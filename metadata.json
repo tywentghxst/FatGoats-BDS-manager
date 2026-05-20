@@ -1,0 +1,6 @@
+{
+  "name": "Bedrock Server Manager",
+  "description": "A bento-grid styled control panel for Minecraft Bedrock Dedicated Servers.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

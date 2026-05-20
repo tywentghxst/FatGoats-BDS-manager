@@ -1,0 +1,122 @@
+# bedrock_server_manager/web/routers/setup.py
+"""
+FastAPI router for the initial setup of the application.
+
+This module provides endpoints for:
+- Handling the creation of the first user (System Admin).
+"""
+
+import logging
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import JSONResponse
+from sqlalchemy.exc import IntegrityError
+
+from ...context import AppContext
+from ...db.models import User
+from ..auth_utils import (
+    create_access_token,
+    get_password_hash,
+)
+from ..dependencies import get_app_context
+from ..schemas import SetupStatusResponse, UserLoginPayload
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter(
+    prefix="/api/setup",
+    tags=["Setup"],
+)
+
+
+@router.get("/status", response_model=SetupStatusResponse, tags=["Setup"])
+async def get_setup_status(
+    app_context: AppContext = Depends(get_app_context),
+):
+    """
+    Returns whether the application needs initial setup.
+    """
+    with app_context.db.session_manager() as db:  # type: ignore
+        user_exists = db.query(User).first() is not None
+        return SetupStatusResponse(needs_setup=not user_exists)
+
+
+@router.post("/create-first-user", include_in_schema=False)
+async def create_first_user(
+    data: UserLoginPayload,
+    app_context: AppContext = Depends(get_app_context),
+):
+    """
+    Creates the first user (admin) in the database.
+    """
+    with app_context.db.session_manager() as db:  # type: ignore
+        if db.query(User).first():
+            # If a user already exists, prevent creating another first user
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "status": "error",
+                    "message": "Setup already completed. Users exist.",
+                },
+            )
+
+        hashed_password = get_password_hash(data.password)
+        user = User(
+            username=data.username, hashed_password=hashed_password, role="admin"
+        )
+
+        try:
+            db.add(user)
+            db.commit()
+            db.refresh(user)  # Refresh the user object to get its ID if needed
+
+            logger.info(f"First user '{data.username}' created with admin role.")
+
+            # Log the user in by creating an access token and returning it
+            access_token = create_access_token(
+                data={"sub": user.username}, app_context=app_context
+            )
+
+            # Create the JSON response
+            response = JSONResponse(
+                content={
+                    "status": "success",
+                    "message": "Admin account created and logged in successfully.",
+                    "access_token": access_token,
+                    "token_type": "bearer",
+                },
+                status_code=status.HTTP_200_OK,
+            )
+            response.set_cookie(
+                key="access_token_cookie",
+                value=access_token,
+                httponly=True,
+                samesite="lax",
+            )
+            return response
+
+        except IntegrityError:
+            db.rollback()  # Rollback the transaction on database error
+            logger.warning(
+                f"Setup failed: Username '{data.username}' already exists (should not happen for first user)."
+            )
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "status": "error",
+                    "message": "Username already exists. Please choose a different one.",
+                },
+            )
+        except Exception as e:
+            db.rollback()  # Rollback for any other unexpected errors
+            logger.error(
+                f"An unexpected error occurred during first user creation: {e}",
+                exc_info=True,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail={
+                    "status": "error",
+                    "message": "An unexpected server error occurred during setup.",
+                },
+            )

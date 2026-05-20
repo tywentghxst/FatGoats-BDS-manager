@@ -1,0 +1,340 @@
+# bedrock_server_manager/web/routers/backup_restore.py
+"""
+FastAPI router for server backup, restore, and pruning operations.
+
+This module defines API endpoints for managing backups of Bedrock server instances.
+Functionalities include:
+
+- Triggering backup operations (full, world-only, specific config file).
+- Triggering restore operations (from latest, specific world backup, specific config backup).
+- Listing available backups for different components.
+- Initiating pruning of old backups based on retention policies.
+
+Most backup and restore actions are performed as background tasks to provide
+immediate API responses. Operations are typically authenticated and target a
+specific server validated by a dependency. It relies on the underlying
+functionality provided by :mod:`~bedrock_server_manager.api.backup_restore`.
+"""
+
+import logging
+import os
+from typing import Any, Callable, Optional
+
+from fastapi import APIRouter, Body, Depends, HTTPException, status
+
+from ...api import backup_restore as backup_restore_api
+from ...context import AppContext
+from ...error import BSMError, UserInputError
+from ..auth_utils import get_moderator_user
+from ..dependencies import get_app_context, validate_server_exists
+from ..schemas import (
+    ActionResponse,
+    BackupActionPayload,
+    RestoreActionPayload,
+    UserResponse,
+)
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter()
+
+
+# --- API Routes ---
+@router.post(
+    "/api/server/{server_name}/backups/prune",
+    response_model=ActionResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    tags=["Backup & Restore API"],
+)
+async def prune_backups_api_route(
+    server_name: str = Depends(validate_server_exists),
+    current_user: UserResponse = Depends(get_moderator_user),
+    app_context: AppContext = Depends(get_app_context),
+):
+    """
+    Initiates a background task to prune old backups for a specific server.
+
+    This action adheres to the retention policies defined in the application settings.
+    """
+    identity = current_user.username
+    logger.info(
+        f"API: Request to prune backups for server '{server_name}' by user '{identity}'."
+    )
+    task_id = app_context.task_manager.run_task(
+        backup_restore_api.prune_old_backups,
+        username=current_user.username,
+        server_name=server_name,
+        app_context=app_context,
+    )
+
+    return ActionResponse(
+        status="pending",
+        message=f"Backup pruning for server '{server_name}' initiated in background.",
+        task_id=task_id,
+    )
+
+
+@router.get(
+    "/api/server/{server_name}/backup/list/{backup_type}",
+    response_model=ActionResponse,
+    tags=["Backup & Restore API"],
+)
+async def list_server_backups_api_route(
+    backup_type: str,
+    server_name: str = Depends(validate_server_exists),
+    current_user: UserResponse = Depends(get_moderator_user),
+    app_context: AppContext = Depends(get_app_context),
+):
+    """
+    Lists available backup files for a specific server and backup type.
+    """
+    identity = current_user.username
+    logger.info(
+        f"API: Request to list '{backup_type}' backups for server '{server_name}' by user '{identity}'."
+    )
+    try:
+        api_result = backup_restore_api.list_backup_files(
+            server_name=server_name, backup_type=backup_type, app_context=app_context
+        )
+        if api_result.get("status") == "success":
+            backup_data = api_result.get("backups", [])
+
+            if backup_type.lower() == "all" and isinstance(backup_data, dict):
+                # For 'all', backup_data is Dict[str, List[str (full paths)]]
+                # We need to convert full paths to basenames for each list in the dict
+                processed_all_backups = {
+                    key: [os.path.basename(p) for p in path_list]
+                    for key, path_list in backup_data.items()
+                }
+                return ActionResponse(
+                    status="success",
+                    message="All backup types listed successfully.",
+                    details={"all_backups": processed_all_backups},
+                )
+            elif isinstance(backup_data, list):
+                basenames = [os.path.basename(p) for p in backup_data]
+                return ActionResponse(
+                    status="success",
+                    message="Backups listed successfully.",
+                    backups=basenames,
+                )
+            else:
+                logger.error(
+                    f"API List Backups: Unexpected backup data format for type '{backup_type}': {backup_data}"
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Unexpected backup data format.",
+                )
+
+        else:
+            if (
+                "not found" in api_result.get("message", "").lower()
+                and "server" in api_result.get("message", "").lower()
+            ):
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=api_result.get("message"),
+                )
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=api_result.get("message", "Failed to list backups."),
+            )
+    except UserInputError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except BSMError as e:
+        logger.error(
+            f"API List Backups '{server_name}/{backup_type}': BSMError. {e}",
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
+        )
+    except Exception as e:
+        logger.error(
+            f"API List Backups '{server_name}/{backup_type}': Unexpected error. {e}",
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="A critical server error occurred while listing backups.",
+        )
+
+
+@router.post(
+    "/api/server/{server_name}/backup/action",
+    response_model=ActionResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    tags=["Backup & Restore API"],
+)
+async def backup_action_api_route(
+    server_name: str = Depends(validate_server_exists),
+    payload: BackupActionPayload = Body(...),
+    current_user: UserResponse = Depends(get_moderator_user),
+    app_context: AppContext = Depends(get_app_context),
+):
+    """
+    Initiates a background task to perform a backup action for a specific server.
+
+    Valid backup types are "world", "config" (requires `file_to_backup` in payload),
+    and "all".
+    """
+    identity = current_user.username
+    logger.info(
+        f"API: Backup action '{payload.backup_type}' requested for server '{server_name}' by user '{identity}'."
+    )
+    valid_types = ["world", "config", "all"]
+    if payload.backup_type.lower() not in valid_types:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid 'backup_type'. Must be one of: {valid_types}.",
+        )
+
+    if payload.backup_type.lower() == "config" and (
+        not payload.file_to_backup or not isinstance(payload.file_to_backup, str)
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Missing or invalid 'file_to_backup' for config backup type.",
+        )
+
+    target_func: Optional[Callable[..., Any]] = None
+    kwargs = {"server_name": server_name, "app_context": app_context}
+    if payload.backup_type.lower() == "world":
+        target_func = backup_restore_api.backup_world
+    elif payload.backup_type.lower() == "config":
+        target_func = backup_restore_api.backup_config_file
+        # payload.file_to_backup is already checked above, but mypy needs reassurance
+        if payload.file_to_backup:
+            kwargs["file_to_backup"] = payload.file_to_backup.strip()
+    elif payload.backup_type.lower() == "all":
+        target_func = backup_restore_api.backup_all
+
+    if not target_func:
+        # Should not be reached due to prior validation, but satisfies mypy
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid backup configuration.",
+        )
+
+    task_id = app_context.task_manager.run_task(
+        target_func,
+        username=current_user.username,
+        **kwargs,
+    )
+
+    return ActionResponse(
+        status="pending",
+        message=f"Backup action '{payload.backup_type}' for server '{server_name}' initiated in background.",
+        task_id=task_id,
+    )
+
+
+@router.post(
+    "/api/server/{server_name}/restore/action",
+    response_model=ActionResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    tags=["Backup & Restore API"],
+)
+async def restore_action_api_route(  # noqa: C901
+    payload: RestoreActionPayload,
+    server_name: str = Depends(validate_server_exists),
+    current_user: UserResponse = Depends(get_moderator_user),
+    app_context: AppContext = Depends(get_app_context),
+):
+    """
+    Initiates a background task to perform a restore action for a specific server.
+
+    Valid restore types include "all", "world", "properties", "allowlist",
+    and "permissions". If not restoring "all", a `backup_file` (basename)
+    must be provided in the payload.
+    """
+    identity = current_user.username
+    logger.info(
+        f"API: Restore action '{payload.restore_type}' requested for server '{server_name}' by user '{identity}'."
+    )
+    valid_types = ["world", "properties", "allowlist", "permissions", "all"]
+    restore_type_lower = payload.restore_type.lower()
+
+    if restore_type_lower not in valid_types:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid 'restore_type'. Must be one of: {valid_types}.",
+        )
+
+    if restore_type_lower != "all" and (
+        not payload.backup_file or not isinstance(payload.backup_file, str)
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Missing or invalid 'backup_file' for this restore type.",
+        )
+
+    if payload.backup_file and (
+        ".." in payload.backup_file or payload.backup_file.startswith(("/", "\\"))
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid 'backup_file' path.",
+        )
+
+    # Re-assert for mypy that payload.backup_file is str if we continue
+    backup_file_name: str = payload.backup_file if payload.backup_file else ""
+
+    target_func: Optional[Callable[..., Any]] = None
+    kwargs = {"server_name": server_name, "app_context": app_context}
+
+    if restore_type_lower == "all":
+        target_func = backup_restore_api.restore_all
+    else:
+        backup_base_dir = app_context.settings.get("paths.backups")
+        if not backup_base_dir:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="BACKUP_DIR not configured.",
+            )
+
+        server_backup_dir = os.path.join(backup_base_dir, server_name)
+        full_backup_path = os.path.normpath(
+            os.path.join(server_backup_dir, backup_file_name)
+        )
+
+        if not os.path.abspath(full_backup_path).startswith(
+            os.path.abspath(server_backup_dir) + os.sep
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Security violation - Invalid backup path '{backup_file_name}'.",
+            )
+
+        if not os.path.isfile(full_backup_path):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Backup file not found: {full_backup_path}",
+            )
+
+        if restore_type_lower == "world":
+            target_func = backup_restore_api.restore_world
+            kwargs["backup_file_path"] = full_backup_path
+        elif restore_type_lower in ["properties", "allowlist", "permissions"]:
+            target_func = backup_restore_api.restore_config_file
+            kwargs["backup_file_path"] = full_backup_path
+
+    if not target_func:
+        # Should not be reached due to prior validation, but satisfies mypy
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid restore configuration.",
+        )
+
+    task_id = app_context.task_manager.run_task(
+        target_func,
+        username=current_user.username,
+        **kwargs,
+    )
+
+    return ActionResponse(
+        status="pending",
+        message=f"Restore action '{payload.restore_type}' for server '{server_name}' initiated in background.",
+        task_id=task_id,
+    )

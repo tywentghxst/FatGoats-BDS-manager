@@ -1,0 +1,171 @@
+:root {
+    --background-image: url('/api/panorama');
+    --background-overlay-color: rgba(0, 0, 0, 0.5);
+    --text-color: #00ff00;
+    --container-background-color: rgba(0, 0, 0, 0.8);
+    --border-color: #00ff00;
+    --header-text-color: #00ff00;
+    --monitor-output-background-color: #000;
+    --monitor-output-text-color: #00ff00;
+    --monitor-output-border-color: #00ff00;
+    --splash-text-color: #ff00ff;
+
+    /* Buttons */
+    --button-background-color: #000;
+    --button-border-color: #00ff00;
+    --button-text-color: #00ff00;
+    --button-hover-background-color: #003300;
+    --button-hover-border-color: #00ff00;
+    --button-hover-text-color: #00ff00;
+    --button-active-background-color: #006600;
+    --button-active-border-color: #00ff00;
+
+    --primary-button-background-color: #00ff00;
+    --primary-button-border-color: #00ff00;
+    --primary-button-text-color: #000;
+    --primary-button-hover-background-color: #66ff66;
+    --primary-button-hover-border-color: #00ff00;
+    --primary-button-active-background-color: #99ff99;
+    --primary-button-active-border-color: #00ff00;
+
+    --danger-button-background-color: #ff0000;
+    --danger-button-border-color: #ff0000;
+    --danger-button-text-color: #000;
+    --danger-button-hover-background-color: #ff6666;
+    --danger-button-hover-border-color: #ff0000;
+    --danger-button-active-background-color: #ff9999;
+    --danger-button-active-border-color: #ff0000;
+
+    /* Forms */
+    --form-input-background-color: #000;
+    --form-input-border-color: #00ff00;
+    --form-input-text-color: #00ff00;
+    --form-input-focus-border-color: #66ff66;
+    --form-label-text-color: #00ff00;
+    --validation-error-text-color: #ff0000;
+    --form-input-invalid-border-color: #ff0000;
+    --form-input-invalid-background-color: #330000;
+
+    /* Tables */
+    --table-header-background-color: #000;
+    --table-header-text-color: #00ff00;
+    --table-border-color: #00ff00;
+    --table-row-hover-background-color: #003300;
+
+    /* Tabs */
+    --tab-background-color: #000;
+    --tab-border-color: #00ff00;
+    --tab-text-color: #00ff00;
+    --tab-hover-background-color: #003300;
+    --tab-hover-text-color: #00ff00;
+    --tab-active-background-color: #006600;
+    --tab-active-text-color: #00ff00;
+
+    /* Messages */
+    --message-success-background-color: #003300;
+    --message-success-border-color: #00ff00;
+    --message-success-text-color: #00ff00;
+    --message-error-background-color: #330000;
+    --message-error-border-color: #ff0000;
+    --message-error-text-color: #ff0000;
+    --message-warning-background-color: #333300;
+    --message-warning-border-color: #ffff00;
+    --message-warning-text-color: #ffff00;
+
+    /* Layout */
+    --sidebar-background-color: #000;
+    --sidebar-border-color: #00ff00;
+    --sidebar-link-text-color: #00ff00;
+    --sidebar-link-hover-background-color: #003300;
+    --sidebar-link-hover-text-color: #00ff00;
+    --sidebar-link-active-background-color: #006600;
+    --sidebar-link-active-border-color: #00ff00;
+    --server-card-background-color: #000;
+    --server-card-border-color: #00ff00;
+    --server-card-hover-background-color: #003300;
+    --server-card-info-text-color: #00cc00;
+    --server-card-info-label-color: #00ff00;
+
+    /* Controls */
+    --toggle-switch-off-background-color: #000;
+    --toggle-switch-off-border-color: #00ff00;
+    --toggle-switch-off-handle-background-color: #00ff00;
+    --toggle-switch-off-handle-border-color: #000;
+    --toggle-switch-on-background-color: #00ff00;
+    --toggle-switch-on-border-color: #000;
+    --toggle-switch-on-handle-background-color: #000;
+    --toggle-switch-on-handle-border-color: #00ff00;
+}
+
+/* ==========================================================================
+   Forced Overrides for V2 UI
+   ========================================================================== */
+
+.container {
+    background-color: var(--container-background-color) !important;
+}
+
+.sidebar-nav, .sidebar-nav .nav-link {
+    background-color: var(--sidebar-background-color) !important;
+    color: var(--sidebar-link-text-color) !important;
+    border-right: 1px solid var(--sidebar-border-color);
+}
+
+.sidebar-nav .nav-link.active {
+    background-color: var(--sidebar-link-active-background-color) !important;
+    border-left: 4px solid var(--sidebar-link-active-border-color);
+}
+
+.server-card {
+    background-color: var(--server-card-background-color) !important;
+    border: 1px solid var(--server-card-border-color) !important;
+    transition: background-color 0.2s ease-in-out;
+}
+
+.server-card:hover {
+    background-color: var(--server-card-hover-background-color) !important;
+}
+
+.form-input {
+    background-color: var(--form-input-background-color) !important;
+    color: var(--form-input-text-color) !important;
+    border: 1px solid var(--form-input-border-color) !important;
+}
+
+.form-input:focus {
+    border-color: var(--form-input-focus-border-color) !important;
+}
+
+/* Force text color on various elements */
+body, h1, h2, h3, h4, h5, p, a, label, .server-card-info, .server-card-info .info-label {
+    color: var(--text-color) !important;
+    font-family: "Courier New", Courier, monospace !important; /* Retro font */
+}
+
+/* Override link colors */
+a {
+    color: var(--button-text-color) !important;
+    text-decoration: underline;
+}
+
+a:hover {
+    color: var(--button-hover-text-color) !important;
+}
+
+.sidebar-nav .nav-link:hover {
+    color: var(--sidebar-link-hover-text-color) !important;
+    background-color: var(--sidebar-link-hover-background-color) !important;
+}
+
+/* Ensure header text is colored */
+.header h1 {
+    color: var(--header-text-color) !important;
+    text-transform: uppercase;
+}
+
+/* Button overrides */
+.action-button, button {
+    border-radius: 0 !important; /* Square buttons */
+    text-transform: uppercase;
+    font-family: "Courier New", Courier, monospace !important;
+}
