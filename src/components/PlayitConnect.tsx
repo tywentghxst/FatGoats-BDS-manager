@@ -182,7 +182,7 @@ export default function PlayitConnect({
   };
 
   return (
-    <div className="flex-1 p-8 overflow-y-auto space-y-8 bg-zinc-950/40">
+    <div className="flex-1 p-4 md:p-8 overflow-y-auto space-y-5 md:space-y-8 bg-zinc-950/40">
       {/* Title Header */}
       <div className="flex flex-col md:flex-row justify-between md:items-center pb-4 border-b border-zinc-900 gap-4">
         <div>

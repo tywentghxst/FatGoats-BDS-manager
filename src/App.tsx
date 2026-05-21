@@ -48,7 +48,9 @@ import {
   Award,
   Flame,
   Bomb,
-  Grid
+  Grid,
+  Menu,
+  X
 } from "lucide-react";
 
 import {
@@ -215,6 +217,7 @@ export default function App() {
   // Menu Navigation Tab (Dashboard, Players, Settings, Console, Users, Selfhost Guides)
   const [navTab, setNavTab] = useState<"dashboard" | "addons" | "worlds" | "console" | "users" | "selfhost" | "console_connect" | "updates" | "tasks_history" | "quick_commands" | "properties">("dashboard");
   const [guideMode, setGuideMode] = useState<"windows" | "docker">("windows");
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // Quick Commands State & Management
   const [quickCommands, setQuickCommands] = useState<QuickCommand[]>(() => {
@@ -1453,7 +1456,7 @@ export default function App() {
   return (
     <div className="flex h-screen bg-zinc-950 text-zinc-100 font-sans overflow-hidden select-none">
       {/* 4.1 Side Navigation */}
-      <nav id="sidebar-nav" className="w-68 border-r border-zinc-900 bg-zinc-900/30 flex flex-col flex-shrink-0">
+      <nav id="sidebar-nav" className="hidden md:flex w-68 border-r border-zinc-900 bg-zinc-900/30 flex-col flex-shrink-0">
         <div className="p-6 border-b border-zinc-900 flex items-center gap-3">
           <div className="w-9 h-9 bg-emerald-600/20 border border-emerald-500/30 rounded-lg flex items-center justify-center font-black text-xl text-emerald-400 shadow-inner">
             F
@@ -1680,8 +1683,181 @@ export default function App() {
           <div className="absolute top-0 left-0 w-full bg-emerald-500 h-1 z-50 animate-pulse" />
         )}
 
+        {/* Mobile Header (Tactly tactile icons, easy thumb access) */}
+        <header className="md:hidden flex h-16 border-b border-zinc-900 bg-zinc-900/40 px-4 items-center justify-between flex-shrink-0 select-none z-[80]">
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setMobileMenuOpen(true)}
+              className="p-2 -ml-2 rounded-lg bg-zinc-900/50 border border-zinc-800 text-zinc-400 hover:text-white active:bg-zinc-850 hover:bg-zinc-800 transition-colors cursor-pointer"
+              aria-label="Open navigation menu"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
+            <div className="flex flex-col">
+              <span className="font-bold tracking-tight text-xs text-white leading-tight">FatGoats BDS</span>
+              <span className="text-[8px] text-zinc-500 uppercase font-black tracking-widest leading-none mt-0.5">MCPE Dedicate</span>
+            </div>
+          </div>
+
+          {/* Quick status dot or icon based on server status */}
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 mt-[1px]">
+              <span className={`w-1.5 h-1.5 rounded-full ${
+                stats?.status === "running" ? "bg-emerald-400 animate-ping" :
+                stats?.status === "starting" ? "bg-amber-400 animate-pulse" :
+                "bg-zinc-500"
+              }`} />
+              <span className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider block">
+                {stats?.status || "offline"}
+              </span>
+            </div>
+
+            {/* Micro Controls */}
+            <div className="flex gap-1 bg-zinc-900/80 border border-zinc-800/80 p-1 rounded-lg">
+              <button
+                type="button"
+                onClick={() => executeServerControl("start")}
+                disabled={stats?.status !== "stopped"}
+                className={`p-1.5 rounded-md text-xs transition-colors shrink-0 ${
+                  stats?.status === "stopped"
+                    ? "bg-emerald-600/30 text-emerald-400 hover:bg-emerald-600 hover:text-white cursor-pointer"
+                    : "text-zinc-650 cursor-not-allowed"
+                }`}
+                title="Start Server"
+              >
+                <Play className="w-3 h-3 fill-emerald-500/20" />
+              </button>
+              <button
+                type="button"
+                onClick={() => executeServerControl("stop")}
+                disabled={stats?.status === "stopped" || stats?.status === "stopping"}
+                className={`p-1.5 rounded-md text-xs transition-colors shrink-0 ${
+                  stats?.status !== "stopped" && stats?.status !== "stopping"
+                    ? "bg-red-650/35 text-red-400 hover:bg-red-600 hover:text-white cursor-pointer"
+                    : "text-zinc-650 cursor-not-allowed"
+                }`}
+                title="Stop Server"
+              >
+                <Square className="w-3 h-3 fill-red-500/20" />
+              </button>
+              <button
+                type="button"
+                onClick={() => executeServerControl("restart")}
+                disabled={stats?.status === "stopped"}
+                className={`p-1.5 rounded-md text-xs transition-colors shrink-0 ${
+                  stats?.status !== "stopped"
+                    ? "bg-zinc-800 text-zinc-300 hover:bg-zinc-700 cursor-pointer"
+                    : "text-zinc-650 cursor-not-allowed"
+                }`}
+                title="Restart Server"
+              >
+                <RefreshCw className="w-3 h-3" />
+              </button>
+            </div>
+          </div>
+        </header>
+
+        {/* Mobile Navigation Drawer backdrop & slider */}
+        {mobileMenuOpen && (
+          <div className="md:hidden fixed inset-0 z-[999] flex">
+            {/* Backdrop */}
+            <div
+              className="fixed inset-0 bg-black/60 backdrop-blur-sm transition-opacity duration-300"
+              onClick={() => setMobileMenuOpen(false)}
+            />
+            {/* Slide-out Panel */}
+            <div className="relative flex flex-col w-72 max-w-[80vw] h-full bg-zinc-950 border-r border-zinc-900 shadow-2xl p-6 transition-transform duration-300 transform-none select-none">
+              <div className="flex items-center justify-between pb-4 border-b border-zinc-900 mb-6 flex-shrink-0">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 bg-emerald-600/20 border border-emerald-500/30 rounded-lg flex items-center justify-center font-black text-lg text-emerald-400">
+                    F
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="font-bold tracking-tight text-base text-white">FatGoats BDS</span>
+                    <span className="text-[9px] text-zinc-500 uppercase font-black tracking-widest leading-none mt-0.5">MCPE Dedicate</span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="p-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Menu selections */}
+              <div className="flex-1 space-y-1 overflow-y-auto pr-1">
+                {[
+                  { id: "dashboard", label: "Dashboard Space", icon: Activity, color: "text-emerald-500" },
+                  { id: "addons", label: "Addons & Packs", icon: Layers, color: "text-emerald-500" },
+                  { id: "worlds", label: "Worlds Vault", icon: FolderOpen, color: "text-emerald-400" },
+                  { id: "console", label: "Live Terminals", icon: Terminal, color: "text-emerald-400" },
+                  { id: "quick_commands", label: "Quick Commands", icon: Grid, color: "text-amber-500" },
+                  { id: "properties", label: "Server Properties", icon: Settings, color: "text-emerald-500" },
+                  { id: "tasks_history", label: "Tasks & History", icon: ClipboardList, color: "text-emerald-500" },
+                  ...(isAdmin ? [{ id: "users", label: "Users & Admins", icon: Users, color: "text-emerald-500" }] : []),
+                  { id: "console_connect", label: "Console Connect", icon: ExternalLink, color: "text-emerald-400" },
+                  { id: "playit", label: "Open to Internet", icon: Globe, color: "text-emerald-400" },
+                  { id: "selfhost", label: "Hosting & Setup", icon: Layers, color: "text-blue-400" },
+                  { id: "updates", label: "Software Updates", icon: RefreshCw, color: "text-purple-400" },
+                ].map((item) => {
+                  const IconComponent = item.icon;
+                  const isSelected = navTab === item.id;
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => {
+                        setNavTab(item.id as any);
+                        setMobileMenuOpen(false);
+                      }}
+                      className={`w-full px-4 py-2.5 rounded-xl flex items-center gap-3 text-xs font-semibold transition-all cursor-pointer ${
+                        isSelected
+                          ? "bg-zinc-800/80 text-white shadow-xl border border-zinc-750/50"
+                          : "text-zinc-400 hover:bg-zinc-900/60 hover:text-zinc-350"
+                      }`}
+                    >
+                      <IconComponent className={`w-3.5 h-3.5 ${item.color} opacity-90`} />
+                      {item.label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* User profile footer controls */}
+              <div className="pt-4 border-t border-zinc-900 mt-6 space-y-3 flex-shrink-0">
+                <div className="flex items-center gap-3 p-2 bg-zinc-900/30 border border-zinc-900 rounded-xl">
+                  <div className="w-7 h-7 rounded-full bg-emerald-750 flex items-center justify-center font-bold text-xs text-white select-none">
+                    {currentUser.username[0]?.toUpperCase() || "A"}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[11px] font-bold text-white truncate leading-tight">{currentUser.username}</p>
+                    <span className={`text-[8px] uppercase font-black tracking-widest leading-none ${currentUser.role === "admin" ? "text-emerald-400" : "text-amber-400"}`}>
+                      {currentUser.role}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMobileMenuOpen(false);
+                      handleLogout();
+                    }}
+                    className="p-1.5 hover:bg-zinc-800 text-zinc-400 hover:text-white rounded-lg transition-colors cursor-pointer"
+                    title="Logout"
+                  >
+                    <LogOut className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+                <div className="text-[9px] text-zinc-650 text-center uppercase tracking-widest font-black leading-none pb-1">v1.4.2 stable</div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* 4.3 App Header Controls Bar */}
-        <header id="app-header-view" className="h-20 border-b border-zinc-900 bg-zinc-900/10 px-8 flex items-center justify-between flex-shrink-0 select-none">
+        <header id="app-header-view" className="hidden md:flex h-20 border-b border-zinc-900 bg-zinc-900/10 px-8 items-center justify-between flex-shrink-0 select-none">
           <div>
             <div className="flex items-center gap-2.5">
               <h1 className="text-xl font-black text-white tracking-tight">{appConfig.levelName}</h1>
@@ -1748,7 +1924,7 @@ export default function App() {
         </header>
 
         {/* 4.4 Dynamic routing container depending on visible Nav Tab */}
-        <div className="flex-1 p-6 overflow-y-auto min-h-0 select-none">
+        <div className="flex-1 p-4 md:p-6 overflow-y-auto min-h-0 select-none">
           {/* ==================== A. DASHBOARD NAVIGATION VIEW ==================== */}
           {navTab === "dashboard" && (
             <div className="grid grid-cols-1 xl:grid-cols-4 gap-5">

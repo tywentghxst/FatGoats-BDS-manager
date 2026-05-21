@@ -103,9 +103,9 @@ export default function SoftwareUpdates({ token, onShowMessage }: SoftwareUpdate
   const hasNewerVersion = updateInfo && updateInfo.latestVersion !== currentVersion;
 
   return (
-    <div className="space-y-6 select-none animate-fade-in">
+    <div className="space-y-4 md:space-y-6 select-none animate-fade-in">
       {/* Banner Card */}
-      <div className="bg-gradient-to-r from-zinc-900 to-zinc-950 border border-zinc-900 rounded-2xl p-6 shadow-xl relative overflow-hidden">
+      <div className="bg-gradient-to-r from-zinc-900 to-zinc-950 border border-zinc-900 rounded-2xl p-4 md:p-6 shadow-xl relative overflow-hidden">
         <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/5 rounded-full blur-3xl pointer-events-none" />
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="space-y-1">

@@ -278,10 +278,10 @@ export default function ConsoleConnect({
   const isDownloaded = data?.isDownloaded;
 
   return (
-    <div className="flex-1 flex flex-col h-full overflow-hidden p-8 space-y-6">
+    <div className="flex-1 flex flex-col h-full overflow-hidden p-4 md:p-8 space-y-4 md:space-y-6">
       
       {/* 1. Header Information Panel */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-zinc-900/40 p-6 rounded-2xl border border-zinc-900">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-zinc-900/40 p-4 md:p-6 rounded-2xl border border-zinc-900">
         <div>
           <div className="flex items-center gap-3">
             <h2 className="text-xl font-extrabold text-white tracking-tight">Console Connect Bridge</h2>
