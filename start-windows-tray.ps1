@@ -6,10 +6,10 @@ $scriptPath = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $scriptPath
 
 $cmd = "node"
-$args = "dist/server.cjs"
+$args = Join-Path $scriptPath "dist/server.cjs"
 
-if (Test-Path "bds-manager.exe") {
-    $cmd = ".\bds-manager.exe"
+if (Test-Path (Join-Path $scriptPath "bds-manager.exe")) {
+    $cmd = Join-Path $scriptPath "bds-manager.exe"
     $args = ""
 }
 
@@ -33,7 +33,7 @@ function Stop-Manager {
     }
     
     # Ensure any stray bds-manager or server.cjs processes are terminated
-    if ($cmd -eq ".\bds-manager.exe") {
+    if ($cmd -like "*bds-manager*") {
         Get-Process -Name "bds-manager" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
     }
 }

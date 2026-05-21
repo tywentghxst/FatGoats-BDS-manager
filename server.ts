@@ -10,7 +10,6 @@ import crypto from "crypto";
 import { spawn, ChildProcessWithoutNullStreams } from "child_process";
 import multer from "multer";
 import AdmZip from "adm-zip";
-import { createServer as createViteServer } from "vite";
 import http from "http";
 import https from "https";
 import pkg from "express";
@@ -2134,14 +2133,26 @@ app.get("/api/updates/backup", authenticateRequest, (req, res) => {
 // ---------------------- Dev Vs Production Framework Integration ----------------------
 
 async function startServer() {
-  if (process.env.NODE_ENV !== "production") {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: "spa"
-    });
-    app.use(vite.middlewares);
+  const isPkg = !!(process as any).pkg;
+  const isProd = isPkg || process.env.NODE_ENV === "production";
+
+  if (!isProd) {
+    try {
+      const { createServer: createViteServer } = await import("vite");
+      const vite = await createViteServer({
+        server: { middlewareMode: true },
+        appType: "spa"
+      });
+      app.use(vite.middlewares);
+    } catch (e: any) {
+      console.warn("Dev mode: Could not dynamically load Vite. Falling back to static assets.", e.message);
+      const distPath = path.join(WORK_DIR, "dist");
+      app.use(express.static(distPath));
+      app.get("*", (req, res) => {
+        res.sendFile(path.join(distPath, "index.html"));
+      });
+    }
   } else {
-    const isPkg = (process as any).pkg;
     const distPath = isPkg ? __dirname : path.join(WORK_DIR, "dist");
     app.use(express.static(distPath));
     app.get("*", (req, res) => {
@@ -2151,6 +2162,17 @@ async function startServer() {
 
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server is running at http://localhost:${PORT}`);
+    
+    // Auto-open browser when starting on Windows in production mode
+    if (process.platform === "win32" && isProd) {
+      setTimeout(() => {
+        const url = `http://localhost:${PORT}`;
+        const cmd = "cmd";
+        const args = ["/c", "start", url];
+        console.log(`Launching administration panel automatically: ${url}`);
+        spawn(cmd, args, { detached: true, stdio: "ignore" }).unref();
+      }, 1200);
+    }
   });
 }
 
