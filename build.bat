@@ -23,16 +23,23 @@ if %errorlevel% neq 0 (
 )
 
 echo.
-echo [2/3] Building frontend assets and bundling server components...
-call npm run build
+echo [2/3] Building frontend assets, bundling server and compiling executable ...
+call npm run build:exe
 if %errorlevel% neq 0 (
-    echo [ERROR] Production compilation failed.
-    pause
-    exit /b 1
+    echo [ERROR] Production compilation and executable compilation failed.
+    echo Building fallback release...
+    call npm run build
 )
 
 echo.
 echo [3/3] Build completed successfully!
+echo.
+echo =======================================================
+echo  🎉 SINGLE-FILE WINDOWS EXECUTABLE COMPILED!
+echo  - Standalone executable created: bds-manager.exe
+echo  - You can double-click 'bds-manager.exe' to launch the panel directly!
+echo  - Or use 'start-windows.bat' to launch as a system tray background service.
+echo =======================================================
 echo.
 echo To launch the Bedrock Dedicated Server Manager interface, run start-windows.bat
 echo or invoke: npm start

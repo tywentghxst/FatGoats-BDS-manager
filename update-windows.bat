@@ -46,30 +46,38 @@ if %errorlevel% equ 0 (
     )
 )
 
-echo [PS] Downloading latest version from Github via PowerShell...
-powershell -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri 'https://github.com/tywentghxst/FatGoats-BDS-manager/archive/refs/heads/main.zip' -OutFile 'latest_update.zip'"
+echo [PS] Downloading latest version from GitHub...
+powershell -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; $urls = @('https://github.com/tywentghxst/FatGoats-BDS-manager/archive/refs/heads/master.zip', 'https://github.com/tywentghxst/FatGoats-BDS-manager/archive/refs/heads/main.zip'); foreach ($url in $urls) { try { Write-Host 'Fetching' $url; Invoke-WebRequest -Uri $url -OutFile 'latest_update.zip' -ErrorAction Stop; if (Test-Path 'latest_update.zip') { Write-Host 'Download successful!'; break } } catch {} }"
 
 if not exist latest_update.zip (
-    echo [ERROR] Failed to download the update package. Please check your internet connection.
+    echo [ERROR] Failed to download the update package. Please check your internet connection or repository branch.
     pause
     exit /b 1
 )
 
-echo [PS] Unpacking ZIP file...
+echo [PS] Unpacking ZIP archive...
 if exist temp_update rd /s /q temp_update
 powershell -Command "Expand-Archive -Path 'latest_update.zip' -DestinationPath 'temp_update' -Force"
 
-echo [INFO] Copying new files and maintaining user data...
-xcopy /e /y "temp_update\FatGoats-BDS-manager-main\*" ".\" /exclude:exclude_update.txt >nul 2>nul
-if %errorlevel% neq 0 (
-    :: Fallback if folder structure has a slightly different name
-    for /d %%i in (temp_update\*) do (
-        xcopy /e /y "%%i\*" ".\"
-    )
+echo [INFO] Generating temporary backup exceptions...
+(
+echo bedrock-server\
+echo uploads\
+echo plugins\
+echo backups\
+echo .env
+echo .git\
+) > exclude_update.txt
+
+echo [INFO] Restoring new assets and applying user protection rules...
+for /d %%i in (temp_update\*) do (
+    echo   - Copying from repository folder: %%~nxi
+    xcopy /e /y "%%i\*" ".\" /exclude:exclude_update.txt >nul 2>nul
 )
 
 echo [INFO] Cleaning up download cache...
 del /f /q latest_update.zip >nul 2>nul
+del /f /q exclude_update.txt >nul 2>nul
 rd /s /q temp_update >nul 2>nul
 
 :after_fetch

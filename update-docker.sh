@@ -42,16 +42,30 @@ else
 fi
 
 echo ""
-echo "[INFO] Step 2: Querying changes from master repository..."
+echo "[INFO] Step 2: Querying changes from repository..."
 if [ -d ".git" ]; then
     echo "[GIT] Repository found. Pulling latest code..."
     git pull
 else
-    echo "[INFO] No git repo found. Preserving volumes and applying main.zip..."
-    wget -qO latest_update.zip https://github.com/tywentghxst/FatGoats-BDS-manager/archive/refs/heads/main.zip
+    echo "[INFO] No git repo found. Checking GitHub branches..."
+    # Try master branch first, then main branch
+    if wget -q --spider https://github.com/tywentghxst/FatGoats-BDS-manager/archive/refs/heads/master.zip; then
+        UPDATE_URL="https://github.com/tywentghxst/FatGoats-BDS-manager/archive/refs/heads/master.zip"
+    else
+        UPDATE_URL="https://github.com/tywentghxst/FatGoats-BDS-manager/archive/refs/heads/main.zip"
+    fi
+    echo "  - Downloading: $UPDATE_URL"
+    wget -qO latest_update.zip "$UPDATE_URL"
     if [ -f latest_update.zip ]; then
         unzip -q latest_update.zip -d temp_update
-        cp -rf temp_update/FatGoats-BDS-manager-main/* . 2>/dev/null || cp -rf temp_update/*/* . 2>/dev/null
+        # Copy from extracted directory dynamically
+        UPDATED_DIR=$(find temp_update -maxdepth 1 -mindepth 1 -type d | head -n 1)
+        if [ -n "$UPDATED_DIR" ]; then
+            echo "  - Extracting files from: $UPDATED_DIR"
+            cp -rf "$UPDATED_DIR"/* .
+        else
+            cp -rf temp_update/*/* . 2>/dev/null
+        fi
         rm -rf temp_update latest_update.zip
         echo "  - Extracted latest source updates."
     else
