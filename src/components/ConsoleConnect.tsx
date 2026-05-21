@@ -640,6 +640,33 @@ export default function ConsoleConnect({
 
       </div>
 
+      {/* 5. Footer Credits */}
+      <div className="border-t border-zinc-900/60 pt-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-[11px] text-zinc-500 font-sans flex-shrink-0">
+        <div className="flex items-center gap-1.5">
+          <span>Console Connect is powered by the open-source</span>
+          <a
+            href="https://github.com/MCXboxBroadcast/Broadcaster"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-emerald-400 hover:text-emerald-300 font-semibold inline-flex items-center gap-1 hover:underline"
+          >
+            MCXboxBroadcast Broadcaster
+            <ExternalLink className="w-3 h-3" />
+          </a>
+        </div>
+        <div>
+          <span>Created with passion by </span>
+          <a
+            href="https://github.com/rtm516"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-zinc-400 hover:text-white font-semibold hover:underline"
+          >
+            rtm516
+          </a>
+        </div>
+      </div>
+
     </div>
   );
 }

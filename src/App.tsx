@@ -48,6 +48,7 @@ import {
 } from "./types";
 
 import ConsoleConnect from "./components/ConsoleConnect";
+import SoftwareUpdates from "./components/SoftwareUpdates";
 
 export default function App() {
   // Authentication & Profile States
@@ -64,7 +65,7 @@ export default function App() {
   const [authError, setAuthError] = useState("");
 
   // Menu Navigation Tab (Dashboard, Players, Settings, Console, Users, Selfhost Guides)
-  const [navTab, setNavTab] = useState<"dashboard" | "addons" | "worlds" | "console" | "users" | "selfhost" | "console_connect">("dashboard");
+  const [navTab, setNavTab] = useState<"dashboard" | "addons" | "worlds" | "console" | "users" | "selfhost" | "console_connect" | "updates">("dashboard");
   const [guideMode, setGuideMode] = useState<"windows" | "docker">("windows");
 
   // Console Panel Tabs
@@ -1287,6 +1288,19 @@ export default function App() {
           >
             <Layers className="w-4 h-4 text-blue-400 opacity-90" />
             Hosting & Docker Setup
+          </button>
+
+          <button
+            id="nav-updates"
+            onClick={() => setNavTab("updates")}
+            className={`w-full px-4 py-2.5 rounded-xl flex items-center gap-3 text-sm font-medium transition-all ${
+              navTab === "updates"
+                ? "bg-zinc-800/80 text-white shadow-md border border-zinc-700/50"
+                : "text-zinc-400 hover:bg-zinc-800/20 hover:text-zinc-300"
+            }`}
+          >
+            <RefreshCw className="w-4 h-4 text-purple-400 opacity-90" />
+            Software Updates
           </button>
         </div>
 
@@ -2813,6 +2827,13 @@ export default function App() {
               serverPort={appConfig.serverPort}
               serverLevelName={appConfig.levelName}
               onShowMessage={(text, type) => showBanner(text, type)}
+            />
+          )}
+
+          {navTab === "updates" && (
+            <SoftwareUpdates
+              token={token}
+              onShowMessage={(text, type) => showBanner(text, type === "warn" ? "info" : type)}
             />
           )}
         </div>
