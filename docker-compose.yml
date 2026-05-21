@@ -1,0 +1,12 @@
+version: "3"
+services:
+  bedrock-manager:
+    build: .
+    container_name: mcb-manager
+    ports:
+      - "3000:3000"         # Web UI manager dashboard
+      - "19132:19132/udp"   # Minecraft Bedrock dedicated game-traffic port
+    volumes:
+      - ./bedrock-server:/app/bedrock-server
+      - ./uploads:/app/uploads
+    restart: unless-stopped

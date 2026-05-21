@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Minecraft Bedrock Dedicated Server Manager - Elegant Self-Hosting Panel</title>
+    <!-- Tailwind CSS v3 CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;850&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'ui-monospace', 'monospace'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #09090b;
+        }
+        .glow-blue {
+            box-shadow: 0 0 40px -5px rgba(59, 130, 246, 0.15);
+        }
+        .glow-emerald {
+            box-shadow: 0 0 40px -5px rgba(16, 185, 129, 0.15);
+        }
+    </style>
+</head>
+<body class="text-zinc-300 min-h-screen Selection:bg-emerald-500/30 selection:text-emerald-300">
+
+    <!-- Header / Navbar -->
+    <header class="border-b border-zinc-900 bg-zinc-950/80 backdrop-blur-md sticky top-0 z-50 transition-all">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 font-black text-sm shadow-sm font-mono select-none">
+                    MC
+                </div>
+                <div>
+                    <h1 class="text-white text-sm font-black tracking-tight leading-none">Bedrock Server Manager</h1>
+                    <span class="text-[10px] text-zinc-500 uppercase tracking-wider font-mono">Self-Hosting Suite</span>
+                </div>
+            </div>
+            
+            <nav class="hidden md:flex items-center gap-6 text-xs font-semibold uppercase tracking-wider select-none">
+                <a href="#features" class="text-zinc-400 hover:text-white transition-colors">Features</a>
+                <a href="#architecture" class="text-zinc-400 hover:text-white transition-colors">Architecture</a>
+                <a href="#deployment" class="text-zinc-400 hover:text-white transition-colors">Setup Guides</a>
+            </nav>
+
+            <div class="flex items-center gap-3">
+                <a href="https://github.com" target="_blank" class="px-3.5 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-bold rounded-xl border border-zinc-800 transition-all flex items-center gap-1.5 shadow-sm">
+                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path fill-rule="evenodd" d="M12 2C6.477 2 2 6.477 2 12c0 4.42 2.865 8.166 6.839 9.489.5.092.682-.217.682-.482 0-.237-.008-.866-.013-1.7-2.782.603-3.369-1.34-3.369-1.34-.454-1.156-1.11-1.462-1.11-1.462-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.087 2.91.831.092-.646.35-1.086.636-1.336-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.203 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.743 0 .267.18.579.688.481C19.137 20.162 22 16.418 22 12c0-5.523-4.477-10-10-10z" clip-rule="evenodd" /></svg>
+                    GitHub
+                </a>
+            </div>
+        </div>
+    </header>
+
+    <!-- Hero Content Header -->
+    <section class="relative overflow-hidden py-24 border-b border-zinc-900 bg-zinc-950">
+        <div class="absolute inset-0 bg-[linear-gradient(to_right,#0f0f12_1px,transparent_1px),linear-gradient(to_bottom,#0f0f12_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)] pointer-events-none" />
+        <div class="absolute top-0 right-1/4 w-96 h-96 bg-blue-500/5 rounded-full blur-[120px] pointer-events-none" />
+        <div class="absolute bottom-0 left-1/4 w-96 h-96 bg-emerald-500/5 rounded-full blur-[120px] pointer-events-none" />
+
+        <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 text-center space-y-6 relative">
+            <div class="inline-flex items-center gap-2 px-3 py-1 bg-zinc-900 border border-zinc-800 rounded-full text-xs font-black tracking-wide uppercase text-zinc-400 shadow-sm animate-pulse select-none">
+                <span class="w-2 h-2 bg-emerald-500 rounded-full inline-block"></span>
+                Fully Verified Setup Stable
+            </div>
+            
+            <h2 class="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-white leading-none">
+                Minecraft Bedrock Servers<br/>
+                <span class="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-blue-500">Made Natively Simple</span>
+            </h2>
+
+            <p class="text-xs sm:text-sm text-zinc-400 max-w-2xl mx-auto leading-relaxed font-sans">
+                A gorgeous, light-weight, full-stack management deck for Bedrock Dedicated Servers. Move away from headless terminal scripts—install engines, bundle behavior packs, check logs, and manage worlds through a highly polished responsive GUI dashboard.
+            </p>
+
+            <div class="flex flex-wrap justify-center items-center gap-4 pt-4 select-none">
+                <a href="#deployment" class="px-6 py-3 bg-emerald-500 hover:bg-emerald-400 text-black text-xs font-black uppercase tracking-wider rounded-xl transition-all shadow-lg active:scale-98 flex items-center gap-1.5">
+                    Get Started Now
+                </a>
+                <a href="#features" class="px-6 py-3 bg-zinc-900 hover:bg-zinc-850 text-white text-xs font-black uppercase tracking-wider rounded-xl border border-zinc-800 transition-all flex items-center gap-1.5">
+                    Explore Features
+                </a>
+            </div>
+
+            <!-- Virtual Server Preview -->
+            <div class="pt-12 max-w-4xl mx-auto">
+                <div class="bg-zinc-925 border border-zinc-900 rounded-2xl p-2.5 overflow-hidden shadow-2xl relative glow-blue">
+                    <div class="bg-zinc-950 rounded-xl overflow-hidden border border-zinc-900">
+                        <!-- Simulated Server Window Header -->
+                        <div class="bg-zinc-900/60 h-10 px-4 flex items-center justify-between border-b border-zinc-950/60 select-none">
+                            <div class="flex items-center gap-2">
+                                <span class="w-2.5 h-2.5 rounded-full bg-red-500/40"></span>
+                                <span class="w-2.5 h-2.5 rounded-full bg-yellow-500/40"></span>
+                                <span class="w-2.5 h-2.5 rounded-full bg-emerald-500/40"></span>
+                                <span class="text-[10px] text-zinc-500 font-mono pl-2">manager-ui@localhost:3000</span>
+                            </div>
+                            <div class="px-2.5 py-0.5 rounded-md bg-zinc-950 border border-zinc-900 text-[9px] font-bold text-zinc-500 font-mono">
+                                STATUS: ONLINE (1.21.60)
+                            </div>
+                        </div>
+                        
+                        <!-- Mini Preview UI Schematic -->
+                        <div class="p-6 grid grid-cols-1 md:grid-cols-4 gap-4 bg-zinc-950">
+                            <div class="md:col-span-1 space-y-2.5">
+                                <div class="bg-zinc-900/40 p-3 rounded-xl border border-zinc-900 text-left space-y-0.5">
+                                    <span class="text-[9px] text-zinc-500 block uppercase font-bold tracking-wider">Active Engine</span>
+                                    <p class="text-xs font-black text-white">Bedrock Server</p>
+                                    <span class="text-[10px] text-emerald-400 font-mono block">● Server Executing</span>
+                                </div>
+                                <div class="bg-zinc-900/40 p-3 rounded-xl border border-zinc-900 text-left space-y-0.5">
+                                    <span class="text-[9px] text-zinc-500 block uppercase font-bold tracking-wider">Storage Capacity</span>
+                                    <p class="text-xs font-black text-white">2.48 GB / 10 GB</p>
+                                    <div class="w-full bg-zinc-950 rounded-full h-1 mt-1.5 overflow-hidden">
+                                        <div class="bg-blue-500 h-full rounded-full" style="width: 25%"></div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="md:col-span-3 bg-zinc-900/20 rounded-xl border border-zinc-900 p-4 text-left">
+                                <div class="flex justify-between items-center border-b border-zinc-900/60 pb-2 mb-3">
+                                    <span class="text-[10px] font-black uppercase text-zinc-400 tracking-wider">Interactive Live Console Terminal</span>
+                                    <span class="text-[9px] font-mono text-zinc-600">Secure WebSocket Socket Client</span>
+                                </div>
+                                <div class="font-mono text-[10px] text-emerald-400/90 space-y-1 bg-zinc-950/80 p-3 rounded-lg border border-zinc-950/80 max-h-36 overflow-hidden">
+                                    <p class="text-zinc-500">[15:34:10 INFO] Starting Server Dedicated Instance thread...</p>
+                                    <p class="text-zinc-500">[15:34:11 INFO] Version 1.21.60.03 initialization loaded.</p>
+                                    <p class="text-zinc-500">[15:34:12 INFO] IPv4 Server listening port: 19132 (UDP)</p>
+                                    <p class="text-zinc-300">[15:34:15 INFO] Level: worlds/Bedrock World initialized. Level-Seeds: 8492025</p>
+                                    <p class="text-emerald-400 font-bold">[15:34:17 INFO] Bedrock Server Manager: Server fully bound & ACTIVE.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Bento Grid Features Section -->
+    <section id="features" class="py-24 border-b border-zinc-900 bg-zinc-950/20">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="text-center max-w-2xl mx-auto space-y-2 mb-16 select-none">
+                <span class="text-[10px] uppercase font-black text-blue-400 tracking-wider bg-blue-500/10 px-2.5 py-0.5 rounded-full border border-blue-500/20">
+                    Feature Ecosystem
+                </span>
+                <h3 class="text-2xl sm:text-3xl font-black text-white tracking-tight">Purpose-Built Operations Deck</h3>
+                <p class="text-xs text-zinc-400 leading-relaxed font-sans">
+                    Never wrestle raw terminal streams or edit text configs over slow SSH loops. Manage components natively in high clarity.
+                </p>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <!-- Bento Block 1: Installer -->
+                <div class="bg-zinc-900/30 border border-zinc-900 rounded-2xl p-6 shadow-md hover:border-zinc-800 transition-all space-y-4">
+                    <div class="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                    </div>
+                    <div class="space-y-1.5">
+                        <h4 class="text-sm font-bold text-white tracking-tight">Mojang Downloader</h4>
+                        <p class="text-xs text-zinc-400 leading-relaxed font-sans">
+                            Instant auto-installer extracts compiled native Bedrock binaries from Mojang servers directly. Supports cross-platform OS detection effortlessly.
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Bento Block 2: Addon Uploader -->
+                <div class="bg-zinc-900/30 border border-zinc-900 rounded-2xl p-6 shadow-md hover:border-zinc-800 transition-all space-y-4">
+                    <div class="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
+                    </div>
+                    <div class="space-y-1.5">
+                        <h4 class="text-sm font-bold text-white tracking-tight">Batch Pack Linker</h4>
+                        <p class="text-xs text-zinc-400 leading-relaxed font-sans">
+                            Drop multiple behavior/resource packs simultaneously. The module parses manifest UUIDs and binds resources cleanly into server structures.
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Bento Block 3: Console Controls -->
+                <div class="bg-zinc-900/30 border border-zinc-900 rounded-2xl p-6 shadow-md hover:border-zinc-800 transition-all space-y-4">
+                    <div class="w-10 h-10 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                    </div>
+                    <div class="space-y-1.5">
+                        <h4 class="text-sm font-bold text-white tracking-tight">Interactive Terminal</h4>
+                        <p class="text-xs text-zinc-400 leading-relaxed font-sans">
+                            Pipes raw system stream stdout into interactive logs over web browser protocols, and sends direct stdin prompts to the underlying world threads securely.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Architecture Section -->
+    <section id="architecture" class="py-24 border-b border-zinc-900 bg-zinc-950">
+        <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="text-center max-w-2xl mx-auto space-y-2 mb-16 select-none">
+                <span class="text-[10px] uppercase font-black text-rose-400 tracking-wider bg-rose-500/10 px-2.5 py-0.5 rounded-full border border-rose-500/20">
+                    System Blueprints
+                </span>
+                <h3 class="text-2xl sm:text-3xl font-black text-white tracking-tight">Architectural Flow</h3>
+                <p class="text-xs text-zinc-400 leading-relaxed font-sans">
+                    Understand how requests are securely routed from your screen to the virtualized Bedrock dedicated child server.
+                </p>
+            </div>
+
+            <!-- SVG Schematic Structure -->
+            <div class="p-6 bg-zinc-900/20 border border-zinc-900 rounded-2xl glow-blue overflow-auto">
+                <svg viewBox="0 0 800 320" fill="none" xmlns="http://www.w3.org/2000/svg" class="w-full min-w-[650px] text-xs font-mono h-auto select-none">
+                    <!-- Client Component Box -->
+                    <rect x="20" y="80" width="160" height="150" rx="12" fill="#09090b" stroke="#3f3f46" stroke-width="2" />
+                    <text x="100" y="120" fill="#ffffff" font-weight="bold" font-size="11" text-anchor="middle">Browser Web UI</text>
+                    <text x="100" y="145" fill="#a1a1aa" font-size="9" text-anchor="middle">React (TypeScript)</text>
+                    <text x="100" y="165" fill="#a1a1aa" font-size="9" text-anchor="middle">Tailwind Styling</text>
+                    <rect x="40" y="190" width="120" height="25" rx="6" fill="#10b981" fill-opacity="0.1" stroke="#10b981" stroke-opacity="0.3" />
+                    <text x="100" y="206" fill="#34d399" font-weight="bold" font-size="9" text-anchor="middle">HTTPS / Admin</text>
+
+                    <!-- Arrow 1 -->
+                    <path d="M190 155 H 290" stroke="#3b82f6" stroke-width="2" stroke-dasharray="4 4" />
+                    <polygon points="295,155 287,151 287,159" fill="#3b82f6" />
+                    <text x="242" y="145" fill="#60a5fa" font-size="8" text-anchor="middle">Auth JWT Token</text>
+
+                    <!-- Control Panel Host Server -->
+                    <rect x="310" y="80" width="180" height="150" rx="12" fill="#09090b" stroke="#3b82f6" stroke-width="2" />
+                    <text x="400" y="120" fill="#ffffff" font-weight="bold" font-size="11" text-anchor="middle">Express Manager Host</text>
+                    <text x="400" y="145" fill="#a1a1aa" font-size="9" text-anchor="middle">Node.js Runtime</text>
+                    <text x="400" y="165" fill="#a1a1aa" font-size="9" text-anchor="middle">Pack & Manifest Parser</text>
+                    <rect x="330" y="190" width="140" height="25" rx="6" fill="#3b82f6" fill-opacity="0.1" stroke="#3b82f6" stroke-opacity="0.3" />
+                    <text x="400" y="206" fill="#60a5fa" font-weight="bold" font-size="9" text-anchor="middle">Spawn Dedicated Server</text>
+
+                    <!-- Arrow 2 -->
+                    <path d="M500 155 H 590" stroke="#10b981" stroke-width="2" />
+                    <polygon points="595,155 587,151 587,159" fill="#10b981" />
+                    <text x="548" y="145" fill="#34d399" font-size="8" text-anchor="middle">stdin / stdout pipes</text>
+
+                    <!-- Minecraft Dedicated OS Thread -->
+                    <rect x="610" y="80" width="170" height="150" rx="12" fill="#09090b" stroke="#10b981" stroke-width="2" />
+                    <text x="695" y="120" fill="#ffffff" font-weight="bold" font-size="11" text-anchor="middle">Bedrock Executable</text>
+                    <text x="695" y="145" fill="#a1a1aa" font-size="9" text-anchor="middle">Compiled Native Process</text>
+                    <text x="695" y="165" fill="#a1a1aa" font-size="9" text-anchor="middle">Active Worlds & Saves</text>
+                    <rect x="630" y="190" width="130" height="25" rx="6" fill="#10b981" fill-opacity="0.1" stroke="#10b981" stroke-opacity="0.3" />
+                    <text x="695" y="206" fill="#34d399" font-weight="bold" font-size="9" text-anchor="middle">Port 19132 UDP Game</text>
+                </svg>
+            </div>
+        </div>
+    </section>
+
+    <!-- Interactive Self-Hosting Wizards Tabs -->
+    <section id="deployment" class="py-24 border-b border-zinc-900 bg-zinc-950/40">
+        <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
+            <div class="text-center max-w-2xl mx-auto space-y-2 select-none">
+                <span class="text-[10px] uppercase font-black text-emerald-400 tracking-wider bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/20">
+                    Operation Setup Desk
+                </span>
+                <h3 class="text-2xl sm:text-3xl font-black text-white tracking-tight">Deploy In Less Than 5 Minutes</h3>
+                <p class="text-xs text-zinc-400 leading-relaxed font-sans">
+                    Choose your hosting environment stack framework to unlock easy step-by-step commands.
+                </p>
+            </div>
+
+            <!-- Tab Buttons Header -->
+            <div class="flex items-center justify-center p-1 bg-zinc-900/60 border border-zinc-900 rounded-xl max-w-sm mx-auto select-none">
+                <button onclick="switchDocTab('win')" id="tab-btn-win" class="w-1/2 py-2 text-center text-xs font-bold uppercase rounded-lg transition-all bg-zinc-800 text-white shadow-sm cursor-pointer">
+                    Windows Native
+                </button>
+                <button onclick="switchDocTab('docker')" id="tab-btn-docker" class="w-1/2 py-2 text-center text-xs font-bold uppercase text-zinc-400 rounded-lg transition-all hover:text-white cursor-pointer">
+                    Docker Compose
+                </button>
+            </div>
+
+            <!-- Windows Wizard Content Box -->
+            <div id="content-win" class="space-y-6 transition-all">
+                <div class="bg-zinc-900/30 border border-zinc-900 rounded-2xl p-6 shadow-lg space-y-5">
+                    <div class="space-y-4">
+                        <div class="flex gap-4">
+                            <span class="w-6 h-6 rounded-full bg-zinc-950 text-xs font-bold flex items-center justify-center border border-zinc-800 text-zinc-400 flex-shrink-0 select-none">1</span>
+                            <div class="space-y-1">
+                                <span class="text-xs font-bold text-white block">Install Node.js</span>
+                                <p class="text-xs text-zinc-400 leading-relaxed font-sans">
+                                    Download and install the official <strong class="text-blue-400">Node.js</strong> (v18 or newer LTS) runtime from <a href="https://nodejs.org" target="_blank" class="underline hover:text-white transition-colors">nodejs.org</a>.
+                                </p>
+                            </div>
+                        </div>
+
+                        <div class="flex gap-4">
+                            <span class="w-6 h-6 rounded-full bg-zinc-950 text-xs font-bold flex items-center justify-center border border-zinc-800 text-zinc-400 flex-shrink-0 select-none">2</span>
+                            <div class="space-y-2 w-full">
+                                <span class="text-xs font-bold text-white block">Download App & Launch Setup Builder</span>
+                                <p class="text-xs text-zinc-400 leading-relaxed font-sans">
+                                    Extract the repository files locally. Double click the automated fast setup builder script:
+                                </p>
+                                <div class="bg-zinc-950 border border-zinc-900 rounded-xl p-3.5 flex justify-between items-center">
+                                    <code class="text-emerald-400 font-bold font-mono text-[11px] block select-all" id="code-win-build">build.bat</code>
+                                    <button onclick="copyToClipboard('code-win-build', 'copy-btn-win-1')" id="copy-btn-win-1" class="text-[10px] text-zinc-500 uppercase font-black tracking-wider hover:text-white transition-all cursor-pointer">Copy</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="flex gap-4">
+                            <span class="w-6 h-6 rounded-full bg-zinc-950 text-xs font-bold flex items-center justify-center border border-zinc-800 text-zinc-400 flex-shrink-0 select-none">3</span>
+                            <div class="space-y-2 w-full">
+                                <span class="text-xs font-bold text-white block">Launch Manager Service</span>
+                                <p class="text-xs text-zinc-400 leading-relaxed font-sans">
+                                    Spin up node systems completely preconfigured in one single task run:
+                                </p>
+                                <div class="bg-zinc-950 border border-zinc-900 rounded-xl p-3.5 flex justify-between items-center">
+                                    <code class="text-emerald-400 font-bold font-mono text-[11px] block select-all" id="code-win-start">start-windows.bat</code>
+                                    <button onclick="copyToClipboard('code-win-start', 'copy-btn-win-2')" id="copy-btn-win-2" class="text-[10px] text-zinc-500 uppercase font-black tracking-wider hover:text-white transition-all cursor-pointer">Copy</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="flex gap-4">
+                            <span class="w-6 h-6 rounded-full bg-emerald-950 text-xs font-bold flex items-center justify-center border border-emerald-500/20 text-emerald-400 flex-shrink-0 select-none">4</span>
+                            <div class="space-y-1">
+                                <span class="text-xs font-bold text-emerald-400 block">Manage & Install</span>
+                                <p class="text-xs text-zinc-400 leading-relaxed font-sans">
+                                    Open your browser to <strong class="text-white">http://localhost:3000</strong>. Access the panel with your local authentication secrets!
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Docker Wizard Content Box -->
+            <div id="content-docker" class="hidden space-y-6 transition-all">
+                <div class="bg-zinc-900/30 border border-zinc-900 rounded-2xl p-6 shadow-lg space-y-5">
+                    <div class="space-y-4">
+                        <div class="flex gap-4">
+                            <span class="w-6 h-6 rounded-full bg-zinc-950 text-xs font-bold flex items-center justify-center border border-zinc-800 text-zinc-400 flex-shrink-0 select-none">1</span>
+                            <div class="space-y-2 w-full">
+                                <span class="text-xs font-bold text-white block">Generate Isolated Docker Container Image</span>
+                                <p class="text-xs text-zinc-400 leading-relaxed font-sans">
+                                    Compile frontend segments and pack backend configurations into isolated images with:
+                                </p>
+                                <div class="bg-zinc-950 border border-zinc-900 rounded-xl p-3.5 flex justify-between items-center">
+                                    <code class="text-blue-400 font-bold font-mono text-[11px] block select-all" id="code-docker-build">docker build -t bedrock-manager .</code>
+                                    <button onclick="copyToClipboard('code-docker-build', 'copy-btn-dk-1')" id="copy-btn-dk-1" class="text-[10px] text-zinc-500 uppercase font-black tracking-wider hover:text-white transition-all cursor-pointer">Copy</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="flex gap-4">
+                            <span class="w-6 h-6 rounded-full bg-zinc-950 text-xs font-bold flex items-center justify-center border border-zinc-800 text-zinc-400 flex-shrink-0 select-none">2</span>
+                            <div class="space-y-2 w-full">
+                                <span class="text-xs font-bold text-white block">Compose Setup Deployment Orchestrations</span>
+                                <p class="text-xs text-zinc-400 leading-relaxed font-sans">
+                                    Start using Docker Compose to handle ports and volume folder bindings. Run:
+                                </p>
+                                <div class="bg-zinc-950 border border-zinc-900 rounded-xl p-3.5 flex justify-between items-center">
+                                    <code class="text-blue-400 font-bold font-mono text-[11px] block select-all" id="code-docker-compose">docker compose up -d</code>
+                                    <button onclick="copyToClipboard('code-docker-compose', 'copy-btn-dk-2')" id="copy-btn-dk-2" class="text-[10px] text-zinc-500 uppercase font-black tracking-wider hover:text-white transition-all cursor-pointer">Copy</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="flex gap-4">
+                            <span class="w-6 h-6 rounded-full bg-emerald-950 text-xs font-bold flex items-center justify-center border border-emerald-500/20 text-emerald-400 flex-shrink-0 select-none">3</span>
+                            <div class="space-y-2 w-full">
+                                <span class="text-xs font-bold text-emerald-400 block">Verify Port Setup Ingress Rules</span>
+                                <p class="text-xs text-zinc-400 leading-relaxed font-sans">
+                                    Confirm that port <span class="font-bold">3000</span> (TCP) is maps correctly for Admin access, and UDP port <span class="font-bold">19132</span> (UDP) is fully authorized on your physical engine routers!
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer Desk -->
+    <footer class="border-t border-zinc-900 bg-zinc-950 py-12 text-center text-xs text-zinc-600 select-none">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-4">
+            <p>Minecraft Bedrock Dedicated Server Manager is completely open-source, unlicensed, and free of cost.</p>
+            <p class="font-mono text-[10px]">BUILD V1.4.2 (STABLE) - FOR SELF-HOSTING & DOCKER LINUX ENVIRONMENTS</p>
+        </div>
+    </footer>
+
+    <!-- Tab Logic Script -->
+    <script>
+        function switchDocTab(type) {
+            const btnWin = document.getElementById('tab-btn-win');
+            const btnDocker = document.getElementById('tab-btn-docker');
+            const contentWin = document.getElementById('content-win');
+            const contentDocker = document.getElementById('content-docker');
+
+            if (type === 'win') {
+                btnWin.className = "w-1/2 py-2 text-center text-xs font-bold uppercase rounded-lg transition-all bg-zinc-800 text-white shadow-sm cursor-pointer";
+                btnDocker.className = "w-1/2 py-2 text-center text-xs font-bold uppercase text-zinc-400 rounded-lg transition-all hover:text-white cursor-pointer";
+                contentWin.classList.remove('hidden');
+                contentDocker.classList.add('hidden');
+            } else {
+                btnDocker.className = "w-1/2 py-2 text-center text-xs font-bold uppercase rounded-lg transition-all bg-zinc-800 text-white shadow-sm cursor-pointer";
+                btnWin.className = "w-1/2 py-2 text-center text-xs font-bold uppercase text-zinc-400 rounded-lg transition-all hover:text-white cursor-pointer";
+                contentDocker.classList.remove('hidden');
+                contentWin.classList.add('hidden');
+            }
+        }
+
+        function copyToClipboard(elementId, btnId) {
+            const textToCopy = document.getElementById(elementId).innerText;
+            navigator.clipboard.writeText(textToCopy).then(() => {
+                const button = document.getElementById(btnId);
+                const originalText = button.innerText;
+                button.innerText = "COPIED!";
+                button.classList.add('text-emerald-400');
+                setTimeout(() => {
+                    button.innerText = originalText;
+                    button.classList.remove('text-emerald-400');
+                }, 1500);
+            });
+        }
+    </script>
+</body>
+</html>
