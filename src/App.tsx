@@ -2883,6 +2883,66 @@ export default function App() {
                     Choose Bedrock version releases. Triggering automated installations downloads correct binary zips from Mojang server nets, extracts, chmod executables dynamically.
                   </p>
 
+                  {/* Deploy Custom Dedicated Server ZIP */}
+                  {isAdmin && (
+                    <div className="bg-zinc-950/40 border border-zinc-900 border-dashed rounded-2xl p-4.5 space-y-3">
+                      <div className="flex items-center gap-2">
+                        <UploadCloud className="w-4 h-4 text-emerald-450" />
+                        <h4 className="text-xs font-black text-white uppercase tracking-wider">Upload Dedicated Server File</h4>
+                      </div>
+                      <p className="text-[10px] text-zinc-500 leading-relaxed">
+                        Alternatively, upload a custom or pre-downloaded Bedrock Dedicated Server <code className="text-zinc-300 font-mono">.zip</code> package to extract and deploy automatically on this host.
+                      </p>
+                      
+                      <div className="flex items-center gap-2">
+                        <label className="bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 hover:border-zinc-750 px-3.5 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest text-zinc-300 transition-all cursor-pointer select-none inline-flex items-center gap-2">
+                          <UploadCloud className="w-3.5 h-3.5 text-emerald-400" />
+                          <span>Select Server ZIP</span>
+                          <input
+                            type="file"
+                            accept=".zip"
+                            className="hidden"
+                            onChange={async (e) => {
+                              const file = e.target.files?.[0];
+                              if (!file) return;
+                              
+                              if (stats?.status !== "stopped") {
+                                showBanner("Please STOP the Bedrock Server completely before uploading custom files.", "error");
+                                return;
+                              }
+                              
+                              const formData = new FormData();
+                              formData.append("file", file);
+                              
+                              try {
+                                showBanner("Starting custom dedicated server ZIP upload...", "info");
+                                const res = await fetch("/api/versions/upload", {
+                                  method: "POST",
+                                  headers: {
+                                    Authorization: `Bearer ${token}`
+                                  },
+                                  body: formData
+                                });
+                                
+                                if (res.ok) {
+                                  const data = await res.json();
+                                  showBanner(`Custom upload deploy started (Task: ${data.taskId})!`, "success");
+                                  fetchDataFeed();
+                                } else {
+                                  const d = await res.json();
+                                  showBanner(d.error || "Custom server ZIP upload failed.", "error");
+                                }
+                              } catch (err) {
+                                showBanner("Connection loss during custom server ZIP upload.", "error");
+                              }
+                            }}
+                          />
+                        </label>
+                        <span className="text-[9px] text-zinc-600 font-mono italic">Accepts Bedrock Dedicated Server ZIP package</span>
+                      </div>
+                    </div>
+                  )}
+
                   <div className="space-y-3">
                     {versions.map((ver, idx) => (
                       <div key={idx} className="bg-zinc-950/40 border border-zinc-900 p-3 rounded-xl flex items-center justify-between hover:border-zinc-800 transition-colors">

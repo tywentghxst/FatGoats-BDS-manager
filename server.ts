@@ -1468,6 +1468,94 @@ app.post("/api/versions/install", authenticateRequest, requireAdmin, (req, res) 
   res.json({ success: true, taskId });
 });
 
+// Custom Bedrock server ZIP upload and extraction installer (Admin only)
+app.post("/api/versions/upload", authenticateRequest, requireAdmin, upload.single("file"), (req, res) => {
+  if (serverStatus !== "stopped") {
+    res.status(400).json({ error: "Please stop the server before uploading/deploying custom server files." });
+    return;
+  }
+
+  if (!req.file) {
+    res.status(400).json({ error: "No server ZIP file was uploaded." });
+    return;
+  }
+
+  const fileExt = path.extname(req.file.originalname).toLowerCase();
+  if (fileExt !== ".zip") {
+    res.status(400).json({ error: "Only .zip files are allowed for custom Bedrock Server installations." });
+    return;
+  }
+
+  const uploadedZipPath = req.file.path;
+  const taskId = crypto.randomUUID();
+
+  const task = {
+    id: taskId,
+    name: "Install Custom Server Upload",
+    description: `Deploying uploaded archive: ${req.file.originalname}`,
+    progress: 10,
+    status: "running" as const,
+    message: "Analyzing uploaded ZIP...",
+    timestamp: new Date().toISOString()
+  };
+  activeTasks.push(task);
+
+  setTimeout(() => {
+    try {
+      const taskRef = activeTasks.find(t => t.id === taskId);
+      if (taskRef) {
+        taskRef.progress = 50;
+        taskRef.message = "Extracting server archive to folder...";
+      }
+
+      if (!fs.existsSync(SERVER_DIR)) {
+        fs.mkdirSync(SERVER_DIR, { recursive: true });
+      }
+
+      const zip = new AdmZip(uploadedZipPath);
+      zip.extractAllTo(SERVER_DIR, true);
+
+      // Clean up uploaded temp file
+      try {
+        fs.unlinkSync(uploadedZipPath);
+      } catch (e) {}
+
+      // Set standard executable permissions (for Linux servers)
+      if (process.platform === "linux") {
+        const exePath = path.join(SERVER_DIR, "bedrock_server");
+        if (fs.existsSync(exePath)) {
+          fs.chmodSync(exePath, 0o755);
+        }
+      }
+
+      // Update configuration to reflect a Custom Upload
+      const displayVersion = "Custom Upload";
+      dbCache.appConfig.selectedVersion = displayVersion;
+      saveDB();
+
+      logServerMessage("SYS", `Installed custom uploaded Bedrock server ZIP: ${req.file?.originalname}`);
+
+      if (taskRef) {
+        taskRef.status = "completed";
+        taskRef.progress = 100;
+        taskRef.message = `Custom Bedrock Server uploaded and deployed, version reference set to 'Custom Upload'!`;
+      }
+    } catch (err: any) {
+      console.error("Custom Bedrock unzip failed:", err);
+      const taskRef = activeTasks.find(t => t.id === taskId);
+      if (taskRef) {
+        taskRef.status = "failed";
+        taskRef.message = `Deploy failed: ${err.message}`;
+      }
+      try {
+        fs.unlinkSync(uploadedZipPath);
+      } catch (e) {}
+    }
+  }, 1000);
+
+  res.json({ success: true, taskId });
+});
+
 // Fetch past logs
 app.get("/api/logs/history", authenticateRequest, (req, res) => {
   res.json(dbCache.pastLogs);
@@ -2207,7 +2295,7 @@ app.post("/api/broadcaster/download", authenticateRequest, (req, res) => {
   broadcasterStatus = "downloading";
   logBroadcasterMessage("SYS", "Starting download of Broadcaster companion binary...");
 
-  const url = "https://github.com/MCXboxBroadcast/Broadcaster/releases/download/v1.0.3/Broadcaster-1.0.3.jar";
+  const url = "https://github.com/MCXboxBroadcast/Broadcaster/releases/download/142/MCXboxBroadcastStandalone.jar";
   
   downloadUrlToFile(url, BROADCASTER_JAR)
     .then(() => {
@@ -2473,8 +2561,8 @@ app.post("/api/playit/download", authenticateRequest, (req, res) => {
 
   const isWin = process.platform === "win32";
   const url = isWin 
-    ? "https://github.com/playit-cloud/playit-agent/releases/download/v0.15.26/playit-windows-x64.exe"
-    : "https://github.com/playit-cloud/playit-agent/releases/download/v0.15.26/playit-linux-amd64";
+    ? "https://github.com/playit-cloud/playit-agent/releases/download/v1.0.4/playit-windows-x86_64.exe"
+    : "https://github.com/playit-cloud/playit-agent/releases/download/v1.0.4/playit-linux-amd64";
 
   downloadUrlToFile(url, PLAYIT_BIN)
     .then(() => {
