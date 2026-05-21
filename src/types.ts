@@ -91,3 +91,12 @@ export interface UserInvite {
   usedBy?: string;
 }
 
+export interface QuickCommand {
+  id: string;
+  name: string;
+  command: string;
+  color: string;
+  icon: string;
+}
+
+

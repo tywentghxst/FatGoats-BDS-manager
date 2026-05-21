@@ -1201,13 +1201,13 @@ app.get("/api/versions", authenticateRequest, (req, res) => {
       version: "1.21.60",
       releaseDate: "2025-02 stable",
       isLatest: true,
-      downloadUrl: `https://www.minecraft.net/bedrockdedicatedserver/${folder}/bedrock-server-1.21.60.03.zip`
+      downloadUrl: `https://www.minecraft.net/bedrockdedicatedserver/${folder}/bedrock-server-1.21.60.10.zip`
     },
     {
       version: "1.21.50",
       releaseDate: "2024-12",
       isLatest: false,
-      downloadUrl: `https://www.minecraft.net/bedrockdedicatedserver/${folder}/bedrock-server-1.21.50.07.zip`
+      downloadUrl: `https://www.minecraft.net/bedrockdedicatedserver/${folder}/bedrock-server-1.21.50.10.zip`
     },
     {
       version: "1.21.30",
@@ -2198,21 +2198,6 @@ async function startServer() {
   const isPkg = !!(process as any).pkg;
   const isProd = isPkg || process.env.NODE_ENV === "production";
   const hasTrayParent = process.argv.includes("--tray-parent");
-
-  // If the user double-clicks bds-manager.exe directly on Windows, delegate to the background tray companion and exit immediately.
-  if (isPkg && !hasTrayParent && process.platform === "win32") {
-    try {
-      const psPath = path.join(WORK_DIR, "start-windows-tray.ps1");
-      console.log("Delegating execution to Background System Tray Companion...");
-      spawn("powershell.exe", ["-WindowStyle", "Hidden", "-ExecutionPolicy", "Bypass", "-File", psPath], {
-        detached: true,
-        stdio: "ignore"
-      }).unref();
-      process.exit(0);
-    } catch (e: any) {
-      console.error("Failed to automatically launch tray companion in background.", e.message);
-    }
-  }
 
   if (!isProd) {
     try {

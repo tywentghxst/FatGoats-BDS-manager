@@ -5,12 +5,19 @@ Add-Type -AssemblyName System.Drawing
 $scriptPath = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $scriptPath
 
-$cmd = "node"
-$args = @((Join-Path $scriptPath "dist/server.cjs"), "--tray-parent")
+# Default to running with Node if it is available and dist/server.cjs exists
+$nodeExists = Get-Command node -ErrorAction SilentlyContinue
+$distExists = Test-Path (Join-Path $scriptPath "dist/server.cjs")
 
-if (Test-Path (Join-Path $scriptPath "bds-manager.exe")) {
+if ($nodeExists -and $distExists) {
+    $cmd = "node"
+    $args = @((Join-Path $scriptPath "dist/server.cjs"), "--tray-parent")
+} elseif (Test-Path (Join-Path $scriptPath "bds-manager.exe")) {
     $cmd = Join-Path $scriptPath "bds-manager.exe"
     $args = "--tray-parent"
+} else {
+    $cmd = "node"
+    $args = @((Join-Path $scriptPath "dist/server.cjs"), "--tray-parent")
 }
 
 $Global:proc = $null

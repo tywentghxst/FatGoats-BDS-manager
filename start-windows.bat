@@ -32,7 +32,7 @@ echo Select how you want to start the Bedrock Server Manager:
 echo [1] Start as a BACKGROUND service with Windows System Tray Icon (Recommended)
 echo [2] Start in FOREGROUND console (standard logs window)
 echo.
-set /p choice="Enter election [1 or 2]: "
+set /p choice="Enter selection [1 or 2]: "
 
 if "%choice%"=="2" (
     echo.
@@ -42,10 +42,23 @@ if "%choice%"=="2" (
     echo  - Log in with your administration credentials.
     echo =======================================================
     echo.
-    if exist bds-manager.exe (
-        bds-manager.exe
+    where node >nul 2>nul
+    if %errorlevel% equ 0 (
+        if exist dist\server.cjs (
+            call npm start
+        ) else if exist bds-manager.exe (
+            bds-manager.exe
+        ) else (
+            call npm start
+        )
     ) else (
-        call npm start
+        if exist bds-manager.exe (
+            bds-manager.exe
+        ) else (
+            echo [ERROR] Neither Node.js nor bds-manager.exe was found!
+            pause
+            exit /b 1
+        )
     )
     echo.
     echo [INFO] Server process has stopped.

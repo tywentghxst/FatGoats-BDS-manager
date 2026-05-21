@@ -33,7 +33,22 @@ import {
   KeyRound,
   Edit,
   ExternalLink,
-  ClipboardList
+  ClipboardList,
+  Sun,
+  Moon,
+  Cloud,
+  Compass,
+  Zap,
+  Heart,
+  ShieldAlert,
+  Wand2,
+  MessageSquare,
+  HelpCircle,
+  Skull,
+  Award,
+  Flame,
+  Bomb,
+  Grid
 } from "lucide-react";
 
 import {
@@ -45,11 +60,142 @@ import {
   ConsoleLine,
   BedrockVersion,
   AppConfig,
-  UserInvite
+  UserInvite,
+  QuickCommand
 } from "./types";
 
 import ConsoleConnect from "./components/ConsoleConnect";
 import SoftwareUpdates from "./components/SoftwareUpdates";
+
+const ICON_MAP: Record<string, React.ComponentType<any>> = {
+  Sun,
+  Moon,
+  Cloud,
+  Compass,
+  Zap,
+  Heart,
+  ShieldAlert,
+  Wand2,
+  MessageSquare,
+  HelpCircle,
+  Skull,
+  Award,
+  Flame,
+  Bomb,
+  Grid,
+  Users,
+  Clock,
+  Lock,
+  Plus,
+  Terminal,
+  ClipboardList
+};
+
+const COLOR_CLASSES: Record<string, {
+  bg: string;
+  hoverBg: string;
+  border: string;
+  text: string;
+  badge: string;
+  accent: string;
+}> = {
+  emerald: {
+    bg: "bg-emerald-500/10 hover:bg-emerald-500/20",
+    hoverBg: "hover:bg-emerald-500/20",
+    border: "border-emerald-500/30 hover:border-emerald-500/50",
+    text: "text-emerald-400",
+    badge: "bg-emerald-500/10 border-emerald-500/20 text-emerald-400",
+    accent: "bg-emerald-500"
+  },
+  rose: {
+    bg: "bg-rose-500/10 hover:bg-rose-500/20",
+    hoverBg: "hover:bg-rose-500/20",
+    border: "border-rose-500/30 hover:border-rose-500/50",
+    text: "text-rose-400",
+    badge: "bg-rose-500/10 border-rose-500/20 text-rose-400",
+    accent: "bg-rose-500"
+  },
+  red: {
+    bg: "bg-red-500/10 hover:bg-red-500/20",
+    hoverBg: "hover:bg-red-500/20",
+    border: "border-red-500/30 hover:border-red-500/50",
+    text: "text-red-400",
+    badge: "bg-red-500/10 border-red-500/20 text-red-400",
+    accent: "bg-red-500"
+  },
+  amber: {
+    bg: "bg-amber-500/10 hover:bg-amber-500/20",
+    hoverBg: "hover:bg-amber-500/20",
+    border: "border-amber-500/30 hover:border-amber-500/50",
+    text: "text-amber-400",
+    badge: "bg-amber-500/10 border-amber-500/20 text-amber-400",
+    accent: "bg-amber-500"
+  },
+  blue: {
+    bg: "bg-blue-500/10 hover:bg-blue-500/20",
+    hoverBg: "hover:bg-blue-500/20",
+    border: "border-blue-500/30 hover:border-blue-500/50",
+    text: "text-blue-400",
+    badge: "bg-blue-500/10 border-blue-500/20 text-blue-400",
+    accent: "bg-blue-500"
+  },
+  sky: {
+    bg: "bg-sky-500/10 hover:bg-sky-500/20",
+    hoverBg: "hover:bg-sky-500/20",
+    border: "border-sky-500/30 hover:border-sky-500/50",
+    text: "text-sky-400",
+    badge: "bg-sky-500/10 border-sky-500/20 text-sky-400",
+    accent: "bg-sky-500"
+  },
+  indigo: {
+    bg: "bg-indigo-500/10 hover:bg-indigo-500/20",
+    hoverBg: "hover:bg-indigo-500/20",
+    border: "border-indigo-500/30 hover:border-indigo-500/50",
+    text: "text-indigo-400",
+    badge: "bg-indigo-500/10 border-indigo-500/20 text-indigo-400",
+    accent: "bg-indigo-505"
+  },
+  purple: {
+    bg: "bg-purple-500/10 hover:bg-purple-500/20",
+    hoverBg: "hover:bg-purple-500/20",
+    border: "border-purple-500/30 hover:border-purple-500/50",
+    text: "text-purple-400",
+    badge: "bg-purple-500/10 border-purple-500/20 text-purple-400",
+    accent: "bg-purple-500"
+  },
+  pink: {
+    bg: "bg-pink-500/10 hover:bg-pink-500/20",
+    hoverBg: "hover:bg-pink-500/20",
+    border: "border-pink-500/30 hover:border-pink-500/50",
+    text: "text-pink-400",
+    badge: "bg-pink-500/10 border-pink-500/20 text-pink-400",
+    accent: "bg-pink-500"
+  },
+  orange: {
+    bg: "bg-orange-500/10 hover:bg-orange-500/20",
+    hoverBg: "hover:bg-orange-500/20",
+    border: "border-orange-500/30 hover:border-orange-500/50",
+    text: "text-orange-400",
+    badge: "bg-orange-500/10 border-orange-500/20 text-orange-400",
+    accent: "bg-orange-500"
+  },
+  teal: {
+    bg: "bg-teal-500/10 hover:bg-teal-500/20",
+    hoverBg: "hover:bg-teal-500/20",
+    border: "border-teal-500/30 hover:border-teal-500/50",
+    text: "text-teal-400",
+    badge: "bg-teal-500/10 border-teal-500/20 text-teal-400",
+    accent: "bg-teal-500"
+  },
+  zinc: {
+    bg: "bg-zinc-500/10 hover:bg-zinc-500/20",
+    hoverBg: "hover:bg-zinc-500/20",
+    border: "border-zinc-500/30 hover:border-zinc-500/50",
+    text: "text-zinc-400",
+    badge: "bg-zinc-500/10 border-zinc-500/20 text-zinc-400",
+    accent: "bg-zinc-400"
+  }
+};
 
 export default function App() {
   // Authentication & Profile States
@@ -66,8 +212,104 @@ export default function App() {
   const [authError, setAuthError] = useState("");
 
   // Menu Navigation Tab (Dashboard, Players, Settings, Console, Users, Selfhost Guides)
-  const [navTab, setNavTab] = useState<"dashboard" | "addons" | "worlds" | "console" | "users" | "selfhost" | "console_connect" | "updates" | "tasks_history">("dashboard");
+  const [navTab, setNavTab] = useState<"dashboard" | "addons" | "worlds" | "console" | "users" | "selfhost" | "console_connect" | "updates" | "tasks_history" | "quick_commands">("dashboard");
   const [guideMode, setGuideMode] = useState<"windows" | "docker">("windows");
+
+  // Quick Commands State & Management
+  const [quickCommands, setQuickCommands] = useState<QuickCommand[]>(() => {
+    const saved = localStorage.getItem("bedrock_quick_commands");
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        console.error("Failed parsing custom bedrock quick commands", e);
+      }
+    }
+    return [
+      { id: "1", name: "Set Time: Day", command: "time set day", color: "amber", icon: "Sun" },
+      { id: "2", name: "Set Time: Night", command: "time set night", color: "indigo", icon: "Moon" },
+      { id: "3", name: "Clear Weather", command: "weather clear", color: "sky", icon: "Cloud" },
+      { id: "4", name: "Rainy Weather", command: "weather rain", color: "blue", icon: "Cloud" },
+      { id: "5", name: "List Players", command: "list", color: "emerald", icon: "Users" },
+      { id: "6", name: "Difficulty: Hard", command: "difficulty hard", color: "red", icon: "ShieldAlert" },
+      { id: "7", name: "Keep Inventory On", command: "gamerule keepinventory true", color: "teal", icon: "Lock" },
+      { id: "8", name: "Show Coordinates", command: "gamerule showcoordinates true", color: "purple", icon: "Compass" },
+      { id: "9", name: "Whitelist List", command: "whitelist list", color: "zinc", icon: "ClipboardList" },
+      { id: "10", name: "Creative Mode", command: "gamemode creative", color: "pink", icon: "Wand2" },
+      { id: "11", name: "Survival Mode", command: "gamemode survival", color: "orange", icon: "Heart" },
+      { id: "12", name: "Kill All Entities", command: "kill @e", color: "rose", icon: "Skull" },
+    ];
+  });
+
+  useEffect(() => {
+    localStorage.setItem("bedrock_quick_commands", JSON.stringify(quickCommands));
+  }, [quickCommands]);
+
+  const [newCmdName, setNewCmdName] = useState("");
+  const [newCmdStr, setNewCmdStr] = useState("");
+  const [newCmdColor, setNewCmdColor] = useState("emerald");
+  const [newCmdIcon, setNewCmdIcon] = useState("Terminal");
+  const [isAddingCmd, setIsAddingCmd] = useState(false);
+
+  const handleAddQuickCommand = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newCmdName.trim() || !newCmdStr.trim()) {
+      showBanner("Please fill in both the name and command fields.", "error");
+      return;
+    }
+
+    const newCommand: QuickCommand = {
+      id: Date.now().toString(),
+      name: newCmdName.trim(),
+      command: newCmdStr.trim(),
+      color: newCmdColor,
+      icon: newCmdIcon
+    };
+
+    setQuickCommands(prev => [...prev, newCommand]);
+    setNewCmdName("");
+    setNewCmdStr("");
+    setNewCmdColor("emerald");
+    setNewCmdIcon("Terminal");
+    setIsAddingCmd(false);
+    showBanner("Quick command saved!", "success");
+  };
+
+  const handleDeleteQuickCommand = (id: string, name: string) => {
+    promptConfirm(
+      "Delete Command Button",
+      `Are you sure you want to delete the "${name}" command button?`,
+      () => {
+        setQuickCommands(prev => prev.filter(c => c.id !== id));
+        showBanner("Command button deleted.", "info");
+      }
+    );
+  };
+
+  const handleResetDefaultCommands = () => {
+    promptConfirm(
+      "Reset to Default Commands",
+      "Are you sure you want to revert to the default set of Minecraft server commands? This will replace your current custom list.",
+      () => {
+        const defaults = [
+          { id: "1", name: "Set Time: Day", command: "time set day", color: "amber", icon: "Sun" },
+          { id: "2", name: "Set Time: Night", command: "time set night", color: "indigo", icon: "Moon" },
+          { id: "3", name: "Clear Weather", command: "weather clear", color: "sky", icon: "Cloud" },
+          { id: "4", name: "Rainy Weather", command: "weather rain", color: "blue", icon: "Cloud" },
+          { id: "5", name: "List Players", command: "list", color: "emerald", icon: "Users" },
+          { id: "6", name: "Difficulty: Hard", command: "difficulty hard", color: "red", icon: "ShieldAlert" },
+          { id: "7", name: "Keep Inventory On", command: "gamerule keepinventory true", color: "teal", icon: "Lock" },
+          { id: "8", name: "Show Coordinates", command: "gamerule showcoordinates true", color: "purple", icon: "Compass" },
+          { id: "9", name: "Whitelist List", command: "whitelist list", color: "zinc", icon: "ClipboardList" },
+          { id: "10", name: "Creative Mode", command: "gamemode creative", color: "pink", icon: "Wand2" },
+          { id: "11", name: "Survival Mode", command: "gamemode survival", color: "orange", icon: "Heart" },
+          { id: "12", name: "Kill All Entities", command: "kill @e", color: "rose", icon: "Skull" },
+        ];
+        setQuickCommands(defaults);
+        showBanner("Preset commands list reset to defaults.", "success");
+      }
+    );
+  };
 
   // Console Panel Tabs
   const [consoleTab, setConsoleTab] = useState<"logs" | "tasks" | "history">("logs");
@@ -203,10 +445,16 @@ export default function App() {
   const checkAuthStatus = async () => {
     try {
       const res = await fetch("/api/auth/status");
-      const data = await res.json();
-      setHasAdmin(data.hasAdmin);
-    } catch (e) {
-      console.error("Failed to read server auth state", e);
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+      const contentType = res.headers.get("content-type");
+      if (contentType && contentType.includes("application/json")) {
+        const data = await res.json();
+        setHasAdmin(data.hasAdmin);
+      }
+    } catch (e: any) {
+      // Quiet when server is offline or loading
     }
   };
 
@@ -214,70 +462,82 @@ export default function App() {
     if (!token) return;
     const headers = { Authorization: `Bearer ${token}` };
 
+    const fetchJson = async (url: string) => {
+      const res = await fetch(url, { headers });
+      if (res.status === 401) {
+        handleLogout();
+        throw new Error("Unauthorized");
+      }
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+      const contentType = res.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        throw new Error("Non-JSON");
+      }
+      return await res.json();
+    };
+
     try {
       // 1. Core Server Stats Info
-      const statsRes = await fetch("/api/server/status", { headers });
-      if (statsRes.status === 401) {
-        handleLogout();
-        return;
-      }
-      const statsData = await statsRes.json();
+      const statsData = await fetchJson("/api/server/status");
       setStats(statsData);
 
       // 2. Active Tasks
-      const tasksRes = await fetch("/api/tasks", { headers });
-      const tasksData = await tasksRes.json();
+      const tasksData = await fetchJson("/api/tasks");
       setActiveTasks(tasksData);
 
       // 3. Active configuration properties
-      const configRes = await fetch("/api/server/config", { headers });
-      const configData = await configRes.json();
+      const configData = await fetchJson("/api/server/config");
       setAppConfig(configData);
 
       // Fetch according to visible route
       if (navTab === "dashboard" || consoleTab === "logs") {
-        const consoleRes = await fetch("/api/console", { headers });
-        const consoleData = await consoleRes.json();
+        const consoleData = await fetchJson("/api/console");
         setConsoleLogs(consoleData);
       }
 
       if (consoleTab === "history" || navTab === "dashboard") {
-        const historyRes = await fetch("/api/logs/history", { headers });
-        const historyData = await historyRes.json();
+        const historyData = await fetchJson("/api/logs/history");
         setPastLogs(historyData);
       }
 
       if (navTab === "addons" || navTab === "dashboard") {
-        const addonsRes = await fetch("/api/addons", { headers });
-        const addonsData = await addonsRes.json();
+        const addonsData = await fetchJson("/api/addons");
         setAddons(addonsData);
       }
 
       if (navTab === "worlds" || navTab === "dashboard") {
-        const worldsRes = await fetch("/api/worlds", { headers });
-        const worldsData = await worldsRes.json();
+        const worldsData = await fetchJson("/api/worlds");
         setWorlds(worldsData);
       }
 
       if (navTab === "users" && isAdmin) {
-        const usersRes = await fetch("/api/users", { headers });
-        const usersData = await usersRes.json();
+        const usersData = await fetchJson("/api/users");
         setUsersList(usersData);
 
-        const inviteRes = await fetch("/api/invites", { headers });
-        const inviteData = await inviteRes.json();
+        const inviteData = await fetchJson("/api/invites");
         setInvitesList(inviteData);
       }
 
       // Pre-populate Bedrock versions on first load of dashboard
       if (versions.length === 0) {
-        const versionsRes = await fetch("/api/versions", { headers });
-        const versionsData = await versionsRes.json();
+        const versionsData = await fetchJson("/api/versions");
         setVersions(versionsData);
       }
 
-    } catch (err) {
-      console.error("Poll data feed failed", err);
+    } catch (err: any) {
+      if (err?.message === "Unauthorized") {
+        return;
+      }
+      const errMsg = err?.message || String(err);
+      const isExpectedOffline = errMsg.includes("Failed to fetch") || 
+                                 errMsg.includes("NetworkError") || 
+                                 errMsg.includes("HTTP ") || 
+                                 errMsg.includes("Non-JSON");
+      if (!isExpectedOffline) {
+        console.warn("Poll data feed unexpected sync issue:", errMsg);
+      }
     }
   };
 
@@ -1252,6 +1512,19 @@ export default function App() {
           </button>
 
           <button
+            id="nav-quick-commands"
+            onClick={() => setNavTab("quick_commands")}
+            className={`w-full px-4 py-2.5 rounded-xl flex items-center gap-3 text-sm font-medium transition-all ${
+              navTab === "quick_commands"
+                ? "bg-zinc-800/80 text-white shadow-md border border-zinc-700/50"
+                : "text-zinc-400 hover:bg-zinc-800/20 hover:text-zinc-300"
+            }`}
+          >
+            <Grid className="w-4 h-4 text-amber-500 opacity-90 animate-pulse" />
+            Quick Commands
+          </button>
+
+          <button
             id="nav-tasks-history"
             onClick={() => setNavTab("tasks_history")}
             className={`w-full px-4 py-2.5 rounded-xl flex items-center gap-3 text-sm font-medium transition-all ${
@@ -1549,30 +1822,21 @@ export default function App() {
                     )}
                   </div>
 
-                  {/* Preset Commands Bar */}
-                  <div className="flex flex-wrap items-center gap-1.5 mt-4 p-2 bg-zinc-900/30 border border-zinc-900/50 rounded-xl">
-                    <span className="text-[9px] uppercase font-black text-zinc-500 tracking-wider mr-1 select-none">Presets:</span>
-                    {[
-                      { label: "List Players", cmd: "list" },
-                      { label: "Day", cmd: "time set day" },
-                      { label: "Night", cmd: "time set night" },
-                      { label: "Clear Weather", cmd: "weather clear" },
-                      { label: "Hard Diff", cmd: "difficulty hard" },
-                      { label: "Keep Inventory", cmd: "gamerule keepinventory true" },
-                      { label: "Show Coords", cmd: "gamerule showcoordinates true" },
-                      { label: "Whitelist List", cmd: "whitelist list" },
-                    ].map((preset, idx) => (
-                      <button
-                        key={idx}
-                        type="button"
-                        disabled={stats?.status !== "running"}
-                        onClick={() => sendPresetCommand(preset.cmd)}
-                        className="px-2 py-1 text-[9px] font-bold bg-zinc-950 border border-zinc-905 hover:border-zinc-800 hover:bg-zinc-900 hover:text-emerald-400 text-zinc-400 rounded-lg font-mono transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-30 select-none"
-                        title={`Execute command: /${preset.cmd}`}
-                      >
-                        /{preset.cmd}
-                      </button>
-                    ))}
+                  {/* Redirect to Quick Commands tab */}
+                  <div className="flex items-center justify-between mt-4 p-2.5 bg-zinc-900/35 border border-zinc-900/40 rounded-xl">
+                    <div className="flex items-center gap-2">
+                      <Grid className="w-3.5 h-3.5 text-amber-500 animate-pulse" />
+                      <span className="text-[10px] font-bold text-zinc-400">
+                        Trigger custom macro presets inside the dedicated command space
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setNavTab("quick_commands")}
+                      className="px-2.5 py-1 text-[9px] uppercase font-black tracking-wider bg-zinc-950 hover:bg-zinc-900 border border-zinc-800 text-amber-400 rounded-lg transition-all cursor-pointer select-none"
+                    >
+                      Open Commands Deck
+                    </button>
                   </div>
 
                   {/* Command Sender Entry Input */}
@@ -2302,30 +2566,21 @@ export default function App() {
                     )}
                   </div>
 
-                  {/* Preset Commands Bar */}
-                  <div className="flex flex-wrap items-center gap-1.5 mt-4 p-2 bg-zinc-900/30 border border-zinc-900/50 rounded-xl">
-                    <span className="text-[9px] uppercase font-black text-zinc-500 tracking-wider mr-1 select-none">Presets:</span>
-                    {[
-                      { label: "List Players", cmd: "list" },
-                      { label: "Day", cmd: "time set day" },
-                      { label: "Night", cmd: "time set night" },
-                      { label: "Clear Weather", cmd: "weather clear" },
-                      { label: "Hard Diff", cmd: "difficulty hard" },
-                      { label: "Keep Inventory", cmd: "gamerule keepinventory true" },
-                      { label: "Show Coords", cmd: "gamerule showcoordinates true" },
-                      { label: "Whitelist List", cmd: "whitelist list" },
-                    ].map((preset, idx) => (
-                      <button
-                        key={idx}
-                        type="button"
-                        disabled={stats?.status !== "running"}
-                        onClick={() => sendPresetCommand(preset.cmd)}
-                        className="px-2 py-1 text-[9px] font-bold bg-zinc-950 border border-zinc-905 hover:border-zinc-800 hover:bg-zinc-900 hover:text-emerald-400 text-zinc-400 rounded-lg font-mono transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-30 select-none"
-                        title={`Execute command: /${preset.cmd}`}
-                      >
-                        /{preset.cmd}
-                      </button>
-                    ))}
+                  {/* Redirect to Quick Commands tab */}
+                  <div className="flex items-center justify-between mt-4 p-2.5 bg-zinc-900/35 border border-zinc-900/40 rounded-xl">
+                    <div className="flex items-center gap-2">
+                      <Grid className="w-3.5 h-3.5 text-amber-500 animate-pulse" />
+                      <span className="text-[10px] font-bold text-zinc-400">
+                        Trigger custom macro presets inside the dedicated command space
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setNavTab("quick_commands")}
+                      className="px-2.5 py-1 text-[9px] uppercase font-black tracking-wider bg-zinc-950 hover:bg-zinc-900 border border-zinc-800 text-amber-400 rounded-lg transition-all cursor-pointer select-none"
+                    >
+                      Open Commands Deck
+                    </button>
                   </div>
 
                   <form onSubmit={handleSendCommand} className="mt-3 p-2 bg-zinc-950 border border-zinc-900 rounded-xl flex gap-2">
@@ -2698,6 +2953,226 @@ export default function App() {
               </div>
             </div>
           </div>
+          )}
+
+          {/* ==================== QUICK COMMANDS TAB PANEL ==================== */}
+          {navTab === "quick_commands" && (
+            <div className="space-y-6 select-none animate-fade-in flex flex-col h-full overflow-hidden">
+              {/* Header block with statistics / actions */}
+              <div className="bg-gradient-to-r from-zinc-900 to-zinc-950 border border-zinc-900 rounded-2xl p-6 shadow-xl relative overflow-hidden flex-shrink-0">
+                <div className="absolute top-0 right-0 w-64 h-64 bg-amber-500/5 rounded-full blur-3xl pointer-events-none" />
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div className="space-y-1">
+                    <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-[10px] font-black uppercase text-amber-400 tracking-wider">
+                      Command Deck
+                    </div>
+                    <h2 className="text-xl font-black text-white tracking-tight">Quick Command Presets</h2>
+                    <p className="text-xs text-zinc-400 leading-relaxed max-w-2xl">
+                      Dispatch custom or built-in Minecraft server console macros with one-click trigger buttons. Configure name, command lines, decorative color-coding, and icon badges.
+                    </p>
+                  </div>
+
+                  {/* Top-level Toolbar */}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setIsAddingCmd(!isAddingCmd)}
+                      className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl flex items-center gap-2 transition-all shadow-md cursor-pointer"
+                    >
+                      <Plus className="w-4 h-4" />
+                      Add Custom Button
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleResetDefaultCommands}
+                      className="px-4 py-2 bg-zinc-850 hover:bg-zinc-805 hover:text-white text-zinc-300 text-xs font-bold rounded-xl flex items-center gap-2 transition-all border border-zinc-700/55 cursor-pointer"
+                      title="Reset presets list to standard game defaults"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" />
+                      Restore Defaults
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Grid content / Forms split */}
+              <div className="flex-1 min-h-0 overflow-y-auto pr-1">
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+                  
+                  {/* Custom Command Adding Form (Left Column if open) */}
+                  {isAddingCmd && (
+                    <div className="col-span-1 bg-zinc-900/60 border border-zinc-900 rounded-2xl p-5 shadow-inner space-y-4 animate-slide-in">
+                      <div className="flex justify-between items-center border-b border-zinc-900 pb-3">
+                        <span className="text-[10px] uppercase font-black text-zinc-400 tracking-wider">Configure Custom Command</span>
+                        <button 
+                          onClick={() => setIsAddingCmd(false)} 
+                          className="text-xs text-zinc-500 hover:text-white font-bold transition-all"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+
+                      <form onSubmit={handleAddQuickCommand} className="space-y-4">
+                        {/* Name Input */}
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-black uppercase text-zinc-400 tracking-wider">Button Label</label>
+                          <input
+                            type="text"
+                            required
+                            placeholder="e.g. Dawn Time"
+                            value={newCmdName}
+                            onChange={e => setNewCmdName(e.target.value)}
+                            className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded-xl text-xs text-white outline-none focus:border-amber-500 transition-colors"
+                          />
+                        </div>
+
+                        {/* Command Line Input */}
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-black uppercase text-zinc-400 tracking-wider">Server Command</label>
+                          <div className="relative">
+                            <span className="absolute left-3 top-2 text-zinc-500 font-mono text-xs select-none">/</span>
+                            <input
+                              type="text"
+                              required
+                              placeholder="e.g. time set dawn"
+                              value={newCmdStr}
+                              onChange={e => setNewCmdStr(e.target.value)}
+                              className="w-full pl-6 pr-3 py-2 bg-zinc-950 border border-zinc-800 rounded-xl text-xs text-white font-mono outline-none focus:border-amber-500 transition-colors"
+                            />
+                          </div>
+                          <span className="text-[9px] text-zinc-500 block leading-tight">Do not include the leading slash (/) character.</span>
+                        </div>
+
+                        {/* Select Icon */}
+                        <div className="space-y-2 font-sans">
+                          <label className="text-[10px] font-black uppercase text-zinc-400 tracking-wider block">Visual Icon Bedding</label>
+                          <div className="grid grid-cols-5 gap-1.5 p-2 bg-zinc-950/50 rounded-xl border border-zinc-900 max-h-40 overflow-y-auto">
+                            {Object.keys(ICON_MAP).map(iconName => {
+                              const IconComponent = ICON_MAP[iconName];
+                              return (
+                                <button
+                                  key={iconName}
+                                  type="button"
+                                  onClick={() => setNewCmdIcon(iconName)}
+                                  className={`p-2 flex items-center justify-center rounded-lg border text-xs transition-all cursor-pointer ${
+                                    newCmdIcon === iconName
+                                      ? "bg-amber-500/10 border-amber-500 text-amber-400 shadow-sm"
+                                      : "border-transparent bg-zinc-900/40 text-zinc-500 hover:text-zinc-350 hover:bg-zinc-850"
+                                  }`}
+                                  title={iconName}
+                                >
+                                  {IconComponent ? <IconComponent className="w-4 h-4" /> : iconName}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        {/* Select Color */}
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-black uppercase text-zinc-400 tracking-wider block">Color Coding Accent</label>
+                          <div className="grid grid-cols-4 gap-1.5">
+                            {Object.keys(COLOR_CLASSES).map(colorName => {
+                              const config = COLOR_CLASSES[colorName];
+                              return (
+                                <button
+                                  key={colorName}
+                                  type="button"
+                                  onClick={() => setNewCmdColor(colorName)}
+                                  className={`py-1.5 px-2 text-[10px] font-black tracking-wide border rounded-lg transition-all capitalize select-none cursor-pointer flex items-center justify-center gap-1.5 ${
+                                    newCmdColor === colorName
+                                      ? `${config.bg} ${config.border} ${config.text} ring-1 ring-amber-500/25 shadow-inner`
+                                      : "border-zinc-850 bg-zinc-900/20 text-zinc-500 hover:text-zinc-400 hover:bg-zinc-850"
+                                  }`}
+                                >
+                                  <span className={`w-1.5 h-1.5 rounded-full ${config.accent}`} />
+                                  {colorName}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        <button
+                          type="submit"
+                          className="w-full py-2.5 bg-amber-650 hover:bg-amber-550 text-white text-xs font-black uppercase tracking-widest rounded-xl transition-all shadow-md cursor-pointer"
+                        >
+                          Save Command Button
+                        </button>
+                      </form>
+                    </div>
+                  )}
+
+                  {/* Grid layout of commands */}
+                  <div className={`grid grid-cols-1 sm:grid-cols-2 ${isAddingCmd ? "lg:col-span-2" : "lg:col-span-3"} gap-4`}>
+                    {quickCommands.length === 0 ? (
+                      <div className="col-span-full py-12 px-6 border border-dashed border-zinc-800 rounded-2xl text-center space-y-2">
+                        <Terminal className="w-8 h-8 text-zinc-650 mx-auto" />
+                        <h4 className="text-sm font-bold text-zinc-400">No command buttons defined yet</h4>
+                        <p className="text-xs text-zinc-500 max-w-sm mx-auto">Click "Add Custom Button" above or click "Restore Defaults" to populate standard administrative console macros.</p>
+                      </div>
+                    ) : (
+                      quickCommands.map((item) => {
+                        const IconComponent = ICON_MAP[item.icon] || Terminal;
+                        const colors = COLOR_CLASSES[item.color] || COLOR_CLASSES.zinc;
+                        const isOnline = stats?.status === "running";
+
+                        return (
+                          <div
+                            key={item.id}
+                            onClick={() => {
+                              if (isOnline) {
+                                sendPresetCommand(item.command);
+                              } else {
+                                showBanner("The Minecraft server must be ONLINE to execute quick commands.", "error");
+                              }
+                            }}
+                            className={`group relative border rounded-2xl p-5 flex items-start gap-4 transition-all shadow-sm ${
+                              isOnline 
+                                ? `${colors.bg} ${colors.border} cursor-pointer active:scale-[0.98]` 
+                                : "border-zinc-900 bg-zinc-950/40 opacity-50 cursor-not-allowed"
+                            }`}
+                          >
+                            {/* Accent Icon Badge */}
+                            <div className={`p-3 rounded-xl flex items-center justify-center border font-semibold ${
+                              isOnline ? `${colors.badge}` : "bg-zinc-950 border-zinc-900 text-zinc-600"
+                            }`}>
+                              <IconComponent className="w-5 h-5" />
+                            </div>
+
+                            {/* Details text context */}
+                            <div className="flex-1 min-w-0 pr-6 space-y-1">
+                              <h3 className={`text-sm font-bold tracking-tight leading-tight ${
+                                isOnline ? "text-white" : "text-zinc-500"
+                              }`}>
+                                {item.name}
+                              </h3>
+                              <div className="font-mono text-[10px] text-zinc-400 bg-zinc-950/45 px-2 py-0.5 rounded border border-zinc-900 break-all w-fit">
+                                /{item.command}
+                              </div>
+                            </div>
+
+                            {/* Delete custom button */}
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteQuickCommand(item.id, item.name);
+                              }}
+                              className="absolute top-4 right-4 p-1 rounded-md opacity-0 group-hover:opacity-100 hover:bg-red-500/10 hover:text-red-400 text-zinc-500 border border-transparent hover:border-red-500/20 transition-all cursor-pointer"
+                              title="Delete command button"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+
+                </div>
+              </div>
+            </div>
           )}
 
           {navTab === "selfhost" && (

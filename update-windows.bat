@@ -102,7 +102,12 @@ rd /s /q temp_update >nul 2>nul
 echo.
 echo [INFO] Step 3: Installing dependencies and compiling application...
 call npm install
-call npm run build
+if exist bds-manager.exe (
+    echo [INFO] Existing bds-manager.exe detected. Re-bundling executable with new updates...
+    call npm run build:exe
+) else (
+    call npm run build
+)
 
 echo.
 echo ==========================================================
