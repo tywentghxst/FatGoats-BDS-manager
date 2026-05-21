@@ -1676,6 +1676,343 @@ app.post("/api/worlds/upload", authenticateRequest, requireAdmin, upload.single(
   res.json({ success: true, taskId });
 });
 
+// ---------------------- Console Connect Companion Controller ----------------------
+
+const BROADCASTER_DIR = path.join(SERVER_DIR, "broadcaster");
+const BROADCASTER_JAR = path.join(BROADCASTER_DIR, "Broadcaster.jar");
+const BROADCASTER_CONFIG_FILE = path.join(BROADCASTER_DIR, "config.yml");
+
+let broadcasterProcess: any = null;
+let broadcasterStatus: "stopped" | "starting" | "running" | "downloading" = "stopped";
+let broadcasterLogs: Array<{ timestamp: string; type: string; message: string }> = [];
+
+function logBroadcasterMessage(type: string, message: string) {
+  const timestamp = new Date().toLocaleTimeString();
+  broadcasterLogs.push({ timestamp, type, message });
+  if (broadcasterLogs.length > 500) {
+    broadcasterLogs.shift();
+  }
+}
+
+// Default config reader & writer
+function readBroadcasterConfig(): any {
+  if (!fs.existsSync(BROADCASTER_CONFIG_FILE)) {
+    return {
+      address: "127.0.0.1",
+      port: 19132,
+      "auto-reconnect": true,
+      email: "",
+      password: "",
+      prefix: "[Console Connect] "
+    };
+  }
+  try {
+    const content = fs.readFileSync(BROADCASTER_CONFIG_FILE, "utf-8");
+    const config: any = {};
+    content.split("\n").forEach(line => {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#")) return;
+      const parts = trimmed.split(":");
+      if (parts.length >= 2) {
+        const key = parts[0].trim();
+        let value = parts.slice(1).join(":").trim();
+        // Strip outer quotes
+        if (value.startsWith('"') && value.endsWith('"')) {
+          value = value.slice(1, -1);
+        } else if (value.startsWith("'") && value.endsWith("'")) {
+          value = value.slice(1, -1);
+        }
+        if (value === "true") {
+          config[key] = true;
+        } else if (value === "false") {
+          config[key] = false;
+        } else if (!isNaN(Number(value)) && value !== "") {
+          config[key] = Number(value);
+        } else {
+          config[key] = value;
+        }
+      }
+    });
+    return config;
+  } catch (err) {
+    console.error("Failed to parse broadcaster config", err);
+    return {
+      address: "127.0.0.1",
+      port: 19132,
+      "auto-reconnect": true,
+      email: "",
+      password: "",
+      prefix: "[Console Connect] "
+    };
+  }
+}
+
+function writeBroadcasterConfig(config: any) {
+  if (!fs.existsSync(BROADCASTER_DIR)) {
+    fs.mkdirSync(BROADCASTER_DIR, { recursive: true });
+  }
+  let content = `# MCXboxBroadcast Broadcaster Config File\n`;
+  content += `# Generated and managed by BDS Manager\n\n`;
+  content += `address: "${config.address || "127.0.0.1"}"\n`;
+  content += `port: ${config.port || 19132}\n`;
+  content += `auto-reconnect: ${config["auto-reconnect"] !== false}\n`;
+  content += `email: "${config.email || ""}"\n`;
+  content += `password: "${config.password || ""}"\n`;
+  content += `prefix: "${config.prefix || "[Console Connect] "}"\n`;
+
+  fs.writeFileSync(BROADCASTER_CONFIG_FILE, content, "utf-8");
+}
+
+let broadcasterSimulatedInterval: any = null;
+
+// Simulated Bot Flow
+function startBroadcasterSimulation() {
+  if (broadcasterSimulatedInterval) clearInterval(broadcasterSimulatedInterval);
+  
+  broadcasterStatus = "starting";
+  logBroadcasterMessage("SYS", "Initializing simulated Console Connect Bridge...");
+  
+  setTimeout(() => {
+    const config = readBroadcasterConfig();
+    logBroadcasterMessage("INFO", `[Broadcaster] Targeting BDS host at ${config.address || "127.0.0.1"}:${config.port || 19132}`);
+    logBroadcasterMessage("INFO", `[Broadcaster] Loaded configurations to cache successfully.`);
+  }, 500);
+
+  setTimeout(() => {
+    logBroadcasterMessage("SIGNIN", "To sign in, use a web browser to open the page https://microsoft.com/link and enter the code BDS-MC42 to authenticate.");
+  }, 2000);
+
+  setTimeout(() => {
+    if (broadcasterStatus !== "starting") return;
+    broadcasterStatus = "running";
+    logBroadcasterMessage("SUCCESS", "Microsoft Xbox Live Authentication successful! Bot verified as: BDSConsoleBot#3920");
+    logBroadcasterMessage("CLIENT", "Status: BROADCAST_ACTIVE. Virtual player bot is now active on Xbox Live.");
+    
+    broadcasterSimulatedInterval = setInterval(() => {
+      const msgs = [
+        "Broadcaster bot pulse check OK.",
+        "Advertised discoverable LAN game to Xbox associates.",
+        "Auto-accepted friend request from gamertag 'MineChamp_90'.",
+        "Xbox Cloud registration renewed."
+      ];
+      const randMsg = msgs[Math.floor(Math.random() * msgs.length)];
+      logBroadcasterMessage("INFO", `[Broadcaster] ${randMsg}`);
+    }, 15000);
+  }, 10000);
+}
+
+function stopBroadcasterSimulation() {
+  if (broadcasterSimulatedInterval) {
+    clearInterval(broadcasterSimulatedInterval);
+    broadcasterSimulatedInterval = null;
+  }
+  broadcasterStatus = "stopped";
+  logBroadcasterMessage("SYS", "Console Connect Bridge offline.");
+}
+
+// Real Bot Flow
+function startBroadcasterProcess() {
+  if (broadcasterProcess) {
+    try { broadcasterProcess.kill(); } catch (e) {}
+    broadcasterProcess = null;
+  }
+
+  const targetConfig = readBroadcasterConfig();
+  
+  try {
+    broadcasterStatus = "starting";
+    logBroadcasterMessage("SYS", "Launching Console Connect companion process...");
+    
+    broadcasterProcess = spawn("java", ["-jar", BROADCASTER_JAR], {
+      cwd: BROADCASTER_DIR,
+      env: { ...process.env }
+    });
+
+    logBroadcasterMessage("SYS", "Spawned Broadcaster JVM instance.");
+
+    broadcasterProcess.stdout.on("data", (data: any) => {
+      const line = data.toString().trim();
+      if (!line) return;
+      
+      let type = "INFO";
+      if (line.includes("https://microsoft.com/link") || line.includes("code")) {
+        type = "SIGNIN";
+      } else if (line.toLowerCase().includes("error") || line.toLowerCase().includes("failed")) {
+        type = "ERROR";
+      } else if (line.toLowerCase().includes("success") || line.toLowerCase().includes("authenticated")) {
+        type = "SUCCESS";
+      } else if (line.toLowerCase().includes("warning")) {
+        type = "WARN";
+      }
+      
+      logBroadcasterMessage(type, line);
+    });
+
+    broadcasterProcess.stderr.on("data", (data: any) => {
+      const line = data.toString().trim();
+      if (line) {
+        logBroadcasterMessage("ERROR", line);
+      }
+    });
+
+    broadcasterProcess.on("close", (code: any) => {
+      logBroadcasterMessage("SYS", `Broadcaster process terminated with code ${code}`);
+      broadcasterStatus = "stopped";
+      broadcasterProcess = null;
+    });
+
+    setTimeout(() => {
+      if (broadcasterStatus === "starting" && broadcasterProcess) {
+        broadcasterStatus = "running";
+      }
+    }, 5000);
+
+  } catch (err: any) {
+    logBroadcasterMessage("ERROR", `Failed process spawn: ${err.message}`);
+    broadcasterStatus = "stopped";
+    broadcasterProcess = null;
+  }
+}
+
+function stopBroadcasterProcess() {
+  broadcasterStatus = "stopped";
+  if (broadcasterProcess) {
+    logBroadcasterMessage("SYS", "Stopping Console Connect companion...");
+    broadcasterProcess.kill();
+    broadcasterProcess = null;
+  }
+}
+
+// Endpoints
+app.get("/api/broadcaster/status", authenticateRequest, (req, res) => {
+  const isDownloaded = fs.existsSync(BROADCASTER_JAR);
+  const currentConfig = readBroadcasterConfig();
+  
+  let rawYml = "";
+  if (fs.existsSync(BROADCASTER_CONFIG_FILE)) {
+    rawYml = fs.readFileSync(BROADCASTER_CONFIG_FILE, "utf-8");
+  } else {
+    writeBroadcasterConfig(currentConfig);
+    rawYml = fs.readFileSync(BROADCASTER_CONFIG_FILE, "utf-8");
+  }
+
+  res.json({
+    status: broadcasterStatus,
+    isDownloaded,
+    logs: broadcasterLogs,
+    config: currentConfig,
+    rawConfig: rawYml
+  });
+});
+
+app.post("/api/broadcaster/config", authenticateRequest, (req, res) => {
+  const { config, rawConfig } = req.body;
+
+  try {
+    if (!fs.existsSync(BROADCASTER_DIR)) {
+      fs.mkdirSync(BROADCASTER_DIR, { recursive: true });
+    }
+
+    if (rawConfig !== undefined) {
+      fs.writeFileSync(BROADCASTER_CONFIG_FILE, rawConfig, "utf-8");
+      logBroadcasterMessage("SYS", "Configuration config.yml updated raw.");
+    } else if (config !== undefined) {
+      writeBroadcasterConfig(config);
+      logBroadcasterMessage("SYS", "Configuration config.yml updated settings.");
+    }
+
+    res.json({ success: true });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post("/api/broadcaster/control", authenticateRequest, (req, res) => {
+  const { action } = req.body;
+
+  if (action === "start") {
+    if (dbCache.appConfig.simulationMode) {
+      startBroadcasterSimulation();
+    } else {
+      const isDownloaded = fs.existsSync(BROADCASTER_JAR);
+      if (!isDownloaded) {
+        res.status(400).json({ error: "Broadcaster executable not installed yet. Please download dependencies first." });
+        return;
+      }
+      startBroadcasterProcess();
+    }
+    res.json({ success: true, status: "starting" });
+  } else if (action === "stop") {
+    if (dbCache.appConfig.simulationMode) {
+      stopBroadcasterSimulation();
+    } else {
+      stopBroadcasterProcess();
+    }
+    res.json({ success: true, status: "stopped" });
+  } else if (action === "restart") {
+    if (dbCache.appConfig.simulationMode) {
+      stopBroadcasterSimulation();
+      setTimeout(() => startBroadcasterSimulation(), 1000);
+    } else {
+      stopBroadcasterProcess();
+      setTimeout(() => startBroadcasterProcess(), 1050);
+    }
+    res.json({ success: true, status: "restarting" });
+  } else {
+    res.status(400).json({ error: "Invalid action." });
+  }
+});
+
+app.post("/api/broadcaster/clear-logs", authenticateRequest, (req, res) => {
+  broadcasterLogs = [];
+  res.json({ success: true });
+});
+
+app.post("/api/broadcaster/download", authenticateRequest, (req, res) => {
+  if (!fs.existsSync(BROADCASTER_DIR)) {
+    fs.mkdirSync(BROADCASTER_DIR, { recursive: true });
+  }
+
+  broadcasterStatus = "downloading";
+  logBroadcasterMessage("SYS", "Starting download of Broadcaster companion binary...");
+
+  const url = "https://github.com/MCXboxBroadcast/Broadcaster/releases/download/v1.0.3/Broadcaster-1.0.3.jar";
+  
+  const fileStream = fs.createWriteStream(BROADCASTER_JAR);
+  
+  const download = (downloadUrl: string) => {
+    https.get(downloadUrl, (response) => {
+      if (response.statusCode === 302 || response.statusCode === 301) {
+        download(response.headers.location!);
+        return;
+      }
+      
+      if (response.statusCode !== 200) {
+        broadcasterStatus = "stopped";
+        logBroadcasterMessage("ERROR", `Failed downloading: HTTP ${response.statusCode}`);
+        res.status(500).json({ error: "Download failed." });
+        return;
+      }
+
+      response.pipe(fileStream);
+      
+      fileStream.on("finish", () => {
+        fileStream.close();
+        broadcasterStatus = "stopped";
+        logBroadcasterMessage("SYS", "Broadcaster JAR downloaded successfully!");
+        res.json({ success: true });
+      });
+    }).on("error", (err) => {
+      fs.unlink(BROADCASTER_JAR, () => {});
+      broadcasterStatus = "stopped";
+      logBroadcasterMessage("ERROR", `Download network failure: ${err.message}`);
+      res.status(500).json({ error: err.message });
+    });
+  };
+
+  download(url);
+});
+
 // ---------------------- Dev Vs Production Framework Integration ----------------------
 
 async function startServer() {

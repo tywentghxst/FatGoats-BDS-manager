@@ -47,6 +47,8 @@ import {
   UserInvite
 } from "./types";
 
+import ConsoleConnect from "./components/ConsoleConnect";
+
 export default function App() {
   // Authentication & Profile States
   const [hasAdmin, setHasAdmin] = useState<boolean | null>(null);
@@ -62,7 +64,7 @@ export default function App() {
   const [authError, setAuthError] = useState("");
 
   // Menu Navigation Tab (Dashboard, Players, Settings, Console, Users, Selfhost Guides)
-  const [navTab, setNavTab] = useState<"dashboard" | "addons" | "worlds" | "console" | "users" | "selfhost">("dashboard");
+  const [navTab, setNavTab] = useState<"dashboard" | "addons" | "worlds" | "console" | "users" | "selfhost" | "console_connect">("dashboard");
   const [guideMode, setGuideMode] = useState<"windows" | "docker">("windows");
 
   // Console Panel Tabs
@@ -1260,6 +1262,19 @@ export default function App() {
               Users & Admins
             </button>
           )}
+
+          <button
+            id="nav-console-connect"
+            onClick={() => setNavTab("console_connect")}
+            className={`w-full px-4 py-2.5 rounded-xl flex items-center gap-3 text-sm font-medium transition-all ${
+              navTab === "console_connect"
+                ? "bg-zinc-800/80 text-white shadow-md border border-zinc-700/50"
+                : "text-zinc-400 hover:bg-zinc-800/20 hover:text-zinc-300"
+            }`}
+          >
+            <ExternalLink className="w-4 h-4 text-emerald-400 opacity-90" />
+            Console Connect
+          </button>
 
           <button
             id="nav-selfhost"
@@ -2790,6 +2805,15 @@ export default function App() {
                 </div>
               </div>
             </div>
+          )}
+
+          {navTab === "console_connect" && (
+            <ConsoleConnect
+              token={token}
+              serverPort={appConfig.serverPort}
+              serverLevelName={appConfig.levelName}
+              onShowMessage={(text, type) => showBanner(text, type)}
+            />
           )}
         </div>
       </main>
