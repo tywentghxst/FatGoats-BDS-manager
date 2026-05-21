@@ -622,6 +622,132 @@ function importWorldPack(filePath: string, originalName: string, taskId: string)
   }
 }
 
+// Robust promise-based file downloader with redirect handling and unhandled error guards
+function downloadUrlToFile(urlToDownload: string, destinationPath: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    try {
+      const parsedUrl = new URL(urlToDownload);
+    } catch (err) {
+      return reject(new Error(`Invalid URL: ${urlToDownload}`));
+    }
+    
+    // Ensure parent directory exists
+    const dir = path.dirname(destinationPath);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    
+    const fileStream = fs.createWriteStream(destinationPath);
+    let finished = false;
+    
+    const cleanupAndReject = (err: Error) => {
+      if (finished) return;
+      finished = true;
+      fileStream.close();
+      fs.unlink(destinationPath, () => {});
+      reject(err);
+    };
+
+    fileStream.on("error", (err) => {
+      cleanupAndReject(err);
+    });
+
+    const executeDownload = (currentUrl: string) => {
+      if (finished) return;
+      
+      const options = {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
+        }
+      };
+
+      const req = https.get(currentUrl, options, (res) => {
+        if (finished) {
+          res.resume();
+          return;
+        }
+
+        if (res.statusCode === 301 || res.statusCode === 302 || res.statusCode === 307 || res.statusCode === 308) {
+          const redirectUrl = res.headers.location;
+          res.resume();
+          if (redirectUrl) {
+            try {
+              const absoluteRedirect = new URL(redirectUrl, currentUrl).toString();
+              executeDownload(absoluteRedirect);
+            } catch (err: any) {
+              cleanupAndReject(err);
+            }
+          } else {
+            cleanupAndReject(new Error(`Redirect received with code ${res.statusCode} but no Location header`));
+          }
+          return;
+        }
+
+        if (res.statusCode !== 200) {
+          res.resume();
+          cleanupAndReject(new Error(`Server returned HTTP status ${res.statusCode}`));
+          return;
+        }
+
+        res.pipe(fileStream);
+
+        fileStream.on("finish", () => {
+          if (!finished) {
+            finished = true;
+            fileStream.close(() => {
+              resolve();
+            });
+          }
+        });
+      });
+
+      req.on("error", (err) => {
+        cleanupAndReject(err);
+      });
+    };
+
+    executeDownload(urlToDownload);
+  });
+}
+
+// Scrapes the official Minecraft downloads page to find the latest Bedrock Server version
+async function fetchLatestBedrockVersion(folder: string): Promise<{ version: string; downloadUrl: string } | null> {
+  try {
+    const response = await fetchHttps("https://www.minecraft.net/en-us/download/server/bedrock", {
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
+    });
+    
+    if (response.statusCode === 200) {
+      const html = response.data;
+      // Search for download links matching official pattern in page source
+      const regex = new RegExp(`(https:\\/\\/www\\.minecraft\\.net\\/bedrockdedicatedserver\\/${folder}\\/bedrock-server-([^"]+?)\\.zip|https:\\/\\/minecraft\\.azureedge\\.net\\/bin-(?:win|linux)\\/${folder}\\/bedrock-server-([^"]+?)\\.zip|https:\\/\\/minecraft\\.azureedge\\.net\\/${folder}\\/bedrock-server-([^"]+?)\\.zip)`, "i");
+      let match = html.match(regex);
+      if (!match) {
+        // Fallback more general regex that captures any bedrock-server-*.zip link
+        const generalRegex = new RegExp(`(https?:\\/\\/[^\\s"']+\\/${folder}\\/bedrock-server-([0-9\\.]+)\\.zip)`, "i");
+        match = html.match(generalRegex);
+      }
+      
+      if (match) {
+        const fullUrl = match[1];
+        const versionStr = match[2] || match[3] || match[4] || "";
+        if (versionStr) {
+          // Clean version string e.g. 1.21.71.01 -> 1.21.71
+          const parts = versionStr.split(".");
+          const displayVersion = parts.length >= 3 ? parts.slice(0, 3).join(".") : versionStr;
+          return {
+            version: displayVersion,
+            downloadUrl: fullUrl
+          };
+        }
+      }
+    }
+  } catch (error) {
+    console.error("Failed to dynamically scrape Minecraft Bedrock download page:", error);
+  }
+  return null;
+}
+
 // Bedrock Version Web downloader helper
 function downloadBedrockVersion(version: string, downloadUrl: string, taskId: string, attempt = 1) {
   const task = activeTasks.find(t => t.id === taskId);
@@ -1238,7 +1364,7 @@ app.post("/api/tasks/clear", authenticateRequest, (req, res) => {
 });
 
 // Versions list
-app.get("/api/versions", authenticateRequest, (req, res) => {
+app.get("/api/versions", authenticateRequest, async (req, res) => {
   const isWin = process.platform === "win32";
   const folder = isWin ? "bin-win" : "bin-linux";
   
@@ -1280,6 +1406,35 @@ app.get("/api/versions", authenticateRequest, (req, res) => {
       downloadUrl: `https://www.minecraft.net/bedrockdedicatedserver/${folder}/bedrock-server-1.20.80.05.zip`
     }
   ];
+
+  try {
+    const scraped = await fetchLatestBedrockVersion(folder);
+    if (scraped) {
+      const existsIdx = versions.findIndex(v => v.version === scraped.version);
+      if (existsIdx === -1) {
+        versions.forEach(v => v.isLatest = false);
+        versions.unshift({
+          version: scraped.version,
+          releaseDate: "Official Dynamic (Latest)",
+          isLatest: true,
+          downloadUrl: scraped.downloadUrl
+        });
+      } else {
+        versions.forEach(v => v.isLatest = false);
+        versions[existsIdx].isLatest = true;
+        versions[existsIdx].downloadUrl = scraped.downloadUrl;
+        if (!versions[existsIdx].releaseDate.includes("(Latest)")) {
+          versions[existsIdx].releaseDate += " (Latest)";
+        }
+        // Move to head of array
+        const [matched] = versions.splice(existsIdx, 1);
+        versions.unshift(matched);
+      }
+    }
+  } catch (err) {
+    console.warn("Failed retrieving latest Bedrock release dynamically: ", err);
+  }
+
   res.json(versions);
 });
 
@@ -2054,39 +2209,17 @@ app.post("/api/broadcaster/download", authenticateRequest, (req, res) => {
 
   const url = "https://github.com/MCXboxBroadcast/Broadcaster/releases/download/v1.0.3/Broadcaster-1.0.3.jar";
   
-  const fileStream = fs.createWriteStream(BROADCASTER_JAR);
-  
-  const download = (downloadUrl: string) => {
-    https.get(downloadUrl, (response) => {
-      if (response.statusCode === 302 || response.statusCode === 301) {
-        download(response.headers.location!);
-        return;
-      }
-      
-      if (response.statusCode !== 200) {
-        broadcasterStatus = "stopped";
-        logBroadcasterMessage("ERROR", `Failed downloading: HTTP ${response.statusCode}`);
-        res.status(500).json({ error: "Download failed." });
-        return;
-      }
-
-      response.pipe(fileStream);
-      
-      fileStream.on("finish", () => {
-        fileStream.close();
-        broadcasterStatus = "stopped";
-        logBroadcasterMessage("SYS", "Broadcaster JAR downloaded successfully!");
-        res.json({ success: true });
-      });
-    }).on("error", (err) => {
-      fs.unlink(BROADCASTER_JAR, () => {});
+  downloadUrlToFile(url, BROADCASTER_JAR)
+    .then(() => {
+      broadcasterStatus = "stopped";
+      logBroadcasterMessage("SYS", "Broadcaster JAR downloaded successfully!");
+      res.json({ success: true });
+    })
+    .catch((err) => {
       broadcasterStatus = "stopped";
       logBroadcasterMessage("ERROR", `Download network failure: ${err.message}`);
       res.status(500).json({ error: err.message });
     });
-  };
-
-  download(url);
 });
 
 // ---------------------- Playit.gg Companion Controller ----------------------
@@ -2343,47 +2476,25 @@ app.post("/api/playit/download", authenticateRequest, (req, res) => {
     ? "https://github.com/playit-cloud/playit-agent/releases/download/v0.15.26/playit-windows-x64.exe"
     : "https://github.com/playit-cloud/playit-agent/releases/download/v0.15.26/playit-linux-amd64";
 
-  const fileStream = fs.createWriteStream(PLAYIT_BIN);
-
-  const download = (downloadUrl: string) => {
-    https.get(downloadUrl, (response) => {
-      if (response.statusCode === 302 || response.statusCode === 301) {
-        download(response.headers.location!);
-        return;
-      }
-
-      if (response.statusCode !== 200) {
-        playitStatus = "stopped";
-        logPlayitMessage("ERROR", `Failed downloading playit binary: HTTP ${response.statusCode}`);
-        res.status(500).json({ error: "Download failed." });
-        return;
-      }
-
-      response.pipe(fileStream);
-
-      fileStream.on("finish", () => {
-        fileStream.close();
-        if (!isWin) {
-          try {
-            fs.chmodSync(PLAYIT_BIN, 0o755);
-            logPlayitMessage("SYS", "Set execution permission (chmod +x) on playit binary.");
-          } catch (e: any) {
-            logPlayitMessage("WARN", `Could not set executable permission: ${e.message}`);
-          }
+  downloadUrlToFile(url, PLAYIT_BIN)
+    .then(() => {
+      if (!isWin) {
+        try {
+          fs.chmodSync(PLAYIT_BIN, 0o755);
+          logPlayitMessage("SYS", "Set execution permission (chmod +x) on playit binary.");
+        } catch (e: any) {
+          logPlayitMessage("WARN", `Could not set executable permission: ${e.message}`);
         }
-        playitStatus = "stopped";
-        logPlayitMessage("SYS", "playit.gg companion binary downloaded successfully!");
-        res.json({ success: true });
-      });
-    }).on("error", (err) => {
-      fs.unlink(PLAYIT_BIN, () => {});
+      }
+      playitStatus = "stopped";
+      logPlayitMessage("SYS", "playit.gg companion binary downloaded successfully!");
+      res.json({ success: true });
+    })
+    .catch((err) => {
       playitStatus = "stopped";
       logPlayitMessage("ERROR", `Download network failure: ${err.message}`);
       res.status(500).json({ error: err.message });
     });
-  };
-
-  download(url);
 });
 
 // ---------------------- Software Update Utilities ----------------------
