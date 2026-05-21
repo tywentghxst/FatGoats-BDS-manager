@@ -111,7 +111,7 @@ let dbCache: DBStructure = {
     levelName: "BedrockWorld",
     difficulty: "normal",
     gamemode: "survival",
-    simulationMode: true, // Default to simulation mode for Cloud Run compatibility
+    simulationMode: false, // Default to simulation mode off for real binary execution
     selectedVersion: "1.21.71",
     serverName: "Bedrock Dedicated Server",
     emitServerTelemetry: false,
@@ -143,7 +143,7 @@ function loadDB() {
           levelName: "BedrockWorld",
           difficulty: "normal",
           gamemode: "survival",
-          simulationMode: true,
+          simulationMode: false,
           selectedVersion: "1.21.71",
           serverName: "Bedrock Dedicated Server",
           emitServerTelemetry: false,
@@ -2082,6 +2082,303 @@ app.post("/api/broadcaster/download", authenticateRequest, (req, res) => {
       fs.unlink(BROADCASTER_JAR, () => {});
       broadcasterStatus = "stopped";
       logBroadcasterMessage("ERROR", `Download network failure: ${err.message}`);
+      res.status(500).json({ error: err.message });
+    });
+  };
+
+  download(url);
+});
+
+// ---------------------- Playit.gg Companion Controller ----------------------
+
+const PLAYIT_DIR = path.join(SERVER_DIR, "playit_gg");
+const PLAYIT_BIN = path.join(PLAYIT_DIR, process.platform === "win32" ? "playit.exe" : "playit");
+
+let playitProcess: any = null;
+let playitStatus: "stopped" | "starting" | "running" | "downloading" = "stopped";
+let playitLogs: Array<{ timestamp: string; type: string; message: string }> = [];
+let playitClaimCode: string = "";
+let playitClaimUrl: string = "";
+let playitTunnelUrl: string = "";
+
+function logPlayitMessage(type: string, message: string) {
+  const timestamp = new Date().toLocaleTimeString();
+  playitLogs.push({ timestamp, type, message });
+  if (playitLogs.length > 500) {
+    playitLogs.shift();
+  }
+}
+
+let playitSimulatedInterval: any = null;
+
+function startPlayitSimulation() {
+  if (playitSimulatedInterval) clearInterval(playitSimulatedInterval);
+
+  playitStatus = "starting";
+  playitClaimCode = "";
+  playitClaimUrl = "";
+  playitTunnelUrl = "";
+  logPlayitMessage("SYS", "Initializing simulated playit.gg tunnel agent...");
+
+  setTimeout(() => {
+    logPlayitMessage("INFO", "Checking network interfaces... OK");
+    logPlayitMessage("INFO", "Discovered Bedrock Dedicated Server running on port 19132 (UDP)");
+  }, 1000);
+
+  setTimeout(() => {
+    playitClaimCode = "bds-9821-4a2c-9018";
+    playitClaimUrl = "https://playit.gg/claim/bds-9821-4a2c-9018";
+    logPlayitMessage("CLAIM", "No active tunnel configuration detected. Generating new agent claim link...");
+    logPlayitMessage("CLAIM", `To register this agent, open: ${playitClaimUrl}`);
+  }, 2500);
+
+  setTimeout(() => {
+    if (playitStatus !== "starting") return;
+    playitStatus = "running";
+    playitTunnelUrl = "goats-bedrock.playit.gg:19132";
+    playitClaimCode = "";
+    playitClaimUrl = "";
+    logPlayitMessage("SUCCESS", `Agent claimed successfully! Registered BDS tunnel on playit.gg.`);
+    logPlayitMessage("SUCCESS", `Tunnel address allocated: ${playitTunnelUrl} (UDP) -> 127.0.0.1:19132`);
+    logPlayitMessage("INFO", "Connecting to playit.gg world proxy servers...");
+    logPlayitMessage("INFO", "Data channel connected! Ping: 42ms.");
+
+    playitSimulatedInterval = setInterval(() => {
+      const msgs = [
+        "Tunnel connection stable. Speed: 15.4 Mbps",
+        "Proxy heartbeat acknowledged by playit.gg edge server.",
+        "Received connection request from 185.11.23.4:51020",
+        "Allocated proxy packet routing for UDP stream."
+      ];
+      const randMsg = msgs[Math.floor(Math.random() * msgs.length)];
+      logPlayitMessage("INFO", `[playit.gg] ${randMsg}`);
+    }, 15000);
+  }, 12000);
+}
+
+function stopPlayitSimulation() {
+  if (playitSimulatedInterval) {
+    clearInterval(playitSimulatedInterval);
+    playitSimulatedInterval = null;
+  }
+  playitStatus = "stopped";
+  logPlayitMessage("SYS", "Simulated playit.gg tunnel agent offline.");
+}
+
+function startPlayitProcess() {
+  if (playitProcess) {
+    try { playitProcess.kill(); } catch (e) {}
+    playitProcess = null;
+  }
+
+  try {
+    playitStatus = "starting";
+    playitClaimCode = "";
+    playitClaimUrl = "";
+    playitTunnelUrl = "";
+    logPlayitMessage("SYS", "Launching playit.gg tunnel agent binary...");
+
+    if (!fs.existsSync(PLAYIT_BIN)) {
+      playitStatus = "stopped";
+      logPlayitMessage("ERROR", "playit.gg binary not found! Please download the binary first.");
+      return;
+    }
+
+    playitProcess = spawn(PLAYIT_BIN, [], {
+      cwd: PLAYIT_DIR,
+      env: { ...process.env }
+    });
+
+    logPlayitMessage("SYS", "Spawned playit agent process.");
+
+    playitProcess.stdout.on("data", (data: any) => {
+      const line = data.toString().trim();
+      if (!line) return;
+
+      const lines = line.split("\n");
+      for (const singleLine of lines) {
+        const trimmed = singleLine.trim();
+        if (!trimmed) continue;
+
+        let type = "INFO";
+        if (trimmed.toLowerCase().includes("error") || trimmed.toLowerCase().includes("failed")) {
+          type = "ERROR";
+        } else if (trimmed.toLowerCase().includes("warn")) {
+          type = "WARN";
+        }
+
+        // Detect claim link
+        const claimMatch = trimmed.match(/https:\/\/playit\.gg\/claim\/([a-zA-Z0-9\-]+)/i);
+        if (claimMatch) {
+          playitClaimUrl = claimMatch[0];
+          playitClaimCode = claimMatch[1];
+          logPlayitMessage("CLAIM", `Claim Link generated: ${playitClaimUrl}`);
+        }
+
+        // Detect tunnel registered
+        if (trimmed.toLowerCase().includes("registered") || trimmed.toLowerCase().includes("allocated") || trimmed.toLowerCase().includes("tunnel")) {
+          const addrMatch = trimmed.match(/([a-zA-Z0-9\-]+\.playit\.gg:\d+)/i);
+          if (addrMatch) {
+            playitTunnelUrl = addrMatch[1];
+          }
+          playitClaimCode = "";
+          playitClaimUrl = "";
+        }
+
+        logPlayitMessage(type, trimmed);
+      }
+    });
+
+    playitProcess.stderr.on("data", (data: any) => {
+      const line = data.toString().trim();
+      if (line) {
+        logPlayitMessage("ERROR", line);
+      }
+    });
+
+    playitProcess.on("close", (code: any) => {
+      logPlayitMessage("SYS", `Playit agent process closed with code ${code}`);
+      playitStatus = "stopped";
+      playitProcess = null;
+    });
+
+    setTimeout(() => {
+      if (playitStatus === "starting" && playitProcess) {
+        playitStatus = "running";
+      }
+    }, 4000);
+
+  } catch (err: any) {
+    logPlayitMessage("ERROR", `Failed process spawn: ${err.message}`);
+    playitStatus = "stopped";
+    playitProcess = null;
+  }
+}
+
+function stopPlayitProcess() {
+  playitStatus = "stopped";
+  if (playitProcess) {
+    logPlayitMessage("SYS", "Stopping playit.gg tunnel agent...");
+    playitProcess.kill("SIGTERM");
+    playitProcess = null;
+  }
+}
+
+// Endpoints
+app.get("/api/playit/status", authenticateRequest, (req, res) => {
+  const isDownloaded = fs.existsSync(PLAYIT_BIN);
+  res.json({
+    status: playitStatus,
+    isDownloaded,
+    logs: playitLogs,
+    claimCode: playitClaimCode,
+    claimUrl: playitClaimUrl,
+    tunnelUrl: playitTunnelUrl
+  });
+});
+
+app.post("/api/playit/control", authenticateRequest, (req, res) => {
+  const { action } = req.body;
+
+  if (action === "start") {
+    if (dbCache.appConfig.simulationMode) {
+      startPlayitSimulation();
+    } else {
+      const isDownloaded = fs.existsSync(PLAYIT_BIN);
+      if (!isDownloaded) {
+        res.status(400).json({ error: "playit.gg binary not downloaded yet." });
+        return;
+      }
+      startPlayitProcess();
+    }
+    res.json({ success: true, status: "starting" });
+  } else if (action === "stop") {
+    if (dbCache.appConfig.simulationMode) {
+      stopPlayitSimulation();
+    } else {
+      stopPlayitProcess();
+    }
+    res.json({ success: true, status: "stopped" });
+  } else if (action === "restart") {
+    if (dbCache.appConfig.simulationMode) {
+      stopPlayitSimulation();
+      setTimeout(() => startPlayitSimulation(), 1000);
+    } else {
+      stopPlayitProcess();
+      setTimeout(() => startPlayitProcess(), 1000);
+    }
+    res.json({ success: true, status: "restarting" });
+  } else if (action === "confirm_claim") {
+    playitClaimCode = "";
+    playitClaimUrl = "";
+    if (dbCache.appConfig.simulationMode) {
+      playitStatus = "running";
+      playitTunnelUrl = "goats-bedrock.playit.gg:19132";
+      logPlayitMessage("SUCCESS", "Manual claim acknowledgement received. Linking client complete!");
+      logPlayitMessage("SUCCESS", `Tunnel address allocated: ${playitTunnelUrl} (UDP) -> 127.0.0.1:19132`);
+    } else {
+      logPlayitMessage("INFO", "Claim confirmed manually by user.");
+    }
+    res.json({ success: true, status: playitStatus });
+  } else {
+    res.status(400).json({ error: "Invalid action." });
+  }
+});
+
+app.post("/api/playit/clear-logs", authenticateRequest, (req, res) => {
+  playitLogs = [];
+  res.json({ success: true });
+});
+
+app.post("/api/playit/download", authenticateRequest, (req, res) => {
+  if (!fs.existsSync(PLAYIT_DIR)) {
+    fs.mkdirSync(PLAYIT_DIR, { recursive: true });
+  }
+
+  playitStatus = "downloading";
+  logPlayitMessage("SYS", "Starting download of playit.gg tunnel binary...");
+
+  const isWin = process.platform === "win32";
+  const url = isWin 
+    ? "https://github.com/playit-cloud/playit-agent/releases/download/v0.15.26/playit-windows-x64.exe"
+    : "https://github.com/playit-cloud/playit-agent/releases/download/v0.15.26/playit-linux-amd64";
+
+  const fileStream = fs.createWriteStream(PLAYIT_BIN);
+
+  const download = (downloadUrl: string) => {
+    https.get(downloadUrl, (response) => {
+      if (response.statusCode === 302 || response.statusCode === 301) {
+        download(response.headers.location!);
+        return;
+      }
+
+      if (response.statusCode !== 200) {
+        playitStatus = "stopped";
+        logPlayitMessage("ERROR", `Failed downloading playit binary: HTTP ${response.statusCode}`);
+        res.status(500).json({ error: "Download failed." });
+        return;
+      }
+
+      response.pipe(fileStream);
+
+      fileStream.on("finish", () => {
+        fileStream.close();
+        if (!isWin) {
+          try {
+            fs.chmodSync(PLAYIT_BIN, 0o755);
+            logPlayitMessage("SYS", "Set execution permission (chmod +x) on playit binary.");
+          } catch (e: any) {
+            logPlayitMessage("WARN", `Could not set executable permission: ${e.message}`);
+          }
+        }
+        playitStatus = "stopped";
+        logPlayitMessage("SYS", "playit.gg companion binary downloaded successfully!");
+        res.json({ success: true });
+      });
+    }).on("error", (err) => {
+      fs.unlink(PLAYIT_BIN, () => {});
+      playitStatus = "stopped";
+      logPlayitMessage("ERROR", `Download network failure: ${err.message}`);
       res.status(500).json({ error: err.message });
     });
   };

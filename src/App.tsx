@@ -66,6 +66,7 @@ import {
 
 import ConsoleConnect from "./components/ConsoleConnect";
 import SoftwareUpdates from "./components/SoftwareUpdates";
+import PlayitConnect from "./components/PlayitConnect";
 
 const ICON_MAP: Record<string, React.ComponentType<any>> = {
   Sun,
@@ -324,7 +325,7 @@ export default function App() {
     levelName: "BedrockWorld",
     difficulty: "normal",
     gamemode: "survival",
-    simulationMode: true,
+    simulationMode: false,
     selectedVersion: "1.21.71",
     serverName: "Bedrock Dedicated Server",
     emitServerTelemetry: false,
@@ -1585,6 +1586,19 @@ export default function App() {
           </button>
 
           <button
+            id="nav-playit"
+            onClick={() => setNavTab("playit")}
+            className={`w-full px-4 py-2.5 rounded-xl flex items-center gap-3 text-sm font-medium transition-all ${
+              navTab === "playit"
+                ? "bg-zinc-800/80 text-white shadow-md border border-zinc-700/50"
+                : "text-zinc-400 hover:bg-zinc-800/20 hover:text-zinc-300"
+            }`}
+          >
+            <Globe className="w-4 h-4 text-emerald-400 opacity-90" />
+            Open to Internet
+          </button>
+
+          <button
             id="nav-selfhost"
             onClick={() => setNavTab("selfhost")}
             className={`w-full px-4 py-2.5 rounded-xl flex items-center gap-3 text-sm font-medium transition-all ${
@@ -2627,30 +2641,7 @@ export default function App() {
 
               {/* Version update panel and config widgets */}
               <div className="bg-zinc-900/40 border border-zinc-900 rounded-2xl p-5 space-y-6 overflow-y-auto shadow h-full">
-                {/* Simulated Versus Real toggle */}
-                <div className="space-y-3.5 border-b border-zinc-900 pb-5">
-                  <h3 className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Environment Engine</h3>
-                  <div className="flex items-center justify-between p-3 bg-zinc-950/40 rounded-xl border border-zinc-900">
-                    <div>
-                      <h4 className="text-xs font-bold text-white leading-tight">Simulation Sandbox</h4>
-                      <p className="text-[10px] text-zinc-500 mt-1 max-w-2xs leading-normal">
-                        Pretend executes C++ binaries inside Cloud Run container. Extremely safe, reactive demo!
-                      </p>
-                    </div>
-                    {isAdmin ? (
-                      <input
-                        type="checkbox"
-                        checked={appConfig.simulationMode}
-                        onChange={e => updateSettingsField({ simulationMode: e.target.checked })}
-                        className="w-5 h-5 accent-emerald-500 cursor-pointer"
-                      />
-                    ) : (
-                      <span className="text-[9px] font-black uppercase text-zinc-600 tracking-wider">
-                        {appConfig.simulationMode ? "Sim" : "Real"}
-                      </span>
-                    )}
-                  </div>
-                </div>
+
 
                 {/* Configurations Property Modifiers (Admin only) */}
                 <div className="space-y-4 border-b border-zinc-900 pb-5">
@@ -3405,6 +3396,15 @@ export default function App() {
             />
           )}
 
+          {navTab === "playit" && (
+            <PlayitConnect
+              token={token}
+              serverPort={appConfig.serverPort}
+              serverLevelName={appConfig.levelName}
+              onShowMessage={(text, type) => showBanner(text, type)}
+            />
+          )}
+
           {navTab === "updates" && (
             <SoftwareUpdates
               token={token}
@@ -3657,9 +3657,9 @@ export default function App() {
 
                       <div className="p-4 bg-zinc-950/40 rounded-xl border border-zinc-900 flex items-center justify-between">
                         <div className="space-y-1">
-                          <h4 className="text-xs font-bold text-white">Simulation Sandbox Engine</h4>
+                          <h4 className="text-xs font-bold text-white">Simulate Server Execution</h4>
                           <p className="text-[9px] text-zinc-500 leading-normal max-w-2xs">
-                            Pretend-executes Bedrock binaries. Extremely safe, reactive demo running seamlessly inside Cloud Run container.
+                            Turn this on to fully simulate the application running back-end features (BDS commands and telemetry simulator). Defaults to OFF for live server binary execution.
                           </p>
                         </div>
                         <input
