@@ -32,7 +32,8 @@ import {
   UserPlus,
   KeyRound,
   Edit,
-  ExternalLink
+  ExternalLink,
+  ClipboardList
 } from "lucide-react";
 
 import {
@@ -65,11 +66,12 @@ export default function App() {
   const [authError, setAuthError] = useState("");
 
   // Menu Navigation Tab (Dashboard, Players, Settings, Console, Users, Selfhost Guides)
-  const [navTab, setNavTab] = useState<"dashboard" | "addons" | "worlds" | "console" | "users" | "selfhost" | "console_connect" | "updates">("dashboard");
+  const [navTab, setNavTab] = useState<"dashboard" | "addons" | "worlds" | "console" | "users" | "selfhost" | "console_connect" | "updates" | "tasks_history">("dashboard");
   const [guideMode, setGuideMode] = useState<"windows" | "docker">("windows");
 
   // Console Panel Tabs
   const [consoleTab, setConsoleTab] = useState<"logs" | "tasks" | "history">("logs");
+  const [taskTimeFilter, setTaskTimeFilter] = useState<"recent" | "oldest">("recent");
 
   // Server stats & configurations
   const [stats, setStats] = useState<any | null>(null);
@@ -953,7 +955,7 @@ export default function App() {
             <div className="w-16 h-16 bg-emerald-600 rounded-2xl flex items-center justify-center mx-auto shadow-lg shadow-emerald-500/20">
               <Shield className="w-8 h-8 text-zinc-100" />
             </div>
-            <h1 id="bento-title" className="text-2xl font-bold tracking-tight text-white mt-4">Welcome to Bedrock Host</h1>
+            <h1 id="bento-title" className="text-2xl font-bold tracking-tight text-white mt-4">Welcome to FatGoats BDS Manager</h1>
             <p className="text-sm text-zinc-500">Create your Primary Administrator account to boot setup.</p>
           </div>
 
@@ -1124,7 +1126,7 @@ export default function App() {
               <KeyRound className="w-8 h-8 text-emerald-400" />
             </div>
             <h1 id="login-title" className="text-2xl font-bold tracking-tight text-white mt-4">Authorized Login</h1>
-            <p className="text-xs text-zinc-500 uppercase tracking-widest font-semibold text-emerald-500">Bedrock dedicated environment</p>
+            <p className="text-xs text-zinc-500 uppercase tracking-widest font-semibold text-emerald-500">FatGoats bds dedicated environment</p>
           </div>
 
           <form onSubmit={handleLogin} className="space-y-4">
@@ -1187,10 +1189,10 @@ export default function App() {
       <nav id="sidebar-nav" className="w-68 border-r border-zinc-900 bg-zinc-900/30 flex flex-col flex-shrink-0">
         <div className="p-6 border-b border-zinc-900 flex items-center gap-3">
           <div className="w-9 h-9 bg-emerald-600/20 border border-emerald-500/30 rounded-lg flex items-center justify-center font-black text-xl text-emerald-400 shadow-inner">
-            B
+            F
           </div>
           <div className="flex flex-col">
-            <span className="font-bold tracking-tight text-lg text-white">Bedrock Panel</span>
+            <span className="font-bold tracking-tight text-lg text-white">FatGoats BDS</span>
             <span className="text-[10px] text-zinc-500 uppercase font-black tracking-widest leading-none mt-0.5">MCPE Dedicate</span>
           </div>
         </div>
@@ -1247,6 +1249,19 @@ export default function App() {
           >
             <Terminal className="w-4 h-4 text-emerald-500 opacity-90" />
             Live Terminals
+          </button>
+
+          <button
+            id="nav-tasks-history"
+            onClick={() => setNavTab("tasks_history")}
+            className={`w-full px-4 py-2.5 rounded-xl flex items-center gap-3 text-sm font-medium transition-all ${
+              navTab === "tasks_history"
+                ? "bg-zinc-800/80 text-white shadow-md border border-zinc-700/50"
+                : "text-zinc-400 hover:bg-zinc-800/20 hover:text-zinc-300"
+            }`}
+          >
+            <ClipboardList className="w-4 h-4 text-emerald-500 opacity-90" />
+            Tasks & History
           </button>
 
           {isAdmin && (
@@ -1489,218 +1504,99 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Console Logs Tabbed Card Interface Bento */}
+              {/* Console Logs Card Interface Bento */}
               <div className="xl:col-span-2 bg-zinc-900/40 border border-zinc-900 rounded-2xl flex flex-col h-[520px] overflow-hidden shadow-xl">
-                {/* Console tabs headers */}
-                <div id="console-sub-navigation" className="px-4 border-b border-zinc-900 flex justify-between items-center bg-zinc-950/40 h-14">
-                  <div className="flex gap-1">
-                    <button
-                      id="console-tab-logs"
-                      onClick={() => setConsoleTab("logs")}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-colors ${
-                        consoleTab === "logs" ? "bg-zinc-850 text-emerald-400" : "text-zinc-500 hover:text-zinc-300"
-                      }`}
-                    >
-                      Console Stream
-                    </button>
-                    <button
-                      id="console-tab-tasks"
-                      onClick={() => setConsoleTab("tasks")}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-colors relative ${
-                        consoleTab === "tasks" ? "bg-zinc-850 text-emerald-400" : "text-zinc-500 hover:text-zinc-300"
-                      }`}
-                    >
-                      Task Tracker
-                      {activeTasks.some(t => t.status === "running" || t.status === "pending") && (
-                        <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-amber-500 rounded-full animate-ping" />
-                      )}
-                    </button>
-                    <button
-                      id="console-tab-history"
-                      onClick={() => setConsoleTab("history")}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-colors ${
-                        consoleTab === "history" ? "bg-zinc-850 text-emerald-400" : "text-zinc-500 hover:text-zinc-300"
-                      }`}
-                    >
-                      Logs History
-                    </button>
+                {/* Console card header */}
+                <div id="console-sub-navigation" className="px-5 border-b border-zinc-900 flex justify-between items-center bg-zinc-950/40 h-14">
+                  <h3 className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Live Console Stream</h3>
+                  <div className="flex items-center gap-1.5 text-xs font-black bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded-full select-none">
+                    <Terminal className="w-3 h-3" />
+                    <span>Real-time</span>
                   </div>
-
-                  {consoleTab === "tasks" && activeTasks.length > 0 && (
-                    <button
-                      onClick={handleClearFinishedTasks}
-                      className="text-[9px] uppercase tracking-wider bg-zinc-900 hover:bg-zinc-850 px-2 py-1 rounded text-zinc-400 border border-zinc-800"
-                    >
-                      Flush list
-                    </button>
-                  )}
-                  {consoleTab === "history" && pastLogs.length > 0 && (
-                    <button
-                      onClick={handleClearHistoryLogs}
-                      className="text-[9px] uppercase tracking-wider bg-zinc-900 hover:bg-zinc-850 px-2 py-1 rounded text-zinc-400 border border-zinc-800"
-                    >
-                      Clear history
-                    </button>
-                  )}
                 </div>
 
                 {/* Sub-tab view renderer blocks */}
                 <div className="flex-1 p-5 overflow-hidden flex flex-col bg-zinc-950/20">
-                  {consoleTab === "logs" && (
-                    <>
-                      <div
-                        id="terminal-text-sandbox"
-                        ref={logContainerRef}
-                        className="flex-1 overflow-y-auto font-mono text-xs space-y-1.5 pr-2"
-                      >
-                        {consoleLogs.length === 0 ? (
-                          <p className="text-zinc-600 italic">No console logs buffered.</p>
-                        ) : (
-                          consoleLogs.map((log, idx) => (
-                            <div key={idx} className="flex gap-2.5 leading-relaxed">
-                              <span className="text-zinc-600 font-bold select-none">[ {log.timestamp.slice(11, 19)} ]</span>
-                              <span
-                                className={`font-black select-none uppercase tracking-wider text-[9px] px-1 rounded h-4 flex items-center ${
-                                  log.type === "ERROR"
-                                    ? "bg-red-500/10 text-red-400 border border-red-500/20"
-                                    : log.type === "WARN"
-                                    ? "bg-amber-500/10 text-amber-400 border border-amber-500/20"
-                                    : log.type === "PLAYER"
-                                    ? "bg-purple-500/10 text-purple-400 border border-purple-500/20"
-                                    : log.type === "SYS"
-                                    ? "bg-blue-500/10 text-blue-400 border border-blue-500/20"
-                                    : "bg-zinc-800 text-zinc-400"
-                                }`}
-                              >
-                                {log.type}
-                              </span>
-                              <span className="text-zinc-300 break-all">{log.message}</span>
-                            </div>
-                          ))
-                        )}
-                      </div>
-
-                      {/* Preset Commands Bar */}
-                      <div className="flex flex-wrap items-center gap-1.5 mt-4 p-2 bg-zinc-900/30 border border-zinc-900/50 rounded-xl">
-                        <span className="text-[9px] uppercase font-black text-zinc-500 tracking-wider mr-1 select-none">Presets:</span>
-                        {[
-                          { label: "List Players", cmd: "list" },
-                          { label: "Day", cmd: "time set day" },
-                          { label: "Night", cmd: "time set night" },
-                          { label: "Clear Weather", cmd: "weather clear" },
-                          { label: "Hard Diff", cmd: "difficulty hard" },
-                          { label: "Keep Inventory", cmd: "gamerule keepinventory true" },
-                          { label: "Show Coords", cmd: "gamerule showcoordinates true" },
-                          { label: "Whitelist List", cmd: "whitelist list" },
-                        ].map((preset, idx) => (
-                          <button
-                            key={idx}
-                            type="button"
-                            disabled={stats?.status !== "running"}
-                            onClick={() => sendPresetCommand(preset.cmd)}
-                            className="px-2 py-1 text-[9px] font-bold bg-zinc-950 border border-zinc-905 hover:border-zinc-800 hover:bg-zinc-900 hover:text-emerald-400 text-zinc-400 rounded-lg font-mono transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-30 select-none"
-                            title={`Execute command: /${preset.cmd}`}
+                  <div
+                    id="terminal-text-sandbox"
+                    ref={logContainerRef}
+                    className="flex-1 overflow-y-auto font-mono text-xs space-y-1.5 pr-2"
+                  >
+                    {consoleLogs.length === 0 ? (
+                      <p className="text-zinc-600 italic">No console logs buffered.</p>
+                    ) : (
+                      consoleLogs.map((log, idx) => (
+                        <div key={idx} className="flex gap-2.5 leading-relaxed">
+                          <span className="text-zinc-600 font-bold select-none">[ {log.timestamp.slice(11, 19)} ]</span>
+                          <span
+                            className={`font-black select-none uppercase tracking-wider text-[9px] px-1 rounded h-4 flex items-center ${
+                              log.type === "ERROR"
+                                ? "bg-red-500/10 text-red-400 border border-red-500/20"
+                                : log.type === "WARN"
+                                ? "bg-amber-500/10 text-amber-400 border border-amber-500/20"
+                                : log.type === "PLAYER"
+                                ? "bg-purple-500/10 text-purple-400 border border-purple-500/20"
+                                : log.type === "SYS"
+                                ? "bg-blue-500/10 text-blue-400 border border-blue-500/20"
+                                : "bg-zinc-800 text-zinc-400"
+                            }`}
                           >
-                            /{preset.cmd}
-                          </button>
-                        ))}
-                      </div>
-
-                      {/* Command Sender Entry Input */}
-                      <form onSubmit={handleSendCommand} className="mt-3 p-2 bg-zinc-950 border border-zinc-900 rounded-xl flex gap-2">
-                        <span className="text-zinc-600 pl-1 py-1 font-bold font-mono">$</span>
-                        <input
-                          id="console-command-bar"
-                          type="text"
-                          placeholder={stats?.status === "running" ? "Send Bedrock server console command..." : "Server must be online to execute commands."}
-                          disabled={stats?.status !== "running"}
-                          value={commandText}
-                          onChange={e => setCommandText(e.target.value)}
-                          className="bg-transparent border-none outline-none text-xs w-full text-zinc-300 font-mono placeholder-zinc-700 disabled:cursor-not-allowed"
-                        />
-                        <button
-                          type="submit"
-                          disabled={stats?.status !== "running"}
-                          className={`px-3 py-1 rounded-lg text-[10px] uppercase font-black tracking-widest shadow cursor-pointer transition-all ${
-                            stats?.status === "running" ? "bg-emerald-600 text-white hover:bg-emerald-500" : "bg-zinc-900 text-zinc-700 cursor-not-allowed"
-                          }`}
-                        >
-                          Execute
-                        </button>
-                      </form>
-                    </>
-                  )}
-
-                  {consoleTab === "tasks" && (
-                    <div className="flex-1 overflow-y-auto space-y-4">
-                      {activeTasks.length === 0 ? (
-                        <div className="h-full flex flex-col items-center justify-center text-center p-6 bg-zinc-950/40 rounded-xl border border-zinc-900">
-                          <CheckCircle className="w-8 h-8 text-zinc-700 mb-2" />
-                          <p className="text-xs text-zinc-500 font-semibold uppercase tracking-wide">All background jobs completed</p>
-                          <p className="text-[10px] text-zinc-600 mt-0.5">Upload a pack config to trigger new indexing.</p>
+                            {log.type}
+                          </span>
+                          <span className="text-zinc-300 break-all">{log.message}</span>
                         </div>
-                      ) : (
-                        activeTasks.map((t, idx) => (
-                          <div key={idx} className="bg-zinc-900/50 border border-zinc-900 p-4 rounded-xl space-y-2.5">
-                            <div className="flex justify-between items-start">
-                              <div>
-                                <h4 className="text-xs font-black text-white tracking-wide">{t.name}</h4>
-                                <p className="text-[10px] text-zinc-500 mt-0.5">{t.description}</p>
-                              </div>
-                              <span
-                                className={`text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded ${
-                                  t.status === "completed"
-                                    ? "bg-emerald-500/10 text-emerald-400"
-                                    : t.status === "failed"
-                                    ? "bg-red-500/10 text-red-400"
-                                    : "bg-amber-500/10 text-amber-400 animate-pulse"
-                                }`}
-                              >
-                                {t.status}
-                              </span>
-                            </div>
-                            <div className="space-y-1">
-                              <div className="w-full bg-zinc-950 h-2 rounded-full overflow-hidden">
-                                <div
-                                  className={`h-full transition-all duration-300 ${t.status === "failed" ? "bg-red-500" : "bg-emerald-500"}`}
-                                  style={{ width: `${t.progress}%` }}
-                                />
-                              </div>
-                              <div className="flex justify-between text-[10px] font-mono">
-                                <span className="text-zinc-400 truncate max-w-xs">{t.message}</span>
-                                <span className="text-zinc-500">{t.progress}%</span>
-                              </div>
-                            </div>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  )}
+                      ))
+                    )}
+                  </div>
 
-                  {consoleTab === "history" && (
-                    <div className="flex-1 overflow-y-auto space-y-3">
-                      {pastLogs.length === 0 ? (
-                        <p className="text-zinc-600 italic text-center p-6 text-xs">History logs database currently empty.</p>
-                      ) : (
-                        pastLogs.map((h, idx) => (
-                          <div key={idx} className="p-3 bg-zinc-900/30 border border-zinc-900 rounded-xl flex gap-3 text-xs leading-relaxed">
-                            {h.status === "completed" ? (
-                              <CheckCircle className="w-4 h-4 text-emerald-500 flex-shrink-0 mt-0.5" />
-                            ) : (
-                              <XCircle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
-                            )}
-                            <div className="flex-1 min-w-0">
-                              <div className="flex justify-between">
-                                <span className="font-bold text-zinc-300">{h.name}</span>
-                                <span className="text-[10px] font-mono text-zinc-600">{h.timestamp.slice(11, 16)}</span>
-                              </div>
-                              <p className="text-[10px] text-zinc-500 mt-0.5 lowercase leading-snug">{h.message}</p>
-                            </div>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  )}
+                  {/* Preset Commands Bar */}
+                  <div className="flex flex-wrap items-center gap-1.5 mt-4 p-2 bg-zinc-900/30 border border-zinc-900/50 rounded-xl">
+                    <span className="text-[9px] uppercase font-black text-zinc-500 tracking-wider mr-1 select-none">Presets:</span>
+                    {[
+                      { label: "List Players", cmd: "list" },
+                      { label: "Day", cmd: "time set day" },
+                      { label: "Night", cmd: "time set night" },
+                      { label: "Clear Weather", cmd: "weather clear" },
+                      { label: "Hard Diff", cmd: "difficulty hard" },
+                      { label: "Keep Inventory", cmd: "gamerule keepinventory true" },
+                      { label: "Show Coords", cmd: "gamerule showcoordinates true" },
+                      { label: "Whitelist List", cmd: "whitelist list" },
+                    ].map((preset, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        disabled={stats?.status !== "running"}
+                        onClick={() => sendPresetCommand(preset.cmd)}
+                        className="px-2 py-1 text-[9px] font-bold bg-zinc-950 border border-zinc-905 hover:border-zinc-800 hover:bg-zinc-900 hover:text-emerald-400 text-zinc-400 rounded-lg font-mono transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-30 select-none"
+                        title={`Execute command: /${preset.cmd}`}
+                      >
+                        /{preset.cmd}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Command Sender Entry Input */}
+                  <form onSubmit={handleSendCommand} className="mt-3 p-2 bg-zinc-950 border border-zinc-900 rounded-xl flex gap-2">
+                    <span className="text-zinc-600 pl-1 py-1 font-bold font-mono">$</span>
+                    <input
+                      id="console-command-bar"
+                      type="text"
+                      placeholder={stats?.status === "running" ? "Send Bedrock server console command..." : "Server must be online to execute commands."}
+                      disabled={stats?.status !== "running"}
+                      value={commandText}
+                      onChange={e => setCommandText(e.target.value)}
+                      className="bg-transparent border-none outline-none text-xs w-full text-zinc-300 font-mono placeholder-zinc-700 disabled:cursor-not-allowed"
+                    />
+                    <button
+                      type="submit"
+                      disabled={stats?.status !== "running"}
+                      className={`px-3 py-1 rounded-lg text-[10px] uppercase font-black tracking-widest shadow cursor-pointer transition-all ${
+                        stats?.status === "running" ? "bg-emerald-600 text-white hover:bg-emerald-500" : "bg-zinc-900 text-zinc-700 cursor-not-allowed"
+                      }`}
+                    >
+                      Execute
+                    </button>
+                  </form>
                 </div>
               </div>
 
@@ -1753,6 +1649,191 @@ export default function App() {
               </div>
             </div>
           )}
+
+          {/* ==================== TASKS & HISTORY ROUTE PANEL ==================== */}
+          {navTab === "tasks_history" && (() => {
+            const sortedTasks = [...activeTasks].sort((a, b) => {
+              const timeA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+              const timeB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+              return taskTimeFilter === "recent" ? timeB - timeA : timeA - timeB;
+            });
+
+            const sortedLogs = [...pastLogs].sort((a, b) => {
+              const timeA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+              const timeB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+              return taskTimeFilter === "recent" ? timeB - timeA : timeA - timeB;
+            });
+
+            return (
+              <div className="space-y-6 select-none">
+                {/* Header Banner */}
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-zinc-900/10 border border-zinc-900 rounded-2xl p-6 mb-6">
+                  <div>
+                    <h2 className="text-lg font-black text-white tracking-tight">Tasks Coordinator & Actions History</h2>
+                    <p className="text-xs text-zinc-500 mt-1 leading-relaxed">
+                      Monitor your active task processes, resource updates, and full event-action journals from the administration panel.
+                    </p>
+                  </div>
+                  
+                  <div className="flex flex-wrap items-center gap-3 mt-4 md:mt-0">
+                    {/* Time Sorting Filters */}
+                    <div className="flex items-center gap-1.5 bg-zinc-950/40 border border-zinc-900 p-1 rounded-xl">
+                      <button
+                        onClick={() => setTaskTimeFilter("recent")}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer select-none ${
+                          taskTimeFilter === "recent"
+                            ? "bg-zinc-800 text-emerald-400 shadow-md border border-zinc-700/30"
+                            : "text-zinc-500 hover:text-zinc-300"
+                        }`}
+                      >
+                        Recent
+                      </button>
+                      <button
+                        onClick={() => setTaskTimeFilter("oldest")}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer select-none ${
+                          taskTimeFilter === "oldest"
+                            ? "bg-zinc-800 text-emerald-400 shadow-md border border-zinc-700/30"
+                            : "text-zinc-500 hover:text-zinc-300"
+                        }`}
+                      >
+                        Oldest
+                      </button>
+                    </div>
+
+                    {isAdmin && (
+                      <div className="flex items-center gap-2">
+                        {activeTasks.length > 0 && (
+                          <button
+                            onClick={handleClearFinishedTasks}
+                            className="px-3.5 py-2 hover:bg-zinc-800 text-zinc-350 font-black text-[10px] rounded-xl transition-all cursor-pointer uppercase tracking-wider border border-zinc-800 shadow-sm"
+                          >
+                            Flush Tracker
+                          </button>
+                        )}
+                        {pastLogs.length > 0 && (
+                          <button
+                            onClick={handleClearHistoryLogs}
+                            className="px-3.5 py-2 bg-red-950/45 hover:bg-red-900/80 text-red-400 font-black text-[10px] rounded-xl transition-all cursor-pointer uppercase tracking-wider border border-red-900/40 shadow-sm"
+                          >
+                            Clear Logs
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Grid Lists layout */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 select-none">
+                  {/* Left Column: Active Tasks */}
+                  <div className="bg-zinc-900/40 border border-zinc-900 rounded-2xl p-5 flex flex-col h-[580px] overflow-hidden shadow-xl">
+                    <div className="flex justify-between items-center mb-5">
+                      <div className="flex items-center gap-2">
+                        <ClipboardList className="w-4 h-4 text-emerald-500" />
+                        <h3 className="text-xs font-black uppercase tracking-widest text-zinc-300">Active Task Tracker</h3>
+                      </div>
+                      <span className="text-[10px] font-black uppercase tracking-widest px-2.5 py-1 rounded-full bg-zinc-950 border border-zinc-900 text-zinc-500 font-mono">
+                        {activeTasks.length} jobs
+                      </span>
+                    </div>
+
+                    <div className="flex-1 overflow-y-auto space-y-4 pr-1">
+                      {sortedTasks.length === 0 ? (
+                        <div className="h-full flex flex-col items-center justify-center text-center p-6 bg-zinc-950/20 rounded-2xl border border-zinc-900 border-dashed">
+                          <CheckCircle className="w-10 h-10 text-zinc-800 mb-2.5" />
+                          <p className="text-xs text-zinc-400 font-black uppercase tracking-wide">All background jobs completed</p>
+                          <p className="text-[10px] text-zinc-600 max-w-xs mt-1">No active addon processing, world compilation, or update migrations currently executing.</p>
+                        </div>
+                      ) : (
+                        sortedTasks.map((t, idx) => (
+                          <div key={idx} className="bg-zinc-900/50 border border-zinc-900 p-5 rounded-2xl space-y-3 shadow-sm hover:border-zinc-850 transition-all">
+                            <div className="flex justify-between items-start">
+                              <div>
+                                <h4 className="text-xs font-black text-white tracking-wide">{t.name}</h4>
+                                <p className="text-[10px] text-zinc-500 mt-1">{t.description}</p>
+                              </div>
+                              <div className="flex flex-col items-end gap-1">
+                                <span
+                                  className={`text-[9px] font-black uppercase tracking-widest px-2.5 py-0.5 rounded leading-normal ${
+                                    t.status === "completed"
+                                      ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                                      : t.status === "failed"
+                                      ? "bg-red-500/10 text-red-400 border border-red-500/20"
+                                      : "bg-amber-500/10 text-amber-400 border border-amber-500/20 animate-pulse"
+                                  }`}
+                                >
+                                  {t.status}
+                                </span>
+                                {t.timestamp && (
+                                  <span className="text-[8px] font-mono text-zinc-600">
+                                    {t.timestamp.slice(11, 19)}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            <div className="space-y-1.5 opacity-90">
+                              <div className="w-full bg-zinc-950 h-2.5 rounded-full overflow-hidden">
+                                <div
+                                  className={`h-full transition-all duration-300 ${t.status === "failed" ? "bg-red-500" : "bg-emerald-500"}`}
+                                  style={{ width: `${t.progress}%` }}
+                                />
+                              </div>
+                              <div className="flex justify-between text-[10px] font-mono">
+                                <span className="text-zinc-400 truncate max-w-xs">{t.message}</span>
+                                <span className="text-zinc-500">{t.progress}%</span>
+                              </div>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Right Column: Past Logs Action History */}
+                  <div className="bg-zinc-900/40 border border-zinc-900 rounded-2xl p-5 flex flex-col h-[580px] overflow-hidden shadow-xl">
+                    <div className="flex justify-between items-center mb-5">
+                      <div className="flex items-center gap-2">
+                        <CheckCircle className="w-4 h-4 text-emerald-500" />
+                        <h3 className="text-xs font-black uppercase tracking-widest text-zinc-300">Action History Log</h3>
+                      </div>
+                      <span className="text-[10px] font-black uppercase tracking-widest px-2.5 py-1 rounded-full bg-zinc-950 border border-zinc-900 text-zinc-500 font-mono">
+                        {pastLogs.length} audits
+                      </span>
+                    </div>
+
+                    <div className="flex-1 overflow-y-auto space-y-3.5 pr-1">
+                      {sortedLogs.length === 0 ? (
+                        <div className="h-full flex flex-col items-center justify-center text-center p-6 bg-zinc-950/20 rounded-2xl border border-zinc-900 border-dashed">
+                          <ClipboardList className="w-10 h-10 text-zinc-800 mb-2.5" />
+                          <p className="text-xs text-zinc-400 font-black uppercase tracking-wide">Empty audit database</p>
+                          <p className="text-[10px] text-zinc-600 max-w-xs mt-1">Actions such as server start/stop and installer triggers will create audit logs.</p>
+                        </div>
+                      ) : (
+                        sortedLogs.map((h, idx) => (
+                          <div key={idx} className="p-4 bg-zinc-900/30 border border-zinc-900 rounded-2xl flex gap-3.5 text-xs leading-relaxed shadow-sm hover:border-zinc-850 hover:bg-zinc-900/40 transition-all">
+                            {h.status === "completed" ? (
+                              <CheckCircle className="w-4 h-4 text-emerald-400 mt-0.5 flex-shrink-0" />
+                            ) : (
+                              <XCircle className="w-4 h-4 text-red-400 mt-0.5 flex-shrink-0" />
+                            )}
+                            <div className="flex-1 min-w-0">
+                              <div className="flex justify-between items-baseline gap-2">
+                                <span className="font-extrabold text-zinc-200 tracking-wide">{h.name}</span>
+                                <span className="text-[9px] font-mono text-zinc-600 whitespace-nowrap">
+                                  {h.timestamp.slice(11, 19)}
+                                </span>
+                              </div>
+                              <p className="text-[10px] text-zinc-400 mt-1 leading-relaxed">{h.message}</p>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
 
           {/* ==================== B. ADDONS & PACKS MANAGER VIEW ==================== */}
           {navTab === "addons" && (

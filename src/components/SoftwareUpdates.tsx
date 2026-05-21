@@ -29,7 +29,7 @@ interface UpdateStatus {
 }
 
 export default function SoftwareUpdates({ token, onShowMessage }: SoftwareUpdatesProps) {
-  const currentVersion = "v1.2.0";
+  const [currentVersion, setCurrentVersion] = useState("v1.3.0");
   const [checking, setChecking] = useState(false);
   const [updateInfo, setUpdateInfo] = useState<UpdateStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -56,6 +56,9 @@ export default function SoftwareUpdates({ token, onShowMessage }: SoftwareUpdate
       const data = await response.json();
       if (data.success) {
         setUpdateInfo(data);
+        if (data.currentVersion) {
+          setCurrentVersion(data.currentVersion);
+        }
       } else {
         throw new Error("Update checks returned negative response status.");
       }

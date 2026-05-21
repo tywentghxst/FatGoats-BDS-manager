@@ -46,8 +46,26 @@ if %errorlevel% equ 0 (
     )
 )
 
-echo [PS] Downloading latest version from GitHub...
-powershell -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; $urls = @('https://github.com/tywentghxst/FatGoats-BDS-manager/archive/refs/heads/master.zip', 'https://github.com/tywentghxst/FatGoats-BDS-manager/archive/refs/heads/main.zip'); foreach ($url in $urls) { try { Write-Host 'Fetching' $url; Invoke-WebRequest -Uri $url -OutFile 'latest_update.zip' -ErrorAction Stop; if (Test-Path 'latest_update.zip') { Write-Host 'Download successful!'; break } } catch {} }"
+echo [INFO] Querying latest branch ZIP files...
+set "DOWNLOADED="
+
+where curl >nul 2>nul
+if %errorlevel% equ 0 (
+    echo [CURL] Downloading master branch...
+    curl -f -L -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) BedrockServerManager" -o latest_update.zip https://github.com/tywentghxst/FatGoats-BDS-manager/archive/refs/heads/master.zip
+    if exist latest_update.zip (
+        set "DOWNLOADED=true"
+    ) else (
+        echo [CURL] Downloading main branch...
+        curl -f -L -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) BedrockServerManager" -o latest_update.zip https://github.com/tywentghxst/FatGoats-BDS-manager/archive/refs/heads/main.zip
+        if exist latest_update.zip set "DOWNLOADED=true"
+    )
+)
+
+if not defined DOWNLOADED (
+    echo [PS] Falling back to PowerShell download with User-Agent...
+    powershell -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; $urls = @('https://github.com/tywentghxst/FatGoats-BDS-manager/archive/refs/heads/master.zip', 'https://github.com/tywentghxst/FatGoats-BDS-manager/archive/refs/heads/main.zip'); foreach ($url in $urls) { try { Write-Host 'Fetching' $url; Invoke-WebRequest -Uri $url -UserAgent 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) BedrockServerManager' -OutFile 'latest_update.zip' -ErrorAction Stop; if (Test-Path 'latest_update.zip') { Write-Host 'Download successful!'; break } } catch {} }"
+)
 
 if not exist latest_update.zip (
     echo [ERROR] Failed to download the update package. Please check your internet connection or repository branch.

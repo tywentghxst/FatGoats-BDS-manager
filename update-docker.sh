@@ -49,13 +49,15 @@ if [ -d ".git" ]; then
 else
     echo "[INFO] No git repo found. Checking GitHub branches..."
     # Try master branch first, then main branch
-    if wget -q --spider https://github.com/tywentghxst/FatGoats-BDS-manager/archive/refs/heads/master.zip; then
+    # Use a secure user-agent to bypass GitHub security limitations against raw command line requests
+    UA_ARG="Mozilla/5.0 (X11; Linux x86_64) BedrockServerManager"
+    if wget -q --user-agent="$UA_ARG" --spider https://github.com/tywentghxst/FatGoats-BDS-manager/archive/refs/heads/master.zip; then
         UPDATE_URL="https://github.com/tywentghxst/FatGoats-BDS-manager/archive/refs/heads/master.zip"
     else
         UPDATE_URL="https://github.com/tywentghxst/FatGoats-BDS-manager/archive/refs/heads/main.zip"
     fi
     echo "  - Downloading: $UPDATE_URL"
-    wget -qO latest_update.zip "$UPDATE_URL"
+    wget -q --user-agent="$UA_ARG" -O latest_update.zip "$UPDATE_URL"
     if [ -f latest_update.zip ]; then
         unzip -q latest_update.zip -d temp_update
         # Copy from extracted directory dynamically

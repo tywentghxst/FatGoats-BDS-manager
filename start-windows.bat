@@ -47,6 +47,9 @@ if "%choice%"=="2" (
     ) else (
         call npm start
     )
+    echo.
+    echo [INFO] Server process has stopped.
+    pause
 ) else (
     echo.
     echo =======================================================

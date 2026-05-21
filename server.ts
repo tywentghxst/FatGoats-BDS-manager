@@ -577,35 +577,58 @@ function importWorldPack(filePath: string, originalName: string, taskId: string)
 }
 
 // Bedrock Version Web downloader helper
-function downloadBedrockVersion(version: string, downloadUrl: string, taskId: string) {
+function downloadBedrockVersion(version: string, downloadUrl: string, taskId: string, attempt = 1) {
   const task = activeTasks.find(t => t.id === taskId);
   if (task) {
     task.status = "running";
     task.progress = 5;
+    task.message = `Downloading v${version} (attempt ${attempt})...`;
   }
 
   const zipPath = path.join(SERVER_DIR, `bedrock-server-${version}.zip`);
   const file = fs.createWriteStream(zipPath);
 
-  // User-Agent simulates dynamic downloads to evade official blocks
+  // User-Agent and Referer to simulate official web browser requests
   const options = {
     headers: {
-      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      "Referer": "https://www.minecraft.net/en-us/download/server/bedrock"
+    }
+  };
+
+  const handleError = (errMessage: string) => {
+    file.close();
+    fs.unlink(zipPath, () => {});
+    if (attempt === 1) {
+      // Try direct azureedge URL as fallback
+      let fallbackUrl = downloadUrl;
+      if (downloadUrl.includes("www.minecraft.net/bedrockdedicatedserver")) {
+        fallbackUrl = downloadUrl.replace("www.minecraft.net/bedrockdedicatedserver", "minecraft.azureedge.net");
+      } else if (downloadUrl.includes("minecraft.azureedge.net")) {
+        fallbackUrl = downloadUrl.replace("minecraft.azureedge.net", "www.minecraft.net/bedrockdedicatedserver");
+      }
+      setTimeout(() => {
+        downloadBedrockVersion(version, fallbackUrl, taskId, 2);
+      }, 1000);
+    } else {
+      if (task) {
+        task.status = "failed";
+        task.message = errMessage;
+      }
     }
   };
 
   const request = https.get(downloadUrl, options, (response) => {
     if (response.statusCode && response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
       // Handle redirect
-      downloadBedrockVersion(version, response.headers.location, taskId);
+      downloadBedrockVersion(version, response.headers.location, taskId, attempt);
+      file.close();
+      fs.unlink(zipPath, () => {});
       return;
     }
 
     if (response.statusCode !== 200) {
-      if (task) {
-        task.status = "failed";
-        task.message = `HTTP status code is ${response.statusCode}`;
-      }
+      handleError(`HTTP status code is ${response.statusCode}`);
       return;
     }
 
@@ -664,12 +687,8 @@ function downloadBedrockVersion(version: string, downloadUrl: string, taskId: st
     });
   });
 
-  request.on("error", (err) => {
-    fs.unlink(zipPath, () => {});
-    if (task) {
-      task.status = "failed";
-      task.message = `Network download failed: ${err.message}`;
-    }
+  request.on("error", (e) => {
+    handleError(e.message);
   });
 }
 
@@ -2014,81 +2033,124 @@ app.post("/api/broadcaster/download", authenticateRequest, (req, res) => {
 
 // ---------------------- Software Update Utilities ----------------------
 
-app.get("/api/updates/check", authenticateRequest, (req, res) => {
-  const options = {
-    hostname: "api.github.com",
-    path: "/repos/tywentghxst/FatGoats-BDS-manager/releases/latest",
-    headers: {
-      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) BedrockServerManager"
-    },
-    timeout: 5000
-  };
+function fetchHttps(url: string, headers: Record<string, string> = {}): Promise<{ statusCode: number; data: string }> {
+  return new Promise((resolve, reject) => {
+    try {
+      const parsedUrl = new URL(url);
+      const req = https.get({
+        hostname: parsedUrl.hostname,
+        path: parsedUrl.pathname + parsedUrl.search,
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) BedrockServerManager",
+          ...headers
+        },
+        timeout: 5000
+      }, (res) => {
+        let body = "";
+        res.on("data", (chunk) => body += chunk);
+        res.on("end", () => resolve({ statusCode: res.statusCode || 0, data: body }));
+      });
+      req.on("error", (e) => reject(e));
+      req.on("timeout", () => {
+        req.destroy();
+        reject(new Error("Timeout"));
+      });
+    } catch (err) {
+      reject(err);
+    }
+  });
+}
 
-  const request = https.get(options, (githubRes) => {
-    let data = "";
-    githubRes.on("data", (chunk) => { data += chunk; });
-    githubRes.on("end", () => {
-      try {
-        if (githubRes.statusCode === 200) {
-          const release = JSON.parse(data);
-          res.json({
-            success: true,
-            latestVersion: release.tag_name || "v1.2.5",
-            releaseName: release.name || "Latest Stable Release",
-            publishedAt: release.published_at || new Date().toISOString(),
-            changelog: release.body || "Bug fixes and performance improvements in Bedrock Dedicated Server management.",
-            url: release.html_url || "https://github.com/tywentghxst/FatGoats-BDS-manager",
-            isNew: true
-          });
-        } else {
-          // Fallback if rate limited or down (mocking latest stable)
-          res.json({
-            success: true,
-            latestVersion: "v1.2.5",
-            releaseName: "v1.2.5 Performance Update",
-            publishedAt: "2026-05-20T12:00:00Z",
-            changelog: "### Additions & Improvements:\n- Integration of Console Connect companion.\n- Simplified data preservation update protocols for Windows and Docker.\n- Dynamic Minecraft bedrock level configs & worlds.",
-            url: "https://github.com/tywentghxst/FatGoats-BDS-manager",
-            isFallback: true
-          });
-        }
-      } catch (e) {
-        res.json({
-          success: true,
-          latestVersion: "v1.2.5",
-          releaseName: "v1.2.5 Performance Update",
-          publishedAt: "2026-05-20T12:00:00Z",
-          changelog: "### Additions & Improvements:\n- Integration of Console Connect companion.\n- Simplified data preservation update protocols for Windows and Docker.\n- Dynamic Minecraft bedrock level configs & worlds.",
-          url: "https://github.com/tywentghxst/FatGoats-BDS-manager",
-          isFallback: true
-        });
+function isNewer(current: string, remote: string): boolean {
+  const norm = (v: string) => v.replace(/^v/i, "").split(".").map(Number);
+  const c = norm(current);
+  const r = norm(remote);
+  for (let i = 0; i < Math.max(c.length, r.length); i++) {
+    const cVal = c[i] || 0;
+    const rVal = r[i] || 0;
+    if (rVal > cVal) return true;
+    if (rVal < cVal) return false;
+  }
+  return false;
+}
+
+app.get("/api/updates/check", authenticateRequest, async (req, res) => {
+  // Read local version
+  let localVersion = "1.3.0";
+  try {
+    const localPkg = JSON.parse(fs.readFileSync(path.join(WORK_DIR, "package.json"), "utf-8"));
+    localVersion = localPkg.version || "1.3.0";
+  } catch (e) {}
+
+  let latestRemoteVersion = "1.3.0";
+  let hasCheckedSuccessfully = false;
+
+  // 1. Try raw github payload on master branch
+  try {
+    const rawUrlMaster = "https://raw.githubusercontent.com/tywentghxst/FatGoats-BDS-manager/master/package.json";
+    const resMaster = await fetchHttps(rawUrlMaster);
+    if (resMaster.statusCode === 200) {
+      const pkgData = JSON.parse(resMaster.data);
+      if (pkgData.version) {
+        latestRemoteVersion = pkgData.version;
+        hasCheckedSuccessfully = true;
       }
-    });
-  });
+    }
+  } catch (e) {}
 
-  request.on("error", () => {
-    res.json({
-      success: true,
-      latestVersion: "v1.2.5",
-      releaseName: "v1.2.5 Performance Update",
-      publishedAt: "2026-05-20T12:00:00Z",
-      changelog: "### Additions & Improvements:\n- Integration of Console Connect companion.\n- Simplified data preservation update protocols for Windows and Docker.\n- Dynamic Minecraft bedrock level configs & worlds.",
-      url: "https://github.com/tywentghxst/FatGoats-BDS-manager",
-      isFallback: true
-    });
-  });
+  // 2. Try raw github payload on main branch if master failed
+  if (!hasCheckedSuccessfully) {
+    try {
+      const rawUrlMain = "https://raw.githubusercontent.com/tywentghxst/FatGoats-BDS-manager/main/package.json";
+      const resMain = await fetchHttps(rawUrlMain);
+      if (resMain.statusCode === 200) {
+        const pkgData = JSON.parse(resMain.data);
+        if (pkgData.version) {
+          latestRemoteVersion = pkgData.version;
+          hasCheckedSuccessfully = true;
+        }
+      }
+    } catch (e) {}
+  }
 
-  request.on("timeout", () => {
-    request.destroy();
-    res.json({
-      success: true,
-      latestVersion: "v1.2.5",
-      releaseName: "v1.2.5 Performance Update",
-      publishedAt: "2026-05-20T12:00:00Z",
-      changelog: "### Additions & Improvements:\n- Integration of Console Connect companion.\n- Simplified data preservation update protocols for Windows and Docker.\n- Dynamic Minecraft bedrock level configs & worlds.",
-      url: "https://github.com/tywentghxst/FatGoats-BDS-manager",
-      isFallback: true
-    });
+  // 3. Fallback mock / lookup releases API for additional context
+  let releaseName = `v${latestRemoteVersion}`;
+  let changelog = "Bug fixes, performance improvements, and interface enhancements in Bedrock Dedicated Server management.";
+  let publishedAt = new Date().toISOString();
+  let releaseUrl = "https://github.com/tywentghxst/FatGoats-BDS-manager";
+
+  try {
+    const resRelease = await fetchHttps("https://api.github.com/repos/tywentghxst/FatGoats-BDS-manager/releases/latest");
+    if (resRelease.statusCode === 200) {
+      const release = JSON.parse(resRelease.data);
+      if (release.tag_name) {
+        // Only override if release name is parsed
+        const rVer = release.tag_name.replace(/^v/i, "");
+        if (isNewer(latestRemoteVersion, rVer)) {
+          latestRemoteVersion = rVer;
+        }
+        releaseName = release.name || `v${latestRemoteVersion}`;
+        changelog = release.body || changelog;
+        publishedAt = release.published_at || publishedAt;
+        releaseUrl = release.html_url || releaseUrl;
+        hasCheckedSuccessfully = true;
+      }
+    }
+  } catch (e) {}
+
+  // If both failed, we can simulate an update check success but fallback
+  const isUpdateAvailable = isNewer(localVersion, latestRemoteVersion);
+
+  res.json({
+    success: true,
+    currentVersion: `v${localVersion}`,
+    latestVersion: `v${latestRemoteVersion}`,
+    releaseName: releaseName,
+    publishedAt: publishedAt,
+    changelog: changelog,
+    url: releaseUrl,
+    isNew: isUpdateAvailable,
+    isFallback: !hasCheckedSuccessfully
   });
 });
 
@@ -2135,10 +2197,27 @@ app.get("/api/updates/backup", authenticateRequest, (req, res) => {
 async function startServer() {
   const isPkg = !!(process as any).pkg;
   const isProd = isPkg || process.env.NODE_ENV === "production";
+  const hasTrayParent = process.argv.includes("--tray-parent");
+
+  // If the user double-clicks bds-manager.exe directly on Windows, delegate to the background tray companion and exit immediately.
+  if (isPkg && !hasTrayParent && process.platform === "win32") {
+    try {
+      const psPath = path.join(WORK_DIR, "start-windows-tray.ps1");
+      console.log("Delegating execution to Background System Tray Companion...");
+      spawn("powershell.exe", ["-WindowStyle", "Hidden", "-ExecutionPolicy", "Bypass", "-File", psPath], {
+        detached: true,
+        stdio: "ignore"
+      }).unref();
+      process.exit(0);
+    } catch (e: any) {
+      console.error("Failed to automatically launch tray companion in background.", e.message);
+    }
+  }
 
   if (!isProd) {
     try {
-      const { createServer: createViteServer } = await import("vite");
+      const vName = "vi" + "te";
+      const { createServer: createViteServer } = await import(vName);
       const vite = await createViteServer({
         server: { middlewareMode: true },
         appType: "spa"

@@ -6,11 +6,11 @@ $scriptPath = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $scriptPath
 
 $cmd = "node"
-$args = Join-Path $scriptPath "dist/server.cjs"
+$args = @((Join-Path $scriptPath "dist/server.cjs"), "--tray-parent")
 
 if (Test-Path (Join-Path $scriptPath "bds-manager.exe")) {
     $cmd = Join-Path $scriptPath "bds-manager.exe"
-    $args = ""
+    $args = "--tray-parent"
 }
 
 $Global:proc = $null
