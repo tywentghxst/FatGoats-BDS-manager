@@ -64,6 +64,12 @@ interface DBStructure {
     gamemode: string;
     simulationMode: boolean;
     selectedVersion: string;
+    serverName?: string;
+    emitServerTelemetry?: boolean;
+    onlineMode?: boolean;
+    allowCheats?: boolean;
+    viewDistance?: number;
+    tickDistance?: number;
   };
   addons: Array<{
     uuid: string;
@@ -106,7 +112,13 @@ let dbCache: DBStructure = {
     difficulty: "normal",
     gamemode: "survival",
     simulationMode: true, // Default to simulation mode for Cloud Run compatibility
-    selectedVersion: "1.21.60"
+    selectedVersion: "1.21.71",
+    serverName: "Bedrock Dedicated Server",
+    emitServerTelemetry: false,
+    onlineMode: false,
+    allowCheats: true,
+    viewDistance: 10,
+    tickDistance: 4
   },
   addons: [],
   pastLogs: [],
@@ -121,6 +133,33 @@ function loadDB() {
       // Ensure key arrays are present
       dbCache.invites = dbCache.invites || [];
       dbCache.addons = dbCache.addons || [];
+      
+      // Ensure default config properties
+      if (!dbCache.appConfig) {
+        dbCache.appConfig = {
+          bentoStyle: true,
+          serverPort: 19132,
+          maxPlayers: 20,
+          levelName: "BedrockWorld",
+          difficulty: "normal",
+          gamemode: "survival",
+          simulationMode: true,
+          selectedVersion: "1.21.71",
+          serverName: "Bedrock Dedicated Server",
+          emitServerTelemetry: false,
+          onlineMode: false,
+          allowCheats: true,
+          viewDistance: 10,
+          tickDistance: 4
+        };
+      } else {
+        dbCache.appConfig.serverName = dbCache.appConfig.serverName || "Bedrock Dedicated Server";
+        dbCache.appConfig.emitServerTelemetry = dbCache.appConfig.emitServerTelemetry ?? false;
+        dbCache.appConfig.onlineMode = dbCache.appConfig.onlineMode ?? false;
+        dbCache.appConfig.allowCheats = dbCache.appConfig.allowCheats ?? true;
+        dbCache.appConfig.viewDistance = dbCache.appConfig.viewDistance || 10;
+        dbCache.appConfig.tickDistance = dbCache.appConfig.tickDistance || 4;
+      }
     } catch (e) {
       console.error("Failed to parse database, resetting", e);
       saveDB();
@@ -262,19 +301,26 @@ function writeServerProperties() {
   const maxPlayers = dbCache.appConfig.maxPlayers || 20;
   const difficulty = dbCache.appConfig.difficulty || "normal";
   const gamemode = dbCache.appConfig.gamemode || "survival";
+  const serverName = dbCache.appConfig.serverName || "Bedrock Dedicated Server";
+  const emitServerTelemetry = dbCache.appConfig.emitServerTelemetry ?? false;
+  const onlineMode = dbCache.appConfig.onlineMode ?? false;
+  const allowCheats = dbCache.appConfig.allowCheats ?? true;
+  const viewDistance = dbCache.appConfig.viewDistance || 10;
+  const tickDistance = dbCache.appConfig.tickDistance || 4;
 
   const propFile = path.join(SERVER_DIR, "server.properties");
-  const defaultPropContent = `server-name=Bedrock Manager Server
+  const defaultPropContent = `server-name=${serverName}
 gamemode=${gamemode}
 difficulty=${difficulty}
-allow-cheats=true
+allow-cheats=${allowCheats}
 max-players=${maxPlayers}
 server-port=${port}
 server-portv6=${port + 1}
-online-mode=false
+online-mode=${onlineMode}
 level-name=${levelName}
-view-distance=10
-tick-distance=4
+view-distance=${viewDistance}
+tick-distance=${tickDistance}
+emit-server-telemetry=${emitServerTelemetry}
 player-movement-score-threshold=20
 player-movement-action-direction-thresholds=0.85
 player-movement-duration-threshold-in-ms=500
@@ -1198,9 +1244,21 @@ app.get("/api/versions", authenticateRequest, (req, res) => {
   
   const versions: Array<{ version: string; releaseDate: string; isLatest: boolean; downloadUrl: string }> = [
     {
+      version: "1.21.71",
+      releaseDate: "2025-05 stable (Latest)",
+      isLatest: true,
+      downloadUrl: `https://www.minecraft.net/bedrockdedicatedserver/${folder}/bedrock-server-1.21.71.01.zip`
+    },
+    {
+      version: "1.21.62",
+      releaseDate: "2025-03 stable",
+      isLatest: false,
+      downloadUrl: `https://www.minecraft.net/bedrockdedicatedserver/${folder}/bedrock-server-1.21.62.01.zip`
+    },
+    {
       version: "1.21.60",
       releaseDate: "2025-02 stable",
-      isLatest: true,
+      isLatest: false,
       downloadUrl: `https://www.minecraft.net/bedrockdedicatedserver/${folder}/bedrock-server-1.21.60.10.zip`
     },
     {

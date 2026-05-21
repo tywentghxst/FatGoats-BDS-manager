@@ -212,7 +212,7 @@ export default function App() {
   const [authError, setAuthError] = useState("");
 
   // Menu Navigation Tab (Dashboard, Players, Settings, Console, Users, Selfhost Guides)
-  const [navTab, setNavTab] = useState<"dashboard" | "addons" | "worlds" | "console" | "users" | "selfhost" | "console_connect" | "updates" | "tasks_history" | "quick_commands">("dashboard");
+  const [navTab, setNavTab] = useState<"dashboard" | "addons" | "worlds" | "console" | "users" | "selfhost" | "console_connect" | "updates" | "tasks_history" | "quick_commands" | "properties">("dashboard");
   const [guideMode, setGuideMode] = useState<"windows" | "docker">("windows");
 
   // Quick Commands State & Management
@@ -325,7 +325,13 @@ export default function App() {
     difficulty: "normal",
     gamemode: "survival",
     simulationMode: true,
-    selectedVersion: "1.21.60"
+    selectedVersion: "1.21.71",
+    serverName: "Bedrock Dedicated Server",
+    emitServerTelemetry: false,
+    onlineMode: false,
+    allowCheats: true,
+    viewDistance: 10,
+    tickDistance: 4
   });
 
   // Live collections
@@ -1522,6 +1528,19 @@ export default function App() {
           >
             <Grid className="w-4 h-4 text-amber-500 opacity-90 animate-pulse" />
             Quick Commands
+          </button>
+
+          <button
+            id="nav-properties"
+            onClick={() => setNavTab("properties")}
+            className={`w-full px-4 py-2.5 rounded-xl flex items-center gap-3 text-sm font-medium transition-all ${
+              navTab === "properties"
+                ? "bg-zinc-800/80 text-white shadow-md border border-zinc-700/50"
+                : "text-zinc-400 hover:bg-zinc-800/20 hover:text-zinc-300"
+            }`}
+          >
+            <Settings className="w-4 h-4 text-emerald-500 opacity-90" />
+            Server Properties
           </button>
 
           <button
@@ -3391,6 +3410,272 @@ export default function App() {
               token={token}
               onShowMessage={(text, type) => showBanner(text, type === "warn" ? "info" : type)}
             />
+          )}
+
+          {navTab === "properties" && (
+            <div className="flex-1 p-8 overflow-y-auto space-y-8 bg-zinc-950/40">
+              <div className="flex justify-between items-center pb-4 border-b border-zinc-900">
+                <div>
+                  <h1 className="text-2xl font-bold text-white tracking-tight">Server Properties</h1>
+                  <p className="text-xs text-zinc-400 mt-1">Configure global bedrock dedicated server game settings and config properties written directly to <code className="text-[10px] font-mono bg-zinc-950 p-1 rounded text-zinc-300">server.properties</code>.</p>
+                </div>
+                {!isAdmin && (
+                  <div className="bg-amber-500/10 border border-amber-500/20 text-amber-400 px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2">
+                    <Shield className="w-3.5 h-3.5" />
+                    Read-Only (Requires Admin Profile)
+                  </div>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                {/* Visual Identity & Game Rules Card */}
+                <div className="bg-zinc-900/30 border border-zinc-900 rounded-2xl p-6 space-y-6">
+                  <div className="flex items-center gap-2 pb-3 border-b border-zinc-900/60">
+                    <div className="w-8 h-8 rounded-lg bg-emerald-600/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
+                      <FolderOpen className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h2 className="text-sm font-bold text-white">Metadata & Game Settings</h2>
+                      <p className="text-[10px] text-zinc-500">Core game session and file rules</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider block">Server Display Name</label>
+                      <input
+                        type="text"
+                        disabled={!isAdmin}
+                        value={appConfig.serverName || ""}
+                        onChange={e => updateSettingsField({ serverName: e.target.value })}
+                        className="w-full bg-zinc-950/60 border border-zinc-850 p-2.5 text-xs font-semibold rounded-xl text-white outline-none focus:border-emerald-500 focus:bg-zinc-950 disabled:opacity-45"
+                        placeholder="e.g. My Bedrock Dedicated Server"
+                      />
+                      <span className="text-[9px] text-zinc-500 block">Sets the MOTD/display name shown to players in game client servers tab.</span>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider block">Active World Name</label>
+                      <input
+                        type="text"
+                        disabled={!isAdmin}
+                        value={appConfig.levelName || ""}
+                        onChange={e => updateSettingsField({ levelName: e.target.value || "BedrockWorld" })}
+                        className="w-full bg-zinc-950/60 border border-zinc-850 p-2.5 text-xs font-semibold rounded-xl text-white outline-none focus:border-emerald-500 focus:bg-zinc-950 disabled:opacity-45"
+                        placeholder="BedrockWorld"
+                      />
+                      <span className="text-[9px] text-zinc-500 block">Sets the level-name directory folder containing active level.dat. Requires server reboot if changed.</span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider block">Game Rule Mod</label>
+                        <select
+                          disabled={!isAdmin}
+                          value={appConfig.gamemode}
+                          onChange={e => updateSettingsField({ gamemode: e.target.value })}
+                          className="w-full bg-zinc-950 border border-zinc-850 p-2 text-xs font-semibold rounded-xl text-white outline-none focus:border-emerald-500 disabled:opacity-45 h-10"
+                        >
+                          <option value="survival">Survival</option>
+                          <option value="creative">Creative</option>
+                          <option value="adventure">Adventure</option>
+                        </select>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider block">Difficulty Rating</label>
+                        <select
+                          disabled={!isAdmin}
+                          value={appConfig.difficulty}
+                          onChange={e => updateSettingsField({ difficulty: e.target.value })}
+                          className="w-full bg-zinc-950 border border-zinc-850 p-2 text-xs font-semibold rounded-xl text-white outline-none focus:border-emerald-500 disabled:opacity-45 h-10"
+                        >
+                          <option value="peaceful">Peaceful</option>
+                          <option value="easy">Easy</option>
+                          <option value="normal">Normal</option>
+                          <option value="hard">Hard</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Connection & Network Routing Configurations */}
+                <div className="bg-zinc-900/30 border border-zinc-900 rounded-2xl p-6 space-y-6">
+                  <div className="flex items-center gap-2 pb-3 border-b border-zinc-900/60">
+                    <div className="w-8 h-8 rounded-lg bg-emerald-600/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
+                      <Globe className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h2 className="text-sm font-bold text-white">Connection & Networks</h2>
+                      <p className="text-[10px] text-zinc-500">Port binds and network connectivity thresholds</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider block">Host Port (IPv4)</label>
+                        <input
+                          type="number"
+                          disabled={!isAdmin}
+                          value={appConfig.serverPort}
+                          onChange={e => updateSettingsField({ serverPort: parseInt(e.target.value) || 19132 })}
+                          className="w-full bg-zinc-950/60 border border-zinc-850 p-2.5 text-xs font-semibold rounded-xl text-white outline-none focus:border-emerald-500 focus:bg-zinc-950 disabled:opacity-45"
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider block">Max Connections</label>
+                        <input
+                          type="number"
+                          disabled={!isAdmin}
+                          value={appConfig.maxPlayers}
+                          onChange={e => updateSettingsField({ maxPlayers: parseInt(e.target.value) || 20 })}
+                          className="w-full bg-zinc-950/60 border border-zinc-850 p-2.5 text-xs font-semibold rounded-xl text-white outline-none focus:border-emerald-500 focus:bg-zinc-950 disabled:opacity-45"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider block">View Distance</label>
+                        <input
+                          type="number"
+                          disabled={!isAdmin}
+                          value={appConfig.viewDistance ?? 10}
+                          onChange={e => updateSettingsField({ viewDistance: parseInt(e.target.value) || 10 })}
+                          className="w-full bg-zinc-950/60 border border-zinc-850 p-2.5 text-xs font-semibold rounded-xl text-white outline-none focus:border-emerald-500 focus:bg-zinc-950 disabled:opacity-45"
+                          min={4}
+                          max={32}
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider block">Tick Distance</label>
+                        <input
+                          type="number"
+                          disabled={!isAdmin}
+                          value={appConfig.tickDistance ?? 4}
+                          onChange={e => updateSettingsField({ tickDistance: parseInt(e.target.value) || 4 })}
+                          className="w-full bg-zinc-950/60 border border-zinc-850 p-2.5 text-xs font-semibold rounded-xl text-white outline-none focus:border-emerald-500 focus:bg-zinc-950 disabled:opacity-45"
+                          min={4}
+                          max={16}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="pt-2">
+                      <div className="flex items-center justify-between p-3.5 bg-zinc-950/40 rounded-xl border border-zinc-900">
+                        <div>
+                          <h4 className="text-xs font-bold text-white">Xbox Active Authentication</h4>
+                          <p className="text-[9px] text-zinc-500 mt-1 max-w-xs">
+                            Forces connection credentials authentication through Xbox Live platform account networks. Disable to permit cracked/offline LAN logins.
+                          </p>
+                        </div>
+                        <input
+                          type="checkbox"
+                          disabled={!isAdmin}
+                          checked={appConfig.onlineMode ?? false}
+                          onChange={e => updateSettingsField({ onlineMode: e.target.checked })}
+                          className="w-4.5 h-4.5 accent-emerald-500 cursor-pointer disabled:opacity-50"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Server Telemetry & Advanced Flags Card */}
+                <div className="bg-zinc-900/30 border border-zinc-900 rounded-2xl p-6 md:col-span-2 space-y-6">
+                  <div className="flex items-center gap-2 pb-3 border-b border-zinc-900/60">
+                    <div className="w-8 h-8 rounded-lg bg-indigo-600/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400">
+                      <Activity className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h2 className="text-sm font-bold text-white">Advanced Options & Telemetry Reporting</h2>
+                      <p className="text-[10px] text-zinc-500">Configure diagnostics and cheat modes for Mojang developer tools</p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* HERE IS THE REQUISITE emit-server-telemetry PROPERTY SELECTOR */}
+                    <div className="space-y-4 p-4.5 bg-zinc-950/30 rounded-xl border border-zinc-900">
+                      <div>
+                        <span className="text-[10px] font-mono text-zinc-500 font-bold uppercase tracking-wider block">Property Identifier</span>
+                        <code className="text-xs text-indigo-400 font-bold font-mono">emit-server-telemetry</code>
+                      </div>
+                      <p className="text-[11px] text-zinc-400 leading-relaxed">
+                        Control backend telemetry tracking sent to Mojang network diagnostic analytics servers. Keep disabled to completely isolate local server footprint.
+                      </p>
+
+                      <div className="space-y-2 pt-3 border-t border-zinc-900">
+                        <span className="text-[10px] text-zinc-300 font-bold uppercase tracking-wider block">Telemetry Track Status</span>
+                        <div className="flex gap-4 mt-2">
+                          <label className="flex items-center gap-2 cursor-pointer text-xs">
+                            <input
+                              type="radio"
+                              disabled={!isAdmin}
+                              name="emit-server-telemetry"
+                              checked={appConfig.emitServerTelemetry === true}
+                              onChange={() => updateSettingsField({ emitServerTelemetry: true })}
+                              className="w-4 h-4 accent-emerald-500 cursor-pointer disabled:opacity-50"
+                            />
+                            <span className={appConfig.emitServerTelemetry === true ? "text-emerald-400 font-bold" : "text-zinc-400"}>True (Enabled)</span>
+                          </label>
+
+                          <label className="flex items-center gap-2 cursor-pointer text-xs">
+                            <input
+                              type="radio"
+                              disabled={!isAdmin}
+                              name="emit-server-telemetry"
+                              checked={appConfig.emitServerTelemetry === false}
+                              onChange={() => updateSettingsField({ emitServerTelemetry: false })}
+                              className="w-4 h-4 accent-red-500 cursor-pointer disabled:opacity-50"
+                            />
+                            <span className={appConfig.emitServerTelemetry === false ? "text-red-400 font-bold" : "text-zinc-400"}>False (Disabled)</span>
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-4 flex flex-col justify-between">
+                      <div className="p-4 bg-zinc-950/40 rounded-xl border border-zinc-900 flex items-center justify-between">
+                        <div className="space-y-1">
+                          <h4 className="text-xs font-bold text-white">Allow Administrative Cheats</h4>
+                          <p className="text-[9px] text-zinc-500 leading-normal max-w-2xs">
+                            Enables cheat commands like coordinates teleporting, changing gamemodes on active runs, or spawning custom block elements.
+                          </p>
+                        </div>
+                        <input
+                          type="checkbox"
+                          disabled={!isAdmin}
+                          checked={appConfig.allowCheats ?? true}
+                          onChange={e => updateSettingsField({ allowCheats: e.target.checked })}
+                          className="w-4.5 h-4.5 accent-emerald-500 cursor-pointer disabled:opacity-50"
+                        />
+                      </div>
+
+                      <div className="p-4 bg-zinc-950/40 rounded-xl border border-zinc-900 flex items-center justify-between">
+                        <div className="space-y-1">
+                          <h4 className="text-xs font-bold text-white">Simulation Sandbox Engine</h4>
+                          <p className="text-[9px] text-zinc-500 leading-normal max-w-2xs">
+                            Pretend-executes Bedrock binaries. Extremely safe, reactive demo running seamlessly inside Cloud Run container.
+                          </p>
+                        </div>
+                        <input
+                          type="checkbox"
+                          disabled={!isAdmin}
+                          checked={appConfig.simulationMode}
+                          onChange={e => updateSettingsField({ simulationMode: e.target.checked })}
+                          className="w-4.5 h-4.5 accent-emerald-500 cursor-pointer disabled:opacity-50"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+            </div>
           )}
         </div>
       </main>

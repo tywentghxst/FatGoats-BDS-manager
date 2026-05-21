@@ -81,6 +81,12 @@ export interface AppConfig {
   gamemode: string;
   simulationMode: boolean;
   selectedVersion: string;
+  serverName?: string;
+  emitServerTelemetry?: boolean;
+  onlineMode?: boolean;
+  allowCheats?: boolean;
+  viewDistance?: number;
+  tickDistance?: number;
 }
 
 export interface UserInvite {
