@@ -3854,10 +3854,16 @@ app.post("/api/updates/restart", authenticateRequest, (req, res) => {
       const argsStr = args.map(a => `"${a}"`).join(" ");
 
       if (process.platform === "win32") {
-        // Use ping for a reliable 2-second delay to free ports, then launch a new visible command window via start
-        const batchCommand = `ping 127.0.0.1 -n 3 > nul & start "" "${exe}" ${argsStr}`;
-        console.log(`[Self-Restart] Windows spawning detached cmd prompt: ${batchCommand}`);
-        spawn("cmd.exe", ["/c", batchCommand], {
+        const batPath = path.join(WORK_DIR, "restart_bds_manager.bat");
+        const batContent = `@echo off\r\n` +
+          `ping 127.0.0.1 -n 3 > nul\r\n` +
+          `start "" "${exe}" ${args.map(a => `"${a}"`).join(" ")}\r\n` +
+          `(goto) 2>nul & del "%~f0"\r\n`;
+
+        fs.writeFileSync(batPath, batContent, "utf-8");
+        console.log(`[Self-Restart] Windows created temporary batch: ${batPath}`);
+
+        spawn("cmd.exe", ["/c", "restart_bds_manager.bat"], {
           detached: true,
           stdio: "ignore",
           cwd: WORK_DIR

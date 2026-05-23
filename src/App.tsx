@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import {
   Server,
   Play,
@@ -349,6 +349,39 @@ export default function App() {
   const [activeTasks, setActiveTasks] = useState<TaskLog[]>([]);
   const [pastLogs, setPastLogs] = useState<any[]>([]);
   const [addons, setAddons] = useState<AddonMetadata[]>([]);
+
+  // Count unique addons by grouping resource + behavior packs together if they share groupId or originalName
+  const groupedAddonsCount = useMemo(() => {
+    const visited = new Set<string>();
+    let count = 0;
+    for (const addon of addons) {
+      if (visited.has(addon.uuid)) continue;
+      
+      const group = [addon];
+      visited.add(addon.uuid);
+      
+      let foundNew = true;
+      while (foundNew) {
+        foundNew = false;
+        for (const other of addons) {
+          if (visited.has(other.uuid)) continue;
+          
+          const isConnected = group.some(item => 
+            (item.groupId && other.groupId && item.groupId === other.groupId) ||
+            (item.originalName && other.originalName && item.originalName === other.originalName && item.originalName !== "")
+          );
+          
+          if (isConnected) {
+            group.push(other);
+            visited.add(other.uuid);
+            foundNew = true;
+          }
+        }
+      }
+      count++;
+    }
+    return count;
+  }, [addons]);
   const [worlds, setWorlds] = useState<any[]>([]);
   const [versions, setVersions] = useState<BedrockVersion[]>([]);
   const [usersList, setUsersList] = useState<UserAccount[]>([]);
@@ -2235,7 +2268,7 @@ export default function App() {
                     </div>
                     <div className="bg-zinc-950/40 p-3 rounded-lg border border-zinc-950">
                       <span className="text-[9px] text-zinc-600 block uppercase font-bold tracking-wider mb-0.5">Active Addons</span>
-                      <p className="text-base font-black text-white">{addons.length}</p>
+                      <p className="text-base font-black text-white">{groupedAddonsCount}</p>
                     </div>
                     <div className="bg-zinc-950/40 p-3 rounded-lg border border-zinc-950">
                       <span className="text-[9px] text-zinc-600 block uppercase font-bold tracking-wider mb-0.5">Backup Worlds</span>
