@@ -309,27 +309,68 @@ function writeServerProperties() {
   const tickDistance = dbCache.appConfig.tickDistance || 4;
 
   const propFile = path.join(SERVER_DIR, "server.properties");
-  const defaultPropContent = `server-name=${serverName}
-gamemode=${gamemode}
-difficulty=${difficulty}
-allow-cheats=${allowCheats}
-max-players=${maxPlayers}
-server-port=${port}
-server-portv6=${port + 1}
-online-mode=${onlineMode}
-level-name=${levelName}
-view-distance=${viewDistance}
-tick-distance=${tickDistance}
-emit-server-telemetry=${emitServerTelemetry}
-player-movement-score-threshold=20
-player-movement-action-direction-thresholds=0.85
-player-movement-duration-threshold-in-ms=500
-correct-player-movement=false
-`;
+
+  // Read existing properties to preserve custom keys not directly managed by GUI forms
+  let existingProps: Record<string, string> = {};
+  if (fs.existsSync(propFile)) {
+    try {
+      const content = fs.readFileSync(propFile, "utf-8");
+      const lines = content.split(/\r?\n/);
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (trimmed && !trimmed.startsWith("#")) {
+          const idx = trimmed.indexOf("=");
+          if (idx !== -1) {
+            const key = trimmed.slice(0, idx).trim();
+            const val = trimmed.slice(idx + 1).trim();
+            existingProps[key] = val;
+          }
+        }
+      }
+    } catch (e) {
+      console.error("Failed to read/parse existing server.properties:", e);
+    }
+  }
+
+  // Define values managed by the GUI form
+  const guiProps: Record<string, string> = {
+    "server-name": serverName,
+    "gamemode": gamemode,
+    "difficulty": difficulty,
+    "allow-cheats": String(allowCheats),
+    "max-players": String(maxPlayers),
+    "server-port": String(port),
+    "server-portv6": String(port + 1),
+    "online-mode": String(onlineMode),
+    "level-name": levelName,
+    "view-distance": String(viewDistance),
+    "tick-distance": String(tickDistance),
+    "emit-server-telemetry": String(emitServerTelemetry),
+  };
+
+  // Merge them (gui values overwrite/supplement existing)
+  const mergedProps = {
+    "player-movement-score-threshold": "20",
+    "player-movement-action-direction-thresholds": "0.85",
+    "player-movement-duration-threshold-in-ms": "500",
+    "correct-player-movement": "false",
+    ...existingProps,
+    ...guiProps
+  };
+
+  // Generate output content
+  let outputContent = "# Standard and custom server properties merged by Bedrock Server Manager\n";
+  for (const [key, val] of Object.entries(mergedProps)) {
+    outputContent += `${key}=${val}\n`;
+  }
 
   try {
-    fs.writeFileSync(propFile, defaultPropContent, "utf-8");
-    logServerMessage("SYS", "server.properties updated successfully.");
+    const serverParent = path.dirname(propFile);
+    if (!fs.existsSync(serverParent)) {
+      fs.mkdirSync(serverParent, { recursive: true });
+    }
+    fs.writeFileSync(propFile, outputContent, "utf-8");
+    logServerMessage("SYS", "server.properties updated successfully with merged properties.");
   } catch (e) {
     logServerMessage("ERROR", "Failed to write server.properties file.");
   }
@@ -1101,6 +1142,138 @@ app.post("/api/server/config", authenticateRequest, requireAdmin, (req, res) => 
   updateWorldPacksConfig();
 
   res.json({ success: true, config: dbCache.appConfig });
+});
+
+// Config files directory reader/writer
+app.get("/api/config-files", authenticateRequest, (req, res) => {
+  const files = [
+    {
+      id: "permissions",
+      name: "permissions.json",
+      path: "config/default/permissions.json",
+      description: "Define level privileges and command permissions for operators, members, and visitors."
+    },
+    {
+      id: "properties",
+      name: "server.properties",
+      path: "server.properties",
+      description: "Define connection, port, simulation, gameplay, and custom server settings."
+    }
+  ];
+  res.json(files);
+});
+
+app.get("/api/config-files/read", authenticateRequest, (req, res) => {
+  const fileId = req.query.file as string;
+  let targetPath = "";
+  
+  if (fileId === "permissions") {
+    targetPath = path.join(SERVER_DIR, "config/default/permissions.json");
+    // Auto-create directory and template if missing
+    if (!fs.existsSync(targetPath)) {
+      try {
+        fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+        const defaultPermissions = [
+          {
+            "permission": "operator",
+            "commands": ["*"]
+          },
+          {
+            "permission": "member",
+            "commands": ["help", "me", "msg", "w"]
+          },
+          {
+            "permission": "visitor",
+            "commands": []
+          }
+        ];
+        fs.writeFileSync(targetPath, JSON.stringify(defaultPermissions, null, 2), "utf-8");
+      } catch (err: any) {
+        console.error("Failed to create default permissions.json:", err);
+      }
+    }
+  } else if (fileId === "properties") {
+    targetPath = path.join(SERVER_DIR, "server.properties");
+    // Ensure file exists
+    if (!fs.existsSync(targetPath)) {
+      writeServerProperties();
+    }
+  } else {
+    res.status(400).json({ error: "Invalid file target requested." });
+    return;
+  }
+
+  try {
+    const fileContent = fs.readFileSync(targetPath, "utf-8");
+    res.json({ content: fileContent });
+  } catch (err: any) {
+    res.status(500).json({ error: `Could not read file contents: ${err.message}` });
+  }
+});
+
+app.post("/api/config-files/write", authenticateRequest, requireAdmin, (req, res) => {
+  const { fileId, content } = req.body;
+  let targetPath = "";
+
+  if (fileId === "permissions") {
+    targetPath = path.join(SERVER_DIR, "config/default/permissions.json");
+    // Validate JSON structure for permissions.json
+    try {
+      JSON.parse(content);
+    } catch (jsonErr: any) {
+      res.status(400).json({ error: `Invalid JSON structure: ${jsonErr.message}` });
+      return;
+    }
+  } else if (fileId === "properties") {
+    targetPath = path.join(SERVER_DIR, "server.properties");
+  } else {
+    res.status(400).json({ error: "Invalid target file identifier specified." });
+    return;
+  }
+
+  try {
+    fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+    fs.writeFileSync(targetPath, content, "utf-8");
+    
+    // If we edited server.properties, parse it to update dbCache.appConfig for matching UI inputs
+    if (fileId === "properties") {
+      try {
+        const lines = content.split(/\r?\n/);
+        const parsed: Record<string, string> = {};
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (trimmed && !trimmed.startsWith("#")) {
+            const idx = trimmed.indexOf("=");
+            if (idx !== -1) {
+              const key = trimmed.slice(0, idx).trim();
+              const val = trimmed.slice(idx + 1).trim();
+              parsed[key] = val;
+            }
+          }
+        }
+        // Safely update App Config in DB caching to reflect edits instantly (in-sync)
+        if (parsed["server-name"]) dbCache.appConfig.serverName = parsed["server-name"];
+        if (parsed["gamemode"]) dbCache.appConfig.gamemode = parsed["gamemode"];
+        if (parsed["difficulty"]) dbCache.appConfig.difficulty = parsed["difficulty"];
+        if (parsed["allow-cheats"]) dbCache.appConfig.allowCheats = parsed["allow-cheats"] === "true";
+        if (parsed["max-players"]) dbCache.appConfig.maxPlayers = parseInt(parsed["max-players"]) || dbCache.appConfig.maxPlayers;
+        if (parsed["server-port"]) dbCache.appConfig.serverPort = parseInt(parsed["server-port"]) || dbCache.appConfig.serverPort;
+        if (parsed["online-mode"]) dbCache.appConfig.onlineMode = parsed["online-mode"] === "true";
+        if (parsed["level-name"]) dbCache.appConfig.levelName = parsed["level-name"];
+        if (parsed["view-distance"]) dbCache.appConfig.viewDistance = parseInt(parsed["view-distance"]) || dbCache.appConfig.viewDistance;
+        if (parsed["tick-distance"]) dbCache.appConfig.tickDistance = parseInt(parsed["tick-distance"]) || dbCache.appConfig.tickDistance;
+        if (parsed["emit-server-telemetry"]) dbCache.appConfig.emitServerTelemetry = parsed["emit-server-telemetry"] === "true";
+        saveDB();
+      } catch (parseErr) {
+        console.warn("Could not sync appConfig from custom properties save:", parseErr);
+      }
+    }
+
+    logServerMessage("SYS", `Successfully updated configuration file: ${fileId === "permissions" ? "config/default/permissions.json" : "server.properties"}`);
+    res.json({ success: true, message: "File content updated successfully!" });
+  } catch (err: any) {
+    res.status(500).json({ error: `Failed to write file contents: ${err.message}` });
+  }
 });
 
 // Status & real-time analytics

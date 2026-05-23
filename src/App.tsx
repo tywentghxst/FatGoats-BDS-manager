@@ -370,6 +370,82 @@ export default function App() {
   const [isSavingAddon, setIsSavingAddon] = useState(false);
   const [updatingAddonUuid, setUpdatingAddonUuid] = useState<string | null>(null);
 
+  // File editor states
+  const [propertiesTab, setPropertiesTab] = useState<"gui" | "files">("gui");
+  const [selectedFileId, setSelectedFileId] = useState<string>("permissions");
+  const [fileEditorContent, setFileEditorContent] = useState<string>("");
+  const [fileEditorLoading, setFileEditorLoading] = useState<boolean>(false);
+
+  const loadConfigFile = async (fileId: string) => {
+    setFileEditorLoading(true);
+    try {
+      const res = await fetch(`/api/config-files/read?file=${fileId}`, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setFileEditorContent(data.content);
+      } else {
+        const err = await res.json();
+        showBanner(err.error || "Failed to load config file contents.", "error");
+      }
+    } catch (err) {
+      showBanner("Failed to communicate with the configs API.", "error");
+    } finally {
+      setFileEditorLoading(false);
+    }
+  };
+
+  const saveConfigFile = async () => {
+    if (!isAdmin) {
+      showBanner("Admin authorization is required to edit configs.", "error");
+      return;
+    }
+    setFileEditorLoading(true);
+    try {
+      const res = await fetch("/api/config-files/write", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          fileId: selectedFileId,
+          content: fileEditorContent
+        })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        showBanner(data.message || "File saved successfully!", "success");
+        // Reload settings if properties edited
+        if (selectedFileId === "properties") {
+          const resConfig = await fetch("/api/server/config", {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          if (resConfig.ok) {
+            const freshConfig = await resConfig.json();
+            setAppConfig(freshConfig);
+          }
+        }
+      } else {
+        const err = await res.json();
+        showBanner(err.error || "Failed to save config file.", "error");
+      }
+    } catch (err) {
+      showBanner("Failed to write updated configs.", "error");
+    } finally {
+      setFileEditorLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (propertiesTab === "files" && token) {
+      loadConfigFile(selectedFileId);
+    }
+  }, [propertiesTab, selectedFileId, token]);
+
   // Add User states
   const [newUsername, setNewUsername] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -3649,11 +3725,11 @@ export default function App() {
           )}
 
           {navTab === "properties" && (
-            <div className="flex-1 p-8 overflow-y-auto space-y-8 bg-zinc-950/40">
+            <div className="flex-1 p-8 overflow-y-auto space-y-8 bg-zinc-950/40 font-sans">
               <div className="flex justify-between items-center pb-4 border-b border-zinc-900">
                 <div>
-                  <h1 className="text-2xl font-bold text-white tracking-tight">Server Properties</h1>
-                  <p className="text-xs text-zinc-400 mt-1">Configure global bedrock dedicated server game settings and config properties written directly to <code className="text-[10px] font-mono bg-zinc-950 p-1 rounded text-zinc-300">server.properties</code>.</p>
+                  <h1 className="text-2xl font-bold text-white tracking-tight">Server Properties & Configs</h1>
+                  <p className="text-xs text-zinc-400 mt-1">Configure global bedrock dedicated server game settings, custom properties, and permissions files.</p>
                 </div>
                 {!isAdmin && (
                   <div className="bg-amber-500/10 border border-amber-500/20 text-amber-400 px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2">
@@ -3663,7 +3739,34 @@ export default function App() {
                 )}
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              {/* Sub-tab Switcher */}
+              <div className="flex gap-2 bg-zinc-900/50 p-1 rounded-xl max-w-xs border border-zinc-900/60">
+                <button
+                  type="button"
+                  onClick={() => setPropertiesTab("gui")}
+                  className={`flex-1 py-1.5 px-3 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all cursor-pointer select-none ${
+                    propertiesTab === "gui"
+                      ? "bg-zinc-850 text-white shadow"
+                      : "text-zinc-500 hover:text-zinc-300"
+                  }`}
+                >
+                  Graphical Settings
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPropertiesTab("files")}
+                  className={`flex-1 py-1.5 px-3 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all cursor-pointer select-none ${
+                    propertiesTab === "files"
+                      ? "bg-zinc-850 text-white shadow"
+                      : "text-zinc-500 hover:text-zinc-300"
+                  }`}
+                >
+                  Config Files Editor
+                </button>
+              </div>
+
+              {propertiesTab === "gui" ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                 {/* Visual Identity & Game Rules Card */}
                 <div className="bg-zinc-900/30 border border-zinc-900 rounded-2xl p-6 space-y-6">
                   <div className="flex items-center gap-2 pb-3 border-b border-zinc-900/60">
@@ -3909,8 +4012,143 @@ export default function App() {
                     </div>
                   </div>
                 </div>
-
               </div>
+              ) : (
+                /* RAW INTEGRATED DIRECT CONFIGS FILE EDITOR */
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                  {/* Left panel: File navigation */}
+                  <div className="lg:col-span-1 bg-zinc-900/30 border border-zinc-900 rounded-2xl p-5 space-y-4 h-[520px] overflow-y-auto">
+                    <div className="flex items-center gap-2 pb-3 border-b border-zinc-900/55">
+                      <FolderOpen className="w-4 h-4 text-emerald-400" />
+                      <h4 className="text-xs font-black uppercase text-white tracking-widest">Main Server Folder</h4>
+                    </div>
+
+                    {/* Navigation tree selector */}
+                    <div className="space-y-3 font-mono text-[11px] text-zinc-400">
+                      <div className="pl-2 border-l border-zinc-850 space-y-1">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedFileId("properties")}
+                          className={`w-full flex items-center justify-between p-2.5 rounded-xl transition-all text-left cursor-pointer ${
+                            selectedFileId === "properties"
+                              ? "bg-zinc-850 border border-zinc-750 text-white font-bold"
+                              : "hover:bg-zinc-950/40 border border-transparent hover:text-white"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2.5">
+                            <FileCode className="w-3.5 h-3.5 text-indigo-400" />
+                            <span>server.properties</span>
+                          </div>
+                          <span className="text-[8px] bg-zinc-950/50 px-1.5 py-0.5 rounded text-zinc-500 font-sans tracking-tight">properties</span>
+                        </button>
+                      </div>
+
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2 text-zinc-500 pl-1">
+                          <FolderOpen className="w-3 h-3 text-emerald-500/70" />
+                          <span className="font-bold">config</span>
+                        </div>
+                        
+                        <div className="pl-4 border-l border-zinc-850 space-y-1">
+                          <div className="flex items-center gap-2 text-zinc-500">
+                            <FolderOpen className="w-3 h-3 text-emerald-600/70" />
+                            <span className="font-semibold">default</span>
+                          </div>
+
+                          <div className="pl-4 border-l border-zinc-850">
+                            <button
+                              type="button"
+                              onClick={() => setSelectedFileId("permissions")}
+                              className={`w-full flex items-center justify-between p-2.5 rounded-xl transition-all text-left cursor-pointer ${
+                                selectedFileId === "permissions"
+                                  ? "bg-zinc-850 border border-zinc-750 text-white font-bold"
+                                  : "hover:bg-zinc-950/40 border border-transparent hover:text-white"
+                              }`}
+                            >
+                              <div className="flex items-center gap-2.5">
+                                <FileCode className="w-3.5 h-3.5 text-amber-500" />
+                                <span>permissions.json</span>
+                              </div>
+                              <span className="text-[8px] bg-zinc-950/50 px-1.5 py-0.5 rounded text-zinc-500 font-sans tracking-tight">json</span>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Meta info boxes */}
+                    <div className="p-3.5 bg-zinc-950/50 rounded-xl border border-zinc-900 space-y-2 text-[10px] text-zinc-500 leading-relaxed font-sans font-normal">
+                      <div className="flex items-center gap-1 text-zinc-300 font-bold">
+                        <Activity className="w-3.5 h-3.5 text-emerald-500" />
+                        <span>Interactive File Mounting</span>
+                      </div>
+                      {selectedFileId === "permissions" ? (
+                        <p>
+                          The <code className="text-zinc-300">permissions.json</code> dictates backend execution rights. You can map console commands cleanly to different permission rings (<code className="text-zinc-400">"operator"</code>, <code className="text-zinc-400 font-bold">"member"</code>, and <code className="text-zinc-400">"visitor"</code>).
+                        </p>
+                      ) : (
+                        <p>
+                          Customize or add ANY config settings in <code className="text-zinc-300">server.properties</code> directly! The applet safely merges custom properties so your definitions are never overridden.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Right panel: Active Editor screen */}
+                  <div className="lg:col-span-2 bg-zinc-900/30 border border-zinc-900 rounded-2xl p-5 flex flex-col h-[520px]">
+                    <div className="flex items-center justify-between pb-3 border-b border-zinc-900">
+                      <div>
+                        <h3 className="text-xs font-black uppercase text-white tracking-widest flex items-center gap-2">
+                          <FileCode className="w-4 h-4 text-emerald-400" />
+                          <span>Editing: {selectedFileId === "permissions" ? "config/default/permissions.json" : "server.properties"}</span>
+                        </h3>
+                        <p className="text-[10px] text-zinc-500 mt-1">
+                          Direct physical path: <code className="text-zinc-400 font-mono text-[9px]">bedrock-server/{selectedFileId === "permissions" ? "config/default/permissions.json" : "server.properties"}</code>
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => loadConfigFile(selectedFileId)}
+                          disabled={fileEditorLoading}
+                          className="p-2 bg-zinc-950 hover:bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white rounded-xl transition-all cursor-pointer active:scale-95 disabled:opacity-50"
+                          title="Reload from Server"
+                        >
+                          <RefreshCw className={`w-3.5 h-3.5 ${fileEditorLoading ? "animate-spin" : ""}`} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={saveConfigFile}
+                          disabled={fileEditorLoading || !isAdmin}
+                          className="px-4 py-2 bg-emerald-650 hover:bg-emerald-500 text-white font-heavy text-[10px] uppercase tracking-widest rounded-xl transition-all flex items-center gap-2 cursor-pointer shadow-lg shadow-emerald-500/10 active:scale-95 disabled:opacity-40"
+                        >
+                          <Settings className="w-3.5 h-3.5 animate-pulse" />
+                          <span>Save Changes</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Text Area Element */}
+                    <div className="flex-1 mt-4 relative bg-zinc-950 rounded-xl overflow-hidden border border-zinc-900 shadow-inner flex flex-col">
+                      {fileEditorLoading && (
+                        <div className="absolute inset-0 bg-black/80 backdrop-blur-sm z-50 flex flex-col items-center justify-center gap-2">
+                          <RefreshCw className="w-6 h-6 text-emerald-400 animate-spin" />
+                          <span className="text-[10px] text-zinc-500 tracking-wider uppercase font-black">Reading raw file contents...</span>
+                        </div>
+                      )}
+                      <textarea
+                        disabled={!isAdmin || fileEditorLoading}
+                        value={fileEditorContent}
+                        onChange={(e) => setFileEditorContent(e.target.value)}
+                        className="flex-1 resize-none p-4 font-mono text-[11px] leading-relaxed text-emerald-300 bg-transparent outline-none border-none select-text focus:ring-0 disabled:opacity-60 disabled:cursor-not-allowed selection:bg-emerald-500/20 selection:text-emerald-200 h-full w-full"
+                        spellCheck={false}
+                        placeholder={selectedFileId === "permissions" ? "Loading permissions.json schema contents..." : "Loading server.properties config settings..."}
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
