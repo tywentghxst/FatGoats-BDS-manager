@@ -61,7 +61,8 @@ import {
   History,
   Sliders,
   Link,
-  CloudDownload
+  CloudDownload,
+  FlaskConical
 } from "lucide-react";
 
 import {
@@ -227,7 +228,9 @@ export default function App() {
   const [authError, setAuthError] = useState("");
 
   // Menu Navigation Tab (Dashboard, Players, Settings, Console, Users, Selfhost Guides)
-  const [navTab, setNavTab] = useState<"dashboard" | "addons" | "worlds" | "console" | "users" | "selfhost" | "console_connect" | "updates" | "tasks_history" | "quick_commands" | "properties" | "players_map">("dashboard");
+  const [navTab, setNavTab] = useState<"dashboard" | "addons" | "worlds" | "console" | "users" | "selfhost" | "console_connect" | "updates" | "tasks_history" | "quick_commands" | "properties" | "players_map" | "settings" | "experimental">("dashboard");
+  const [settingsSubTab, setSettingsSubTab] = useState<"properties" | "users" | "tasks_history" | "selfhost" | "updates">("properties");
+  const [experimentalSubTab, setExperimentalSubTab] = useState<"players_map" | "console_connect" | "playit">("players_map");
   const [guideMode, setGuideMode] = useState<"windows" | "docker">("windows");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -346,7 +349,12 @@ export default function App() {
     onlineMode: false,
     allowCheats: true,
     viewDistance: 10,
-    tickDistance: 4
+    tickDistance: 4,
+    backupCountToKeep: 5,
+    backupFrequencyHours: 24,
+    backupOnStart: false,
+    backupOnStop: false,
+    lastBackupTimestamp: 0
   });
 
   // Live collections
@@ -388,6 +396,8 @@ export default function App() {
     return count;
   }, [addons]);
   const [worlds, setWorlds] = useState<any[]>([]);
+  const [backups, setBackups] = useState<any[]>([]);
+  const [loadingBackups, setLoadingBackups] = useState<boolean>(false);
   const [versions, setVersions] = useState<BedrockVersion[]>([]);
   const [usersList, setUsersList] = useState<UserAccount[]>([]);
   const [invitesList, setInvitesList] = useState<UserInvite[]>([]);
@@ -577,16 +587,10 @@ export default function App() {
     { id: "dashboard", label: "Dashboard Space", icon: LayoutDashboard, color: "text-emerald-400" },
     { id: "addons", label: "Addons & Packs", icon: Blocks, color: "text-indigo-400" },
     { id: "worlds", label: "Worlds Vault", icon: FolderOpen, color: "text-amber-400" },
-    { id: "players_map", label: "Players & Live Map", icon: Map, color: "text-rose-400" },
     { id: "quick_commands", label: "Quick Commands", icon: Zap, color: "text-yellow-400", pulse: true },
-    { id: "properties", label: "Server Properties", icon: Sliders, color: "text-cyan-400" },
-    { id: "tasks_history", label: "Tasks & History", icon: History, color: "text-pink-400" },
-    ...(isAdmin ? [{ id: "users", label: "Users & Admins", icon: Users, color: "text-blue-400" }] : []),
-    { id: "console_connect", label: "Console Connect", icon: Link, color: "text-violet-400" },
-    { id: "playit", label: "Open to Internet", icon: Globe, color: "text-sky-400" },
-    { id: "selfhost", label: "Hosting & Docker Setup", icon: Server, color: "text-teal-400" },
-    { id: "updates", label: "Software Updates", icon: CloudDownload, color: "text-purple-400" },
-  ], [isAdmin]);
+    { id: "settings", label: "Settings & System", icon: Settings, color: "text-zinc-400" },
+    { id: "experimental", label: "EXPERIMENTAL", icon: FlaskConical, color: "text-rose-500", pulse: true },
+  ], []);
 
   // Polling data loops
   useEffect(() => {
@@ -595,7 +599,7 @@ export default function App() {
     fetchDataFeed();
     const interval = setInterval(fetchDataFeed, 2000);
     return () => clearInterval(interval);
-  }, [token, navTab]);
+  }, [token, navTab, settingsSubTab, experimentalSubTab]);
 
   // Command logs autoscroll
   useEffect(() => {
@@ -659,7 +663,7 @@ export default function App() {
         setConsoleLogs(consoleData);
       }
 
-      if (consoleTab === "history" || navTab === "dashboard") {
+      if (consoleTab === "history" || navTab === "dashboard" || (navTab === "settings" && settingsSubTab === "tasks_history")) {
         const historyData = await fetchJson("/api/logs/history");
         setPastLogs(historyData);
       }
@@ -672,9 +676,15 @@ export default function App() {
       if (navTab === "worlds" || navTab === "dashboard") {
         const worldsData = await fetchJson("/api/worlds");
         setWorlds(worldsData);
+        try {
+          const backupsData = await fetchJson("/api/worlds/backups");
+          setBackups(backupsData);
+        } catch (backErr) {
+          console.error("Backups feed load error", backErr);
+        }
       }
 
-      if (navTab === "users" && isAdmin) {
+      if ((navTab === "users" || (navTab === "settings" && settingsSubTab === "users")) && isAdmin) {
         const usersData = await fetchJson("/api/users");
         setUsersList(usersData);
 
@@ -1360,6 +1370,131 @@ export default function App() {
       }
     } catch (e) {
       showBanner("Server error worlds API", "error");
+    }
+  };
+
+  // Create Manual World Backup
+  const handleCreateBackup = async (worldFolderName: string) => {
+    if (!token || !isAdmin) return;
+    setLoadingBackups(true);
+    try {
+      const res = await fetch("/api/worlds/backups/create", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ worldFolderName })
+      });
+      if (res.ok) {
+        const d = await res.json();
+        showBanner(`Successfully compiled custom backup file: ${d.fileName}`, "success");
+        fetchDataFeed();
+      } else {
+        const data = await res.json();
+        showBanner(data.error || "Failed building backup archive.", "error");
+      }
+    } catch (err) {
+      showBanner("Communication failure saving backup.", "error");
+    } finally {
+      setLoadingBackups(false);
+    }
+  };
+
+  // Restore World Backup
+  const handleRestoreBackup = async (fileName: string, worldName: string) => {
+    if (!token || !isAdmin) return;
+    
+    if (stats?.status && stats.status !== "stopped") {
+      showBanner("Cannot restore world backup while the server is running. Please stop the Bedrock server first!", "error");
+      return;
+    }
+    
+    promptConfirm(
+      "Restore World Backup",
+      `Are you ABSOLUTELY sure you want to restore the backup "${fileName}"? This will physically overwrite and replace files inside worlds/${worldName}! (We will save a pre-restore copy of your current active world folder on the server as safety backup first).`,
+      async () => {
+        setLoadingBackups(true);
+        try {
+          const res = await fetch(`/api/worlds/backups/${fileName}/restore`, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${token}`
+            }
+          });
+          if (res.ok) {
+            showBanner(`Successfully restored "${worldName}" to database!`, "success");
+            fetchDataFeed();
+          } else {
+            const data = await res.json();
+            showBanner(data.error || "Restore execution error client-side", "error");
+          }
+        } catch (err) {
+          showBanner("Communication connection failure executing restore.", "error");
+        } finally {
+          setLoadingBackups(false);
+        }
+      }
+    );
+  };
+
+  // Delete specific backup file
+  const handleDeleteBackup = async (fileName: string) => {
+    if (!token || !isAdmin) return;
+    
+    promptConfirm(
+      "Delete Backup File",
+      `Are you positive you wish to completely delete the backup file "${fileName}"? This cannot be undone.`,
+      async () => {
+        setLoadingBackups(true);
+        try {
+          const res = await fetch(`/api/worlds/backups/${fileName}`, {
+            method: "DELETE",
+            headers: {
+              Authorization: `Bearer ${token}`
+            }
+          });
+          if (res.ok) {
+            showBanner("Successfully deleted backup file from storage.", "success");
+            fetchDataFeed();
+          } else {
+            const data = await res.json();
+            showBanner(data.error || "Delete action failed", "error");
+          }
+        } catch (err) {
+          showBanner("Communication error deleting backup file.", "error");
+        } finally {
+          setLoadingBackups(false);
+        }
+      }
+    );
+  };
+
+  // Export world folder to browser download as .mcworld
+  const handleExportWorld = async (folderName: string) => {
+    if (!token) return;
+    try {
+      showBanner(`Packaging and compressing "${folderName}.mcworld"... Please wait.`, "info");
+      const res = await fetch(`/api/worlds/${folderName}/export`, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+      if (!res.ok) {
+        throw new Error(`HTTP error ${res.status}`);
+      }
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${folderName}.mcworld`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+      showBanner(`Successfully exported and downloaded "${folderName}.mcworld"!`, "success");
+    } catch (err: any) {
+      showBanner(`Failed to export world folder: ${err.message}`, "error");
     }
   };
 
@@ -2282,7 +2417,7 @@ export default function App() {
           )}
 
           {/* ==================== TASKS & HISTORY ROUTE PANEL ==================== */}
-          {navTab === "tasks_history" && (() => {
+          {navTab === "settings" && settingsSubTab === "tasks_history" && (() => {
             const sortedTasks = [...activeTasks].sort((a, b) => {
               const timeA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
               const timeB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
@@ -2296,12 +2431,106 @@ export default function App() {
             });
 
             return (
-              <div className="space-y-6 select-none">
-                {/* Header Banner */}
+              <div className="space-y-6 select-none flex-1 p-8 bg-zinc-950/40 font-sans animate-fade-in">
+                
+                {/* Central Settings Navigation */}
+                <div className="mb-6 space-y-5 select-none animate-fadeIn">
+                  <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-zinc-900/10 border border-zinc-900 rounded-2xl p-6 gap-4">
+                    <div>
+                      <h2 className="text-xl font-black text-white tracking-tight flex items-center gap-2">
+                        <Settings className="w-5 h-5 text-zinc-400" />
+                        Settings & System Administration
+                      </h2>
+                      <p className="text-xs text-zinc-500 mt-1">
+                        Configure server properties, orchestrate admin user accounts, inspect logging history, and deployment platforms.
+                      </p>
+                    </div>
+                    {!isAdmin && (
+                      <div className="bg-amber-500/10 border border-amber-500/20 text-amber-400 px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2">
+                        <Shield className="w-3.5 h-3.5" />
+                        Read-Only (Requires Admin Profile)
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex flex-wrap gap-2 p-1 bg-zinc-950/80 border border-zinc-900 rounded-xl w-fit max-w-full">
+                    <button
+                      type="button"
+                      onClick={() => setSettingsSubTab("properties")}
+                      className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        settingsSubTab === "properties"
+                          ? "bg-zinc-900 border border-zinc-805 text-white shadow-md font-extrabold"
+                          : "text-zinc-500 hover:text-zinc-300"
+                      }`}
+                    >
+                      <Sliders className={`w-3.5 h-3.5 ${settingsSubTab === "properties" ? "text-cyan-400" : "text-zinc-500"}`} />
+                      Server Properties
+                    </button>
+
+                    {isAdmin && (
+                      <button
+                        type="button"
+                        onClick={() => setSettingsSubTab("users")}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                          settingsSubTab === "users"
+                            ? "bg-zinc-900 border border-zinc-805 text-white shadow-md font-extrabold"
+                            : "text-zinc-500 hover:text-zinc-300"
+                        }`}
+                      >
+                        <Users className={`w-3.5 h-3.5 ${settingsSubTab === "users" ? "text-blue-400" : "text-zinc-500"}`} />
+                        Users & Admins
+                      </button>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={() => setSettingsSubTab("tasks_history")}
+                      className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        settingsSubTab === "tasks_history"
+                          ? "bg-zinc-900 border border-zinc-805 text-white shadow-md font-extrabold"
+                          : "text-white"
+                      }`}
+                    >
+                      <History className={`w-3.5 h-3.5 ${settingsSubTab === "tasks_history" ? "text-pink-400" : "text-zinc-500"}`} />
+                      Tasks & History
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setSettingsSubTab("selfhost")}
+                      className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        settingsSubTab === "selfhost"
+                          ? "bg-zinc-900 border border-zinc-805 text-white shadow-md font-extrabold"
+                          : "text-zinc-500 hover:text-zinc-300"
+                      }`}
+                    >
+                      <Server className={`w-3.5 h-3.5 ${settingsSubTab === "selfhost" ? "text-teal-400" : "text-zinc-500"}`} />
+                      Hosting & Docker Setup
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setSettingsSubTab("updates")}
+                      className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        settingsSubTab === "updates"
+                          ? "bg-zinc-900 border border-zinc-805 text-white shadow-md font-extrabold"
+                          : "text-zinc-500 hover:text-zinc-300"
+                      }`}
+                    >
+                      <CloudDownload className={`w-3.5 h-3.5 ${settingsSubTab === "updates" ? "text-purple-400" : "text-zinc-500"}`} />
+                      Software Updates
+                    </button>
+                  </div>
+                </div>
+
+                {/* Sub-header Banner */}
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-zinc-900/10 border border-zinc-900 rounded-2xl p-6 mb-6">
                   <div>
-                    <h2 className="text-lg font-black text-white tracking-tight">Tasks Coordinator & Actions History</h2>
-                    <p className="text-xs text-zinc-500 mt-1 leading-relaxed">
+                    <h3 className="text-sm font-bold text-white tracking-tight flex items-center gap-2">
+                      <History className="w-4 h-4 text-pink-400" />
+                      Tasks Coordinator & Actions History
+                    </h3>
+                    <p className="text-[11px] text-zinc-400 mt-1 max-w-2xl leading-relaxed">
                       Monitor your active task processes, resource updates, and full event-action journals from the administration panel.
                     </p>
                   </div>
@@ -2465,11 +2694,6 @@ export default function App() {
               </div>
             );
           })()}
-
-          {/* ==================== PLAYERS & TACTICAL MAP VIEW ==================== */}
-          {navTab === "players_map" && (
-            <PlayersMap token={token} onShowMessage={showBanner} />
-          )}
 
           {/* ==================== B. ADDONS & PACKS MANAGER VIEW ==================== */}
           {navTab === "addons" && (
@@ -3070,12 +3294,16 @@ export default function App() {
 
           {/* ==================== C. WORLDS ARCHIVE MANAGEMENT VIEW ==================== */}
           {navTab === "worlds" && (
-            <div className="space-y-6 select-none">
+            <div className="space-y-6 select-none animate-fadeIn">
+              {/* Header Card */}
               <div className="flex justify-between items-center bg-zinc-900/10 border border-zinc-900 rounded-2xl p-6">
                 <div>
-                  <h2 className="text-lg font-black text-white tracking-tight">Active World Vault</h2>
+                  <h2 className="text-lg font-black text-white tracking-tight flex items-center gap-2">
+                    <FolderOpen className="w-5 h-5 text-amber-400" />
+                    Minecraft World Vault
+                  </h2>
                   <p className="text-xs text-zinc-500 mt-0.5">
-                    Minecraft world managers. Upload `.mcworld` packages to index worlds directory registers, select which world directory drives active hosts.
+                    Manage Bedrock server directories, export worlds to `.mcworld` packages, and administer disaster-recovery database backups.
                   </p>
                 </div>
 
@@ -3091,76 +3319,347 @@ export default function App() {
                     <button
                       id="upload-world-trigger"
                       onClick={() => worldFileInputRef.current?.click()}
-                      className="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs tracking-wider uppercase px-4 py-2.5 rounded-xl flex items-center gap-2 shadow-md cursor-pointer"
+                      className="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs tracking-wider uppercase px-4 py-2.5 rounded-xl flex items-center gap-2 shadow-md cursor-pointer transition-colors"
                     >
                       <UploadCloud className="w-4 h-4" />
                       Import .mcworld
                     </button>
                   </div>
                 ) : (
-                  <span className="px-3 py-1.5 rounded-xl bg-zinc-900 text-zinc-550 border border-zinc-850 text-xs font-bold uppercase select-none leading-none">
+                  <span className="px-3 py-1.5 rounded-xl bg-zinc-900 text-zinc-500 border border-zinc-850 text-xs font-bold uppercase select-none leading-none">
                     Viewer Read Only
                   </span>
                 )}
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-                {worlds.length === 0 ? (
-                  <div className="col-span-full bg-zinc-900/30 border border-zinc-900 p-12 text-center rounded-2xl flex flex-col items-center">
-                    <FolderOpen className="w-12 h-12 text-zinc-800 mb-3" />
-                    <h3 className="text-sm font-black text-white tracking-wide">No minecraft worlds detected</h3>
-                    <p className="text-xs text-zinc-500 max-w-sm mt-1 leading-relaxed">
-                      Upload `.mcworld` zipped files directly or create server folders internally to populate.
-                    </p>
-                  </div>
-                ) : (
-                  worlds.map((w, idx) => (
-                    <div
-                      key={idx}
-                      className={`bg-zinc-900/40 border rounded-2xl p-5 flex flex-col justify-between shadow hover:border-zinc-800 transition-all ${
-                        w.isActive ? "border-emerald-500/20 bg-emerald-950/10" : "border-zinc-900"
-                      }`}
-                    >
-                      <div className="space-y-4">
-                        <div className="flex items-center gap-3">
-                          <FolderOpen className={`w-8 h-8 ${w.isActive ? "text-emerald-400" : "text-zinc-500"}`} />
-                          <div>
-                            <h4 className="text-xs font-black text-white tracking-wide">{w.name}</h4>
-                            <p className="text-[10px] text-zinc-500 font-mono mt-0.5">Size on Disk: {formatBytes(w.sizeBytes)}</p>
+              {/* Worlds Listing Grid */}
+              <div className="space-y-3">
+                <h3 className="text-xs font-black text-zinc-400 uppercase tracking-widest px-1">Indexed Server Worlds</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                  {worlds.length === 0 ? (
+                    <div className="col-span-full bg-zinc-900/30 border border-zinc-900 p-12 text-center rounded-2xl flex flex-col items-center">
+                      <FolderOpen className="w-12 h-12 text-zinc-800 mb-3" />
+                      <h3 className="text-sm font-black text-white tracking-wide">No minecraft worlds detected</h3>
+                      <p className="text-xs text-zinc-500 max-w-sm mt-1 leading-relaxed">
+                        Upload `.mcworld` zipped files directly or create server folders internally to populate.
+                      </p>
+                    </div>
+                  ) : (
+                    worlds.map((w, idx) => (
+                      <div
+                        key={idx}
+                        className={`bg-zinc-900/40 border rounded-2xl p-5 flex flex-col justify-between shadow hover:border-zinc-850 transition-all ${
+                          w.isActive ? "border-emerald-500/20 bg-emerald-950/10" : "border-zinc-900"
+                        }`}
+                      >
+                        <div className="space-y-4">
+                          <div className="flex items-center gap-3">
+                            <FolderOpen className={`w-8 h-8 ${w.isActive ? "text-emerald-400" : "text-zinc-500"}`} />
+                            <div>
+                              <h4 className="text-xs font-black text-white tracking-wide">{w.name}</h4>
+                              <p className="text-[10px] text-zinc-500 font-mono mt-0.5">Size on Disk: {formatBytes(w.sizeBytes)}</p>
+                            </div>
                           </div>
+
+                          {w.isActive ? (
+                            <div className="p-3 bg-emerald-500/5 rounded-xl border border-emerald-500/10 flex items-center gap-2 text-[10px] text-emerald-400">
+                              <CheckCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                              <span>This world is currently active on server start configs.</span>
+                            </div>
+                          ) : (
+                            <p className="text-[10px] text-zinc-600 leading-snug">Folder: worlds/{w.folderName}</p>
+                          )}
                         </div>
 
-                        {w.isActive ? (
-                          <div className="p-3 bg-emerald-500/5 rounded-xl border border-emerald-500/10 flex items-center gap-2 text-[10px] text-emerald-400">
-                            <CheckCircle className="w-3.5 h-3.5 flex-shrink-0" />
-                            <span>This world is currently active on server start configs.</span>
+                        <div className="flex justify-between items-center mt-5 pt-4 border-t border-zinc-900/65">
+                          <div className="flex items-center gap-2">
+                            {isAdmin && !w.isActive && (
+                              <button
+                                onClick={() => setActiveWorld(w.folderName)}
+                                className="bg-emerald-600/10 text-emerald-400 hover:bg-emerald-605/20 border border-emerald-500/20 font-black text-[9px] uppercase tracking-widest px-3 py-1.5 rounded-lg select-none cursor-pointer"
+                              >
+                                Set Active
+                              </button>
+                            )}
+                            {w.isActive && (
+                              <span className="text-[9px] font-black uppercase text-emerald-400 tracking-wider">
+                                Active
+                              </span>
+                            )}
                           </div>
-                        ) : (
-                          <p className="text-[10px] text-zinc-600 leading-snug">Folder: worlds/{w.folderName}</p>
-                        )}
+
+                          <div className="flex items-center gap-1.5">
+                            {/* Create Backup */}
+                            {isAdmin && (
+                              <button
+                                onClick={() => handleCreateBackup(w.folderName)}
+                                disabled={loadingBackups}
+                                title="Compile snapshot backup zip of this world"
+                                className="p-1.5 rounded-lg border border-zinc-805 bg-indigo-550/5 hover:bg-indigo-500/20 text-indigo-400 transition-colors cursor-pointer"
+                              >
+                                <History className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+
+                            {/* Export Download */}
+                            <button
+                              onClick={() => handleExportWorld(w.folderName)}
+                              title="Download world directory package as .mcworld"
+                              className="p-1.5 rounded-lg border border-zinc-805 bg-amber-550/5 hover:bg-amber-500/19 text-amber-400 transition-colors cursor-pointer"
+                            >
+                              <CloudDownload className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              {/* Multi-Column Bento Details Section */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                
+                {/* 1. World Backups List (Left 7-columns) */}
+                <div className="lg:col-span-7 bg-zinc-900/40 border border-zinc-900 rounded-2xl p-5 md:p-6 space-y-4">
+                  <div className="flex justify-between items-center border-b border-zinc-900/60 pb-3">
+                    <div>
+                      <h3 className="text-xs font-black text-white uppercase tracking-wider flex items-center gap-2">
+                        <History className="w-4 h-4 text-indigo-400" />
+                        World Backup Snaps List
+                      </h3>
+                      <p className="text-[10px] text-zinc-500 mt-0.5">
+                        Recover server errors by restoring historical zip files.
+                      </p>
+                    </div>
+
+                    {isAdmin && worlds.length > 0 && (
+                      <button
+                        onClick={() => {
+                          const activeWorld = appConfig.levelName || "BedrockWorld";
+                          handleCreateBackup(activeWorld);
+                        }}
+                        disabled={loadingBackups}
+                        className="bg-indigo-600/10 text-indigo-400 hover:bg-indigo-600 hover:text-white border border-indigo-500/20 hover:border-indigo-500 font-bold text-[10px] uppercase tracking-wider py-1.5 px-3 rounded-lg flex items-center gap-1.5 transition-all cursor-pointer"
+                      >
+                        <Plus className="w-3 h-3" /> Quick Backup
+                      </button>
+                    )}
+                  </div>
+
+                  {loadingBackups ? (
+                    <div className="py-12 text-center space-y-2">
+                      <RefreshCw className="w-6 h-6 text-indigo-450 animate-spin mx-auto" />
+                      <p className="text-xs text-zinc-500">Processing file archive stream...</p>
+                    </div>
+                  ) : backups.length === 0 ? (
+                    <div className="py-12 border border-dashed border-zinc-900 rounded-xl text-center space-y-2 bg-zinc-950/20">
+                      <History className="w-10 h-10 text-zinc-800 mx-auto" />
+                      <h4 className="text-xs font-bold text-zinc-400">No world backups created yet</h4>
+                      <p className="text-[10px] text-zinc-500 max-w-xs mx-auto leading-relaxed">
+                        Trigger backups manually on worlds, or toggle the automatic start/stop triggers to save backups.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="max-h-[500px] overflow-y-auto space-y-3 pr-1">
+                      {backups.map((b, idx) => {
+                        const dateStr = b.createdAt ? new Date(b.createdAt).toLocaleString(undefined, {
+                          month: "short",
+                          day: "numeric",
+                          year: "numeric",
+                          hour: "2-digit",
+                          minute: "2-digit"
+                        }) : "Date Unknown";
+                        
+                        return (
+                          <div
+                            key={idx}
+                            className="bg-zinc-900/20 border border-zinc-900 px-3.5 py-3 rounded-xl flex items-center justify-between gap-4 hover:border-zinc-800 transition-colors"
+                          >
+                            <div className="min-w-0 flex items-center gap-3">
+                              <div className="w-8 h-8 rounded-lg bg-zinc-950 flex items-center justify-center border border-zinc-900 shrink-0">
+                                <History className="w-4 h-4 text-zinc-600" />
+                              </div>
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-[11px] font-black text-white hover:text-indigo-400 truncate tracking-wide block max-w-[150px] md:max-w-[220px]">
+                                    {b.worldName}
+                                  </span>
+                                  <span className="text-[9px] text-indigo-400 font-mono bg-indigo-500/5 border border-indigo-500/10 px-1 rounded block">
+                                    {formatBytes(b.sizeBytes)}
+                                  </span>
+                                </div>
+                                <p className="text-[9.5px] text-zinc-500 truncate mt-0.5">{b.fileName}</p>
+                                <p className="text-[9px] text-zinc-600 block mt-0.5">{dateStr}</p>
+                              </div>
+                            </div>
+
+                            <div className="flex gap-2 shrink-0">
+                              {/* Restore Button */}
+                              {isAdmin && (
+                                <button
+                                  onClick={() => handleRestoreBackup(b.fileName, b.worldName)}
+                                  disabled={loadingBackups}
+                                  title="Restore and replace database directory files"
+                                  className="py-1 px-2.5 rounded-lg font-bold text-[9px] uppercase tracking-wider bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 text-amber-500 hover:text-amber-400 transition-all cursor-pointer"
+                                >
+                                  Restore
+                                </button>
+                              )}
+
+                              {/* Delete Button */}
+                              {isAdmin && (
+                                <button
+                                  onClick={() => handleDeleteBackup(b.fileName)}
+                                  disabled={loadingBackups}
+                                  title="Delete this backup archive file from server storage."
+                                  className="p-1.5 rounded-lg text-zinc-600 hover:text-red-400 hover:bg-red-500/5 transition-colors cursor-pointer"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* 2. World Backup Settings (Right 5-columns) */}
+                <div className="lg:col-span-5 bg-zinc-900/40 border border-zinc-900 rounded-2xl p-5 md:p-6 space-y-5">
+                  <div>
+                    <h3 className="text-xs font-black text-white uppercase tracking-wider flex items-center gap-2">
+                      <Settings className="w-4 h-4 text-emerald-400" />
+                      Backup Settings Panel
+                    </h3>
+                    <p className="text-[10px] text-zinc-500 mt-0.5">
+                      Change retention limits and automated cron schedules to your heart's desire.
+                    </p>
+                  </div>
+
+                  <div className="space-y-4 pt-1">
+                    {/* Keep Limit selector */}
+                    <div className="space-y-1.5">
+                      <div className="flex justify-between items-center">
+                        <label className="text-[10px] font-black uppercase text-zinc-400 tracking-wider">
+                          Max Backups per World
+                        </label>
+                        <span className="text-emerald-400 font-mono text-[10px] font-bold select-none bg-emerald-500/5 px-2 py-0.5 rounded border border-emerald-500/10">
+                          {appConfig.backupCountToKeep ?? 5} files
+                        </span>
+                      </div>
+                      <input
+                        type="range"
+                        min={1}
+                        max={20}
+                        value={appConfig.backupCountToKeep ?? 5}
+                        disabled={!isAdmin}
+                        onChange={e => updateSettingsField({ backupCountToKeep: Number(e.target.value) })}
+                        className="w-full h-1.5 bg-zinc-950 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+                      />
+                      <p className="text-[9px] text-zinc-500 leading-normal">
+                        When this count is reached for a world directory, old zip snap logs are deleted cleanly.
+                      </p>
+                    </div>
+
+                    {/* Frequency Hourly selector */}
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-black uppercase text-zinc-400 tracking-wider block">
+                        Scheduled Backup Interval
+                      </label>
+                      <select
+                        value={appConfig.backupFrequencyHours ?? 24}
+                        disabled={!isAdmin}
+                        onChange={e => updateSettingsField({ backupFrequencyHours: Number(e.target.value) })}
+                        className="w-full bg-zinc-950 border border-zinc-900 px-3 py-2 rounded-xl text-xs font-semibold text-zinc-350 focus:outline-none focus:border-emerald-500/40"
+                      >
+                        <option value={0}>Disabled (Manual Only)</option>
+                        <option value={1}>Every 1 hour (Ultra secure)</option>
+                        <option value={6}>Every 6 hours</option>
+                        <option value={12}>Every 12 hours</option>
+                        <option value={24}>Every 24 hours (Daily default)</option>
+                        <option value={72}>Every 3 days</option>
+                        <option value={168}>Every 7 days (Weekly)</option>
+                      </select>
+                      <p className="text-[9px] text-zinc-500 leading-normal">
+                        Scheduled background checks run periodically on the host and back up the current active world folder.
+                      </p>
+                    </div>
+
+                    {/* Toggles for Start/Stop */}
+                    <div className="border-t border-zinc-900 pt-4 space-y-3.5">
+                      <span className="text-[10px] font-black uppercase text-zinc-400 tracking-wider block">Start & Stop Hooks</span>
+                      
+                      {/* Hook 1: Start */}
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="space-y-0.5 max-w-[200px] md:max-w-xs">
+                          <p className="text-[11px] font-extrabold text-zinc-200">Backup on Server Bootup</p>
+                          <p className="text-[9.5px] text-zinc-500 leading-relaxed">Saves a complete snapshot right before Bedrock spawns.</p>
+                        </div>
+                        <button
+                          onClick={() => {
+                            if (!isAdmin) return;
+                            updateSettingsField({ backupOnStart: !appConfig.backupOnStart });
+                          }}
+                          disabled={!isAdmin}
+                          className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors cursor-pointer ${
+                            appConfig.backupOnStart ? "bg-emerald-500" : "bg-zinc-850 border border-zinc-800"
+                          }`}
+                        >
+                          <span
+                            className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
+                              appConfig.backupOnStart ? "translate-x-4.5" : "translate-x-0.5"
+                            }`}
+                          />
+                        </button>
                       </div>
 
-                      <div className="flex justify-end item-center mt-5 pt-4 border-t border-zinc-900/65">
-                        {isAdmin && !w.isActive && (
-                          <button
-                            onClick={() => setActiveWorld(w.folderName)}
-                            className="bg-emerald-600/10 text-emerald-400 hover:bg-emerald-605/20 border border-emerald-500/20 font-black text-[9px] uppercase tracking-widest px-3 py-1.5 rounded-lg select-none cursor-pointer"
-                          >
-                            Set Active
-                          </button>
-                        )}
-                        {w.isActive && (
-                          <span className="text-[9px] font-black uppercase text-emerald-400 tracking-wider">
-                            Active
-                          </span>
-                        )}
+                      {/* Hook 2: Stop */}
+                      <div className="flex items-center justify-between gap-3 pt-1">
+                        <div className="space-y-0.5 max-w-[200px] md:max-w-xs">
+                          <p className="text-[11px] font-extrabold text-zinc-200">Backup on Server Shutdown</p>
+                          <p className="text-[9.5px] text-zinc-500 leading-relaxed">Compiles snapshots immediately as files are unlocked on exit.</p>
+                        </div>
+                        <button
+                          onClick={() => {
+                            if (!isAdmin) return;
+                            updateSettingsField({ backupOnStop: !appConfig.backupOnStop });
+                          }}
+                          disabled={!isAdmin}
+                          className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors cursor-pointer ${
+                            appConfig.backupOnStop ? "bg-emerald-500" : "bg-zinc-850 border border-zinc-800"
+                          }`}
+                        >
+                          <span
+                            className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
+                              appConfig.backupOnStop ? "translate-x-4.5" : "translate-x-0.5"
+                            }`}
+                          />
+                        </button>
                       </div>
                     </div>
-                  ))
-                )}
+
+                    {/* Last backup timestamp display */}
+                    {appConfig.lastBackupTimestamp ? (
+                      <div className="bg-zinc-950/45 border border-zinc-900 px-4 py-3 rounded-xl flex items-center gap-3">
+                        <Clock className="w-4 h-4 text-zinc-500" />
+                        <div>
+                          <p className="text-[9px] text-zinc-600 uppercase font-black tracking-wider leading-none">Last Auto Backup Compiled</p>
+                          <p className="text-[10px] text-amber-500 font-mono mt-1 font-bold">
+                            {new Date(appConfig.lastBackupTimestamp).toLocaleString()}
+                          </p>
+                        </div>
+                      </div>
+                    ) : null}
+
+                  </div>
+                </div>
+
+              </div>
+
             </div>
-          </div>
-        )}
+          )}
           {/* ==================== D. FULL EXPANDED MOBILE/DESKTOP CONSOLE VIEW ==================== */}
           {navTab === "console" && (
             <div className="w-full h-full min-h-[500px] flex flex-col gap-5">
@@ -3246,8 +3745,99 @@ export default function App() {
           )}
 
           {/* ==================== E. USERS AND SECURITY AUTHORIZATIONS ==================== */}
-          {navTab === "users" && isAdmin && (
-            <div className="space-y-6">
+          {navTab === "settings" && settingsSubTab === "users" && isAdmin && (
+            <div className="space-y-6 flex-1 p-8 bg-zinc-950/40 font-sans">
+              
+              {/* Central Settings Navigation */}
+              <div className="mb-6 space-y-5 select-none animate-fadeIn">
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-zinc-900/10 border border-zinc-900 rounded-2xl p-6 gap-4">
+                  <div>
+                    <h2 className="text-xl font-black text-white tracking-tight flex items-center gap-2">
+                      <Settings className="w-5 h-5 text-zinc-400" />
+                      Settings & System Administration
+                    </h2>
+                    <p className="text-xs text-zinc-500 mt-1">
+                      Configure server properties, orchestrate admin user accounts, inspect logging history, and deployment platforms.
+                    </p>
+                  </div>
+                  {!isAdmin && (
+                    <div className="bg-amber-500/10 border border-amber-500/20 text-amber-400 px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2">
+                      <Shield className="w-3.5 h-3.5" />
+                      Read-Only (Requires Admin Profile)
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex flex-wrap gap-2 p-1 bg-zinc-950/80 border border-zinc-900 rounded-xl w-fit max-w-full">
+                  <button
+                    type="button"
+                    onClick={() => setSettingsSubTab("properties")}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      settingsSubTab === "properties"
+                        ? "bg-zinc-900 border border-zinc-805 text-white shadow-md font-extrabold"
+                        : "text-zinc-500 hover:text-zinc-300"
+                    }`}
+                  >
+                    <Sliders className={`w-3.5 h-3.5 ${settingsSubTab === "properties" ? "text-cyan-400" : "text-zinc-500"}`} />
+                    Server Properties
+                  </button>
+
+                  {isAdmin && (
+                    <button
+                      type="button"
+                      onClick={() => setSettingsSubTab("users")}
+                      className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        settingsSubTab === "users"
+                          ? "bg-zinc-900 border border-zinc-805 text-white shadow-md font-extrabold"
+                          : "text-zinc-350 hover:text-white"
+                      }`}
+                    >
+                      <Users className={`w-3.5 h-3.5 ${settingsSubTab === "users" ? "text-blue-400" : "text-zinc-500"}`} />
+                      Users & Admins
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => setSettingsSubTab("tasks_history")}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      settingsSubTab === "tasks_history"
+                        ? "bg-zinc-900 border border-zinc-805 text-white shadow-md font-extrabold"
+                        : "text-zinc-500 hover:text-zinc-300"
+                    }`}
+                  >
+                    <History className={`w-3.5 h-3.5 ${settingsSubTab === "tasks_history" ? "text-pink-400" : "text-zinc-500"}`} />
+                    Tasks & History
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setSettingsSubTab("selfhost")}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      settingsSubTab === "selfhost"
+                        ? "bg-zinc-900 border border-zinc-805 text-white shadow-md font-extrabold"
+                        : "text-zinc-500 hover:text-zinc-300"
+                    }`}
+                  >
+                    <Server className={`w-3.5 h-3.5 ${settingsSubTab === "selfhost" ? "text-teal-400" : "text-zinc-500"}`} />
+                    Hosting & Docker Setup
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setSettingsSubTab("updates")}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      settingsSubTab === "updates"
+                        ? "bg-zinc-900 border border-zinc-805 text-white shadow-md font-extrabold"
+                        : "text-zinc-500 hover:text-zinc-300"
+                    }`}
+                  >
+                    <CloudDownload className={`w-3.5 h-3.5 ${settingsSubTab === "updates" ? "text-purple-400" : "text-zinc-500"}`} />
+                    Software Updates
+                  </button>
+                </div>
+              </div>
+
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6 select-none">
               {/* Creator user rules form banner */}
               <div className="bg-zinc-900/40 border border-zinc-900 rounded-2xl p-5 h-fit shadow-lg">
@@ -3691,22 +4281,108 @@ export default function App() {
             </div>
           )}
 
-          {navTab === "selfhost" && (
-            <div className="space-y-6 select-none animate-fade-in">
-              {/* Header card banner */}
-              <div className="bg-gradient-to-r from-zinc-900 to-zinc-950 border border-zinc-900 rounded-2xl p-6 shadow-xl relative overflow-hidden">
-                <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/5 rounded-full blur-3xl pointer-events-none" />
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                  <div className="space-y-1">
-                    <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-blue-500/10 border border-blue-500/20 text-[10px] font-black uppercase text-blue-400 tracking-wider">
-                      Deployment Desk
-                    </div>
-                    <h2 className="text-xl font-black text-white tracking-tight">System Self-Hosting & Production Guide</h2>
-                    <p className="text-xs text-zinc-400 leading-relaxed max-w-2xl">
-                      Run this Minecraft Bedrock Server Manager software locally on physical hardware, configure headless background hosting, or orchestrate highly portable isolated components with container standard runtimes.
+          {navTab === "settings" && settingsSubTab === "selfhost" && (
+            <div className="space-y-6 select-none animate-fade-in flex-1 p-8 bg-zinc-950/40 font-sans">
+              
+              {/* Central Settings Navigation */}
+              <div className="mb-6 space-y-5 select-none animate-fadeIn">
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-zinc-900/10 border border-zinc-900 rounded-2xl p-6 gap-4">
+                  <div>
+                    <h2 className="text-xl font-black text-white tracking-tight flex items-center gap-2">
+                      <Settings className="w-5 h-5 text-zinc-400" />
+                      Settings & System Administration
+                    </h2>
+                    <p className="text-xs text-zinc-500 mt-1">
+                      Configure server properties, orchestrate admin user accounts, inspect logging history, and deployment platforms.
                     </p>
                   </div>
+                  {!isAdmin && (
+                    <div className="bg-amber-500/10 border border-amber-500/20 text-amber-400 px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2">
+                      <Shield className="w-3.5 h-3.5" />
+                      Read-Only (Requires Admin Profile)
+                    </div>
+                  )}
                 </div>
+
+                <div className="flex flex-wrap gap-2 p-1 bg-zinc-950/80 border border-zinc-900 rounded-xl w-fit max-w-full">
+                  <button
+                    type="button"
+                    onClick={() => setSettingsSubTab("properties")}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      settingsSubTab === "properties"
+                        ? "bg-zinc-900 border border-zinc-805 text-white shadow-md font-extrabold"
+                        : "text-zinc-500 hover:text-zinc-300"
+                    }`}
+                  >
+                    <Sliders className={`w-3.5 h-3.5 ${settingsSubTab === "properties" ? "text-cyan-400" : "text-zinc-500"}`} />
+                    Server Properties
+                  </button>
+
+                  {isAdmin && (
+                    <button
+                      type="button"
+                      onClick={() => setSettingsSubTab("users")}
+                      className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        settingsSubTab === "users"
+                          ? "bg-zinc-900 border border-zinc-805 text-white shadow-md font-extrabold"
+                          : "text-zinc-500 hover:text-zinc-300"
+                      }`}
+                    >
+                      <Users className={`w-3.5 h-3.5 ${settingsSubTab === "users" ? "text-blue-400" : "text-zinc-500"}`} />
+                      Users & Admins
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => setSettingsSubTab("tasks_history")}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      settingsSubTab === "tasks_history"
+                        ? "bg-zinc-900 border border-zinc-805 text-white shadow-md font-extrabold"
+                        : "text-zinc-500 hover:text-zinc-300"
+                    }`}
+                  >
+                    <History className={`w-3.5 h-3.5 ${settingsSubTab === "tasks_history" ? "text-pink-400" : "text-zinc-500"}`} />
+                    Tasks & History
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setSettingsSubTab("selfhost")}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      settingsSubTab === "selfhost"
+                        ? "bg-zinc-900 border border-zinc-805 text-white shadow-md font-extrabold"
+                        : "text-zinc-550 hover:text-zinc-300"
+                    }`}
+                  >
+                    <Server className={`w-3.5 h-3.5 ${settingsSubTab === "selfhost" ? "text-teal-400" : "text-zinc-500"}`} />
+                    Hosting & Docker Setup
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setSettingsSubTab("updates")}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      settingsSubTab === "updates"
+                        ? "bg-zinc-900 border border-zinc-805 text-white shadow-md font-extrabold"
+                        : "text-zinc-500 hover:text-zinc-300"
+                    }`}
+                  >
+                    <CloudDownload className={`w-3.5 h-3.5 ${settingsSubTab === "updates" ? "text-purple-400" : "text-zinc-500"}`} />
+                    Software Updates
+                  </button>
+                </div>
+              </div>
+
+              {/* Smaller selfhost contextual sub-banner */}
+              <div className="bg-gradient-to-r from-teal-950/25 to-zinc-900/10 border border-teal-900/35 rounded-2xl p-5 shadow-xl select-none">
+                <h3 className="text-base font-bold text-white tracking-tight flex items-center gap-2 animate-pulse">
+                  <Server className="w-4 h-4 text-teal-400" />
+                  Self-Hosting Guides & Portability Specifications
+                </h3>
+                <p className="text-xs text-zinc-400 mt-1 max-w-3xl leading-relaxed">
+                  Learn how to build, run and orchestrate this server manager on local physical machines, configure headless automation backgrounds, or utilize container standardization with Docker.
+                </p>
               </div>
 
               {/* Guide Selector Tabs */}
@@ -3893,44 +4569,289 @@ export default function App() {
             </div>
           )}
 
-          {navTab === "console_connect" && (
-            <ConsoleConnect
-              token={token}
-              serverPort={appConfig.serverPort}
-              serverLevelName={appConfig.levelName}
-              onShowMessage={(text, type) => showBanner(text, type)}
-            />
-          )}
-
-          {navTab === "playit" && (
-            <PlayitConnect
-              token={token}
-              serverPort={appConfig.serverPort}
-              serverLevelName={appConfig.levelName}
-              onShowMessage={(text, type) => showBanner(text, type)}
-            />
-          )}
-
-          {navTab === "updates" && (
-            <SoftwareUpdates
-              token={token}
-              onShowMessage={(text, type) => showBanner(text, type === "warn" ? "info" : type)}
-            />
-          )}
-
-          {navTab === "properties" && (
+          {/* ==================== EXPERIMENTAL LAB TABS ==================== */}
+          {navTab === "experimental" && (
             <div className="flex-1 p-8 overflow-y-auto space-y-8 bg-zinc-950/40 font-sans">
-              <div className="flex justify-between items-center pb-4 border-b border-zinc-900">
-                <div>
-                  <h1 className="text-2xl font-bold text-white tracking-tight">Server Properties & Configs</h1>
-                  <p className="text-xs text-zinc-400 mt-1">Configure global bedrock dedicated server game settings, custom properties, and permissions files.</p>
-                </div>
-                {!isAdmin && (
-                  <div className="bg-amber-500/10 border border-amber-500/20 text-amber-400 px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2">
-                    <Shield className="w-3.5 h-3.5" />
-                    Read-Only (Requires Admin Profile)
+              
+              {/* Central Experimental Navigation */}
+              <div className="mb-6 space-y-5 select-none animate-fadeIn">
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-rose-950/10 border border-rose-900/20 rounded-2xl p-6 gap-4">
+                  <div>
+                    <h2 className="text-xl font-black text-rose-400 tracking-tight flex items-center gap-2">
+                      <FlaskConical className="w-5 h-5 text-rose-500 animate-pulse" />
+                      Experimental Lab
+                    </h2>
+                    <p className="text-xs text-zinc-400 mt-1">
+                      Access live player telemetry inside tactical maps, tunnel server ports to the public internet, or execute console bindings programmatically.
+                    </p>
                   </div>
+                  <div className="bg-rose-500/10 border border-rose-500/20 text-rose-400 px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2">
+                    <FlaskConical className="w-3.5 h-3.5 animate-pulse" />
+                    Beta & Tactical Features
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-2 p-1 bg-zinc-950/80 border border-zinc-900 rounded-xl w-fit max-w-full">
+                  <button
+                    type="button"
+                    onClick={() => setExperimentalSubTab("players_map")}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      experimentalSubTab === "players_map"
+                        ? "bg-zinc-900 border border-zinc-805 text-white shadow-md font-extrabold"
+                        : "text-zinc-550 hover:text-zinc-300"
+                    }`}
+                  >
+                    <Map className={`w-3.5 h-3.5 ${experimentalSubTab === "players_map" ? "text-rose-400" : "text-zinc-500"}`} />
+                    Players & Live Map
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setExperimentalSubTab("console_connect")}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      experimentalSubTab === "console_connect"
+                        ? "bg-zinc-900 border border-zinc-805 text-white shadow-md font-extrabold"
+                        : "text-zinc-550 hover:text-zinc-300"
+                    }`}
+                  >
+                    <Link className={`w-3.5 h-3.5 ${experimentalSubTab === "console_connect" ? "text-violet-400" : "text-zinc-500"}`} />
+                    Console Connect
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setExperimentalSubTab("playit")}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      experimentalSubTab === "playit"
+                        ? "bg-zinc-900 border border-zinc-805 text-white shadow-md font-extrabold"
+                        : "text-zinc-550 hover:text-zinc-300"
+                    }`}
+                  >
+                    <Globe className={`w-3.5 h-3.5 ${experimentalSubTab === "playit" ? "text-sky-400" : "text-zinc-500"}`} />
+                    Open to Internet
+                  </button>
+                </div>
+              </div>
+
+              {/* Render Selected Experimental Tool */}
+              <div className="animate-fadeIn">
+                {experimentalSubTab === "players_map" && (
+                  <PlayersMap token={token} onShowMessage={showBanner} />
                 )}
+
+                {experimentalSubTab === "console_connect" && (
+                  <ConsoleConnect
+                    token={token}
+                    serverPort={appConfig.serverPort}
+                    serverLevelName={appConfig.levelName}
+                    onShowMessage={(text, type) => showBanner(text, type)}
+                  />
+                )}
+
+                {experimentalSubTab === "playit" && (
+                  <PlayitConnect
+                    token={token}
+                    serverPort={appConfig.serverPort}
+                    serverLevelName={appConfig.levelName}
+                    onShowMessage={(text, type) => showBanner(text, type)}
+                  />
+                )}
+              </div>
+
+            </div>
+          )}
+
+          {navTab === "settings" && settingsSubTab === "updates" && (
+            <div className="flex-1 p-8 overflow-y-auto space-y-8 bg-zinc-950/40 font-sans">
+              
+              {/* Central Settings Navigation */}
+              <div className="mb-6 space-y-5 select-none animate-fadeIn">
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-zinc-900/10 border border-zinc-900 rounded-2xl p-6 gap-4">
+                  <div>
+                    <h2 className="text-xl font-black text-white tracking-tight flex items-center gap-2">
+                      <Settings className="w-5 h-5 text-zinc-400" />
+                      Settings & System Administration
+                    </h2>
+                    <p className="text-xs text-zinc-500 mt-1">
+                      Configure server properties, orchestrate admin user accounts, inspect logging history, and deployment platforms.
+                    </p>
+                  </div>
+                  {!isAdmin && (
+                    <div className="bg-amber-500/10 border border-amber-500/20 text-amber-400 px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2">
+                      <Shield className="w-3.5 h-3.5" />
+                      Read-Only (Requires Admin Profile)
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex flex-wrap gap-2 p-1 bg-zinc-950/80 border border-zinc-900 rounded-xl w-fit max-w-full">
+                  <button
+                    type="button"
+                    onClick={() => setSettingsSubTab("properties")}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      settingsSubTab === "properties"
+                        ? "bg-zinc-900 border border-zinc-805 text-white shadow-md font-extrabold"
+                        : "text-zinc-500 hover:text-zinc-300"
+                    }`}
+                  >
+                    <Sliders className={`w-3.5 h-3.5 ${settingsSubTab === "properties" ? "text-cyan-400" : "text-zinc-500"}`} />
+                    Server Properties
+                  </button>
+
+                  {isAdmin && (
+                    <button
+                      type="button"
+                      onClick={() => setSettingsSubTab("users")}
+                      className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        settingsSubTab === "users"
+                          ? "bg-zinc-900 border border-zinc-805 text-white shadow-md font-extrabold"
+                          : "text-zinc-500 hover:text-zinc-300"
+                      }`}
+                    >
+                      <Users className={`w-3.5 h-3.5 ${settingsSubTab === "users" ? "text-blue-400" : "text-zinc-500"}`} />
+                      Users & Admins
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => setSettingsSubTab("tasks_history")}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      settingsSubTab === "tasks_history"
+                        ? "bg-zinc-900 border border-zinc-805 text-white shadow-md font-extrabold"
+                        : "text-zinc-500 hover:text-zinc-300"
+                    }`}
+                  >
+                    <History className={`w-3.5 h-3.5 ${settingsSubTab === "tasks_history" ? "text-pink-400" : "text-zinc-500"}`} />
+                    Tasks & History
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setSettingsSubTab("selfhost")}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      settingsSubTab === "selfhost"
+                        ? "bg-zinc-900 border border-zinc-805 text-white shadow-md font-extrabold"
+                        : "text-zinc-500 hover:text-zinc-300"
+                    }`}
+                  >
+                    <Server className={`w-3.5 h-3.5 ${settingsSubTab === "selfhost" ? "text-teal-400" : "text-zinc-500"}`} />
+                    Hosting & Docker Setup
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setSettingsSubTab("updates")}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      settingsSubTab === "updates"
+                        ? "bg-zinc-900 border border-zinc-805 text-white shadow-md font-extrabold"
+                        : "text-zinc-500 hover:text-zinc-300"
+                    }`}
+                  >
+                    <CloudDownload className={`w-3.5 h-3.5 ${settingsSubTab === "updates" ? "text-purple-400" : "text-zinc-500"}`} />
+                    Software Updates
+                  </button>
+                </div>
+              </div>
+
+              <SoftwareUpdates
+                token={token}
+                onShowMessage={(text, type) => showBanner(text, type === "warn" ? "info" : type)}
+              />
+            </div>
+          )}
+
+          {navTab === "settings" && settingsSubTab === "properties" && (
+            <div className="flex-1 p-8 overflow-y-auto space-y-8 bg-zinc-950/40 font-sans">
+              
+              {/* Central Settings Navigation */}
+              <div className="mb-6 space-y-5 select-none animate-fadeIn">
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-zinc-900/10 border border-zinc-900 rounded-2xl p-6 gap-4">
+                  <div>
+                    <h2 className="text-xl font-black text-white tracking-tight flex items-center gap-2">
+                      <Settings className="w-5 h-5 text-zinc-400" />
+                      Settings & System Administration
+                    </h2>
+                    <p className="text-xs text-zinc-500 mt-1">
+                      Configure server properties, orchestrate admin user accounts, inspect logging history, and deployment platforms.
+                    </p>
+                  </div>
+                  {!isAdmin && (
+                    <div className="bg-amber-500/10 border border-amber-500/20 text-amber-400 px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2">
+                      <Shield className="w-3.5 h-3.5" />
+                      Read-Only (Requires Admin Profile)
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex flex-wrap gap-2 p-1 bg-zinc-950/80 border border-zinc-900 rounded-xl w-fit max-w-full">
+                  <button
+                    type="button"
+                    onClick={() => setSettingsSubTab("properties")}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      settingsSubTab === "properties"
+                        ? "bg-zinc-900 border border-zinc-805 text-white shadow-md font-extrabold"
+                        : "text-zinc-500 hover:text-zinc-300"
+                    }`}
+                  >
+                    <Sliders className={`w-3.5 h-3.5 ${settingsSubTab === "properties" ? "text-cyan-400" : "text-zinc-500"}`} />
+                    Server Properties
+                  </button>
+
+                  {isAdmin && (
+                    <button
+                      type="button"
+                      onClick={() => setSettingsSubTab("users")}
+                      className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        settingsSubTab === "users"
+                          ? "bg-zinc-900 border border-zinc-805 text-white shadow-md font-extrabold"
+                          : "text-zinc-500 hover:text-zinc-300"
+                      }`}
+                    >
+                      <Users className={`w-3.5 h-3.5 ${settingsSubTab === "users" ? "text-blue-400" : "text-zinc-500"}`} />
+                      Users & Admins
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => setSettingsSubTab("tasks_history")}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      settingsSubTab === "tasks_history"
+                        ? "bg-zinc-900 border border-zinc-805 text-white shadow-md font-extrabold"
+                        : "text-zinc-500 hover:text-zinc-300"
+                    }`}
+                  >
+                    <History className={`w-3.5 h-3.5 ${settingsSubTab === "tasks_history" ? "text-pink-400" : "text-zinc-500"}`} />
+                    Tasks & History
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setSettingsSubTab("selfhost")}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      settingsSubTab === "selfhost"
+                        ? "bg-zinc-900 border border-zinc-805 text-white shadow-md font-extrabold"
+                        : "text-zinc-500 hover:text-zinc-300"
+                    }`}
+                  >
+                    <Server className={`w-3.5 h-3.5 ${settingsSubTab === "selfhost" ? "text-teal-400" : "text-zinc-500"}`} />
+                    Hosting & Docker Setup
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setSettingsSubTab("updates")}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      settingsSubTab === "updates"
+                        ? "bg-zinc-900 border border-zinc-805 text-white shadow-md font-extrabold"
+                        : "text-zinc-500 hover:text-zinc-300"
+                    }`}
+                  >
+                    <CloudDownload className={`w-3.5 h-3.5 ${settingsSubTab === "updates" ? "text-purple-400" : "text-zinc-500"}`} />
+                    Software Updates
+                  </button>
+                </div>
               </div>
 
               {/* Sub-tab Switcher */}
@@ -4703,7 +5624,10 @@ export default function App() {
               <span>Auto-updates in real-time</span>
               <button 
                 type="button"
-                onClick={() => setNavTab("tasks_history")}
+                onClick={() => {
+                  setNavTab("settings");
+                  setSettingsSubTab("tasks_history");
+                }}
                 className="text-emerald-500 hover:text-emerald-400 font-bold cursor-pointer"
               >
                 View History

@@ -73,6 +73,11 @@ interface DBStructure {
     customJavaPath?: string;
     customPlayitPath?: string;
     playitSecretKey?: string;
+    backupCountToKeep?: number;
+    backupFrequencyHours?: number;
+    backupOnStart?: boolean;
+    backupOnStop?: boolean;
+    lastBackupTimestamp?: number;
   };
   addons: Array<{
     uuid: string;
@@ -124,7 +129,12 @@ let dbCache: DBStructure = {
     tickDistance: 4,
     customJavaPath: "",
     customPlayitPath: "",
-    playitSecretKey: ""
+    playitSecretKey: "",
+    backupCountToKeep: 5,
+    backupFrequencyHours: 24,
+    backupOnStart: false,
+    backupOnStop: false,
+    lastBackupTimestamp: 0
   },
   addons: [],
   pastLogs: [],
@@ -159,7 +169,12 @@ function loadDB() {
           tickDistance: 4,
           customJavaPath: "",
           customPlayitPath: "",
-          playitSecretKey: ""
+          playitSecretKey: "",
+          backupCountToKeep: 5,
+          backupFrequencyHours: 24,
+          backupOnStart: false,
+          backupOnStop: false,
+          lastBackupTimestamp: 0
         };
       } else {
         dbCache.appConfig.serverName = dbCache.appConfig.serverName || "Bedrock Dedicated Server";
@@ -172,6 +187,11 @@ function loadDB() {
         dbCache.appConfig.customPlayitPath = dbCache.appConfig.customPlayitPath || "";
         dbCache.appConfig.playitSecretKey = dbCache.appConfig.playitSecretKey || "";
         dbCache.appConfig.simulationMode = false; // Always force simulationMode to false
+        dbCache.appConfig.backupCountToKeep = dbCache.appConfig.backupCountToKeep ?? 5;
+        dbCache.appConfig.backupFrequencyHours = dbCache.appConfig.backupFrequencyHours ?? 24;
+        dbCache.appConfig.backupOnStart = dbCache.appConfig.backupOnStart ?? false;
+        dbCache.appConfig.backupOnStop = dbCache.appConfig.backupOnStop ?? false;
+        dbCache.appConfig.lastBackupTimestamp = dbCache.appConfig.lastBackupTimestamp ?? 0;
       }
     } catch (e) {
       console.error("Failed to parse database, resetting", e);
@@ -1649,6 +1669,11 @@ app.post("/api/server/control", authenticateRequest, (req, res) => {
     writeServerProperties();
     updateWorldPacksConfig();
 
+    const activeLvlName = dbCache.appConfig.levelName || "BedrockWorld";
+    if (dbCache.appConfig.backupOnStart) {
+      performWorldBackup(activeLvlName, "server start");
+    }
+
     // Real process launcher
     try {
       const exeName = process.platform === "win32" ? "bedrock_server.exe" : "bedrock_server";
@@ -1758,6 +1783,11 @@ app.post("/api/server/control", authenticateRequest, (req, res) => {
         serverStatus = "stopped";
         serverUptimeStart = null;
         logServerMessage("SYS", "Bedrock Process killed successfully.");
+
+        const levelName = dbCache.appConfig.levelName || "BedrockWorld";
+        if (dbCache.appConfig.backupOnStop) {
+          performWorldBackup(levelName, "server stop");
+        }
       }, 3000);
     } else {
       serverStatus = "stopped";
@@ -2570,6 +2600,255 @@ app.put("/api/addons/:uuid", authenticateRequest, requireAdmin, (req, res) => {
   res.json({ success: true, updatedCount: toUpdate.length, updatedNames });
 });
 
+// World backup helper function
+function performWorldBackup(worldFolderName: string, isAutomaticReason?: string): string | null {
+  try {
+    const worldsDir = path.join(SERVER_DIR, "worlds");
+    const targetWorldPath = path.join(worldsDir, worldFolderName);
+    
+    if (!fs.existsSync(targetWorldPath)) {
+      console.warn(`Cannot backup world "${worldFolderName}"; source directory does not exist.`);
+      return null;
+    }
+    
+    const backupsDir = path.join(SERVER_DIR, "world_backups");
+    if (!fs.existsSync(backupsDir)) {
+      fs.mkdirSync(backupsDir, { recursive: true });
+    }
+    
+    // Format timestamp as YYYY-MM-DD-HH-mm-ss
+    const d = new Date();
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const timestampStr = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}-${pad(d.getHours())}-${pad(d.getMinutes())}-${pad(d.getSeconds())}`;
+    const zipName = `backup-${worldFolderName}-${timestampStr}.zip`;
+    const destZipPath = path.join(backupsDir, zipName);
+    
+    const zip = new AdmZip();
+    zip.addLocalFolder(targetWorldPath);
+    zip.writeZip(destZipPath);
+    
+    const msg = isAutomaticReason 
+      ? `Auto-backup (triggered by ${isAutomaticReason}) successfully compiled for "${worldFolderName}": ${zipName}`
+      : `Backup successfully compiled for "${worldFolderName}": ${zipName}`;
+    
+    logServerMessage("SYS", msg);
+    
+    // Update last backup timestamp
+    dbCache.appConfig.lastBackupTimestamp = Date.now();
+    saveDB();
+    
+    // Pruning old backups based on count to keep
+    const countToKeep = dbCache.appConfig.backupCountToKeep ?? 5;
+    try {
+      const files = fs.readdirSync(backupsDir);
+      const prefix = `backup-${worldFolderName}-`;
+      const worldBackups = files
+        .filter(f => f.startsWith(prefix) && f.endsWith(".zip"))
+        .map(f => {
+          const filePath = path.join(backupsDir, f);
+          const stat = fs.statSync(filePath);
+          return { fileName: f, path: filePath, mtime: stat.mtimeMs };
+        })
+        .sort((a, b) => b.mtime - a.mtime); // Newest first
+      
+      if (worldBackups.length > countToKeep) {
+        const toDelete = worldBackups.slice(countToKeep);
+        for (const item of toDelete) {
+          fs.unlinkSync(item.path);
+          logServerMessage("SYS", `Pruned older world backup file due to keep limit settings: ${item.fileName}`);
+        }
+      }
+    } catch (pruneErr: any) {
+      console.error("Failed to prune old backups:", pruneErr);
+    }
+    
+    return zipName;
+  } catch (err: any) {
+    const errMsg = `World backup failed for "${worldFolderName}": ${err.message}`;
+    logServerMessage("ERROR", errMsg);
+    console.error(err);
+    return null;
+  }
+}
+
+// Scheduled frequency checker interval
+setInterval(() => {
+  try {
+    const frequencyHours = dbCache.appConfig.backupFrequencyHours ?? 24;
+    if (frequencyHours <= 0) return; // disabled
+    
+    const lastBackup = dbCache.appConfig.lastBackupTimestamp ?? 0;
+    const now = Date.now();
+    const frequencyMs = frequencyHours * 60 * 60 * 1000;
+    
+    if (lastBackup === 0) {
+      dbCache.appConfig.lastBackupTimestamp = now;
+      saveDB();
+      return;
+    }
+    
+    if (now - lastBackup >= frequencyMs) {
+      const levelName = dbCache.appConfig.levelName || "BedrockWorld";
+      performWorldBackup(levelName, "scheduled frequency interval");
+      dbCache.appConfig.lastBackupTimestamp = now;
+      saveDB();
+    }
+  } catch (e) {
+    console.error("Error in scheduled backup check interval:", e);
+  }
+}, 5 * 60 * 1000); // Check every 5 minutes
+
+// --- Backup Endpoints ---
+
+// Get all world backups
+app.get("/api/worlds/backups", authenticateRequest, (req, res) => {
+  const backupsDir = path.join(SERVER_DIR, "world_backups");
+  if (!fs.existsSync(backupsDir)) {
+    res.json([]);
+    return;
+  }
+  try {
+    const files = fs.readdirSync(backupsDir);
+    const backups = files
+      .filter(f => f.endsWith(".zip"))
+      .map(f => {
+        const fp = path.join(backupsDir, f);
+        const stat = fs.statSync(fp);
+        
+        // parse out world name from format: backup-{worldName}-{timestamp}.zip
+        let worldName = "Unknown";
+        const match = f.match(/^backup-([^-]+)-/);
+        if (match) {
+          worldName = match[1];
+        } else if (f.startsWith("pre-update-")) {
+          worldName = "System Update Vault";
+        }
+        
+        return {
+          fileName: f,
+          worldName,
+          sizeBytes: stat.size,
+          createdAt: stat.birthtime.toISOString(),
+          mtime: stat.mtimeMs
+        };
+      })
+      .sort((a, b) => b.mtime - a.mtime); // Newest first
+    res.json(backups);
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Create manual world backup
+app.post("/api/worlds/backups/create", authenticateRequest, requireAdmin, (req, res) => {
+  const { worldFolderName } = req.body;
+  const target = worldFolderName || dbCache.appConfig.levelName || "BedrockWorld";
+  
+  const result = performWorldBackup(target);
+  if (result) {
+    res.json({ success: true, fileName: result });
+  } else {
+    res.status(500).json({ error: `Could not compile backup for world "${target}"` });
+  }
+});
+
+// Restore world backup
+app.post("/api/worlds/backups/:fileName/restore", authenticateRequest, requireAdmin, (req, res) => {
+  const fileName = req.params.fileName;
+  const backupsDir = path.join(SERVER_DIR, "world_backups");
+  const zipPath = path.join(backupsDir, fileName);
+  
+  if (!fs.existsSync(zipPath)) {
+    res.status(404).json({ error: "Backup file does not exist." });
+    return;
+  }
+  
+  if (serverStatus !== "stopped") {
+    res.status(400).json({ error: "Cannot restore world backup while the Bedrock Dedicated Server is running! Please stop the server first." });
+    return;
+  }
+  
+  try {
+    // Auto-detect target worldFolderName
+    let worldName = "";
+    const match = fileName.match(/^backup-([^-]+)-/);
+    if (match) {
+      worldName = match[1];
+    } else {
+      worldName = dbCache.appConfig.levelName || "BedrockWorld";
+    }
+    
+    const worldsDir = path.join(SERVER_DIR, "worlds");
+    const worldPath = path.join(worldsDir, worldName);
+    
+    // Save current world folder to pre-restore directory as safety fallback
+    if (fs.existsSync(worldPath)) {
+      const safetyPath = path.join(worldsDir, `${worldName}-pre-restore-${Date.now()}`);
+      try {
+        fs.renameSync(worldPath, safetyPath);
+        logServerMessage("SYS", `Saved pre-restore safety copy of current world folder to: ${path.basename(safetyPath)}`);
+      } catch (renameErr) {
+        console.warn("Failed to rename for safety backup, removing directory directly", renameErr);
+        fs.rmSync(worldPath, { recursive: true, force: true });
+      }
+    }
+    
+    // Extract zip archive
+    const zip = new AdmZip(zipPath);
+    fs.mkdirSync(worldPath, { recursive: true });
+    zip.extractAllTo(worldPath, true);
+    
+    logServerMessage("SYS", `Successfully restored world "${worldName}" from backup file: ${fileName}`);
+    res.json({ success: true, worldName });
+  } catch (err: any) {
+    res.status(500).json({ error: `Restore process failed: ${err.message}` });
+  }
+});
+
+// Delete specific world backup
+app.delete("/api/worlds/backups/:fileName", authenticateRequest, requireAdmin, (req, res) => {
+  const fileName = req.params.fileName;
+  const backupsDir = path.join(SERVER_DIR, "world_backups");
+  const filePath = path.join(backupsDir, fileName);
+  
+  if (!fs.existsSync(filePath)) {
+    res.status(404).json({ error: "Backup file not found." });
+    return;
+  }
+  
+  try {
+    fs.unlinkSync(filePath);
+    logServerMessage("SYS", `Deleted world backup archive: ${fileName}`);
+    res.json({ success: true });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// World export to Minecraft .mcworld (zip extension compatibility)
+app.get("/api/worlds/:folderName/export", authenticateRequest, (req, res) => {
+  const folderName = req.params.folderName;
+  const worldsDir = path.join(SERVER_DIR, "worlds");
+  const targetWorldPath = path.join(worldsDir, folderName);
+  
+  if (!fs.existsSync(targetWorldPath)) {
+    res.status(404).send("World folder not found.");
+    return;
+  }
+  
+  try {
+    const zip = new AdmZip();
+    zip.addLocalFolder(targetWorldPath);
+    const buffer = zip.toBuffer();
+    
+    res.setHeader("Content-Disposition", `attachment; filename="${folderName}.mcworld"`);
+    res.setHeader("Content-Type", "application/octet-stream");
+    res.send(buffer);
+  } catch (err: any) {
+    res.status(500).send(`Failed to package world archive for export: ${err.message}`);
+  }
+});
+
 // Worlds database manager
 app.get("/api/worlds", authenticateRequest, (req, res) => {
   const worldsDir = path.join(SERVER_DIR, "worlds");
@@ -3227,7 +3506,10 @@ app.post("/api/playit/download", authenticateRequest, (req, res) => {
 
 // ---------------------- Software Update Utilities ----------------------
 
-function fetchHttps(url: string, headers: Record<string, string> = {}): Promise<{ statusCode: number; data: string }> {
+function fetchHttps(url: string, headers: Record<string, string> = {}, redirectCount = 0): Promise<{ statusCode: number; data: string }> {
+  if (redirectCount > 5) {
+    return Promise.reject(new Error("Too many redirects"));
+  }
   return new Promise((resolve, reject) => {
     try {
       const parsedUrl = new URL(url);
@@ -3235,11 +3517,26 @@ function fetchHttps(url: string, headers: Record<string, string> = {}): Promise<
         hostname: parsedUrl.hostname,
         path: parsedUrl.pathname + parsedUrl.search,
         headers: {
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) BedrockServerManager",
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+          "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+          "Accept-Language": "en-US,en;q=0.9",
           ...headers
         },
-        timeout: 5000
+        timeout: 8000
       }, (res) => {
+        // Handle redirect status codes (301, 302, 303, 307, 308)
+        if (res.statusCode && [301, 302, 303, 307, 308].includes(res.statusCode)) {
+          const location = res.headers.location;
+          if (location) {
+            let nextUrl = location;
+            if (!location.startsWith("http://") && !location.startsWith("https://")) {
+              nextUrl = new URL(location, url).toString();
+            }
+            resolve(fetchHttps(nextUrl, headers, redirectCount + 1));
+            return;
+          }
+        }
+
         let body = "";
         res.on("data", (chunk) => body += chunk);
         res.on("end", () => resolve({ statusCode: res.statusCode || 0, data: body }));

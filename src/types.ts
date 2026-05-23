@@ -87,6 +87,11 @@ export interface AppConfig {
   allowCheats?: boolean;
   viewDistance?: number;
   tickDistance?: number;
+  backupCountToKeep?: number;
+  backupFrequencyHours?: number;
+  backupOnStart?: boolean;
+  backupOnStop?: boolean;
+  lastBackupTimestamp?: number;
 }
 
 export interface UserInvite {
