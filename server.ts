@@ -2383,6 +2383,42 @@ app.delete("/api/addons-all", authenticateRequest, requireAdmin, (req, res) => {
   res.json({ success: true, count: toDelete.length });
 });
 
+// Reorder Addons (Admin only)
+app.post("/api/addons/reorder", authenticateRequest, requireAdmin, (req, res) => {
+  const { uuids } = req.body;
+  if (!uuids || !Array.isArray(uuids)) {
+    res.status(400).json({ error: "Invalid or missing uuids array." });
+    return;
+  }
+
+  // Create lookup map of current addons
+  const addonMap = new Map(dbCache.addons.map(a => [a.uuid, a]));
+  const reorderedList: any[] = [];
+
+  // 1. Add specified UUIDs in their new order
+  for (const uuid of uuids) {
+    const addon = addonMap.get(uuid);
+    if (addon) {
+      reorderedList.push(addon);
+      addonMap.delete(uuid);
+    }
+  }
+
+  // 2. Add any remaining addons in their original relative order
+  for (const addon of dbCache.addons) {
+    if (addonMap.has(addon.uuid)) {
+      reorderedList.push(addon);
+    }
+  }
+
+  dbCache.addons = reorderedList;
+  saveDB();
+  updateWorldPacksConfig();
+
+  logServerMessage("SYS", `Addon load order was re-sequenced by admin.`);
+  res.json({ success: true, message: "Addon load order updated successfully." });
+});
+
 // Update/Override an Addon with a newly uploaded file (Admin only)
 app.post("/api/addons/:uuid/update-upload", authenticateRequest, requireAdmin, upload.single("file"), (req, res) => {
   if (!req.file) {
