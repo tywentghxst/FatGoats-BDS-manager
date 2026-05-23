@@ -3333,9 +3333,20 @@ function isNewer(current: string, remote: string): boolean {
   return false;
 }
 
+function getLocalCommitSha(): string {
+  const shaPath = path.join(WORK_DIR, ".last_commit_sha");
+  if (fs.existsSync(shaPath)) {
+    try {
+      return fs.readFileSync(shaPath, "utf-8").trim();
+    } catch (e) {}
+  }
+  return "7245175d3fc4a0167bdc8b4da800a7970c4cd339";
+}
+
 app.get("/api/updates/check", authenticateRequest, async (req, res) => {
   // Read local version from package.json dynamically
   const localVersion = getCurrentVersion();
+  const localSha = getLocalCommitSha();
 
   let latestRemoteVersion = localVersion;
   let hasCheckedSuccessfully = false;
@@ -3373,6 +3384,7 @@ app.get("/api/updates/check", authenticateRequest, async (req, res) => {
   let changelog = "";
   let publishedAt = new Date().toISOString();
   let releaseUrl = "https://github.com/tywentghxst/FatGoats-BDS-manager";
+  let latestSha = "";
 
   try {
     const resCommits = await fetchHttps("https://api.github.com/repos/tywentghxst/FatGoats-BDS-manager/commits");
@@ -3380,6 +3392,7 @@ app.get("/api/updates/check", authenticateRequest, async (req, res) => {
       const commitsList = JSON.parse(resCommits.data);
       if (Array.isArray(commitsList) && commitsList.length > 0) {
         hasCheckedSuccessfully = true;
+        latestSha = commitsList[0].sha || "";
         // Construct a highly detailed and stylized changelog directly from real commits
         changelog = commitsList.slice(0, 12).map((cmt: any) => {
           const authorName = cmt.commit?.author?.name || "YoungToaster";
@@ -3423,19 +3436,23 @@ app.get("/api/updates/check", authenticateRequest, async (req, res) => {
     changelog = `[605b527] ✨ Release v1.3.0 Standard Build\n   └─ by YoungToaster\n   • Interactive Bedrock Server configuration editor on tap\n   • playit.gg world proxy agent background executable driver\n   • Player coordinates radar live tracker mapping integrations\n   • Multiple-Addon load-ordering layout and conflict managers\n   • Safe automated container and native system hot-reboot patches`;
   }
 
-  // If we couldn't detect a remote version, default to current local
-  const isUpdateAvailable = isNewer(localVersion, latestRemoteVersion);
+  // If latest master commit differs from local check SHA, or if package.json has a higher semver version
+  const isUpdateAvailable = isNewer(localVersion, latestRemoteVersion) || (latestSha && latestSha !== localSha);
+
+  const localVerStr = `v${localVersion}${localSha ? `-${localSha.substring(0, 7)}` : ""}`;
+  const latestVerStr = `v${latestRemoteVersion}${latestSha ? `-${latestSha.substring(0, 7)}` : ""}`;
 
   res.json({
     success: true,
-    currentVersion: `v${localVersion}`,
-    latestVersion: `v${latestRemoteVersion}`,
+    currentVersion: localVerStr,
+    latestVersion: latestVerStr,
     releaseName: releaseName,
     publishedAt: publishedAt,
     changelog: changelog,
     url: releaseUrl,
     isNew: isUpdateAvailable,
-    isFallback: !hasCheckedSuccessfully
+    isFallback: !hasCheckedSuccessfully,
+    latestSha: latestSha
   });
 });
 
@@ -3511,7 +3528,7 @@ app.get("/api/updates/status", authenticateRequest, (req, res) => {
 });
 
 app.post("/api/updates/apply", authenticateRequest, (req, res) => {
-  const { latestVersion } = req.body;
+  const { latestVersion, latestSha } = req.body;
   if (!latestVersion) {
     res.status(400).json({ error: "latestVersion parameter is required." });
     return;
@@ -3528,14 +3545,17 @@ app.post("/api/updates/apply", authenticateRequest, (req, res) => {
   softwareUpdateError = null;
 
   logSoftwareUpdate("Initializing automated secure upgrade routine...", "info");
-  logSoftwareUpdate(`Target release version: ${latestVersion}`, "info");
+  logSoftwareUpdate(`Target release version: ${latestVersion} (SHA: ${latestSha ? latestSha.substring(0, 7) : "N/A"})`, "info");
 
   // Run async background update loop
   (async () => {
+    const zipDest = path.join(UPLOADS_DIR, "update-master.zip");
+    const extractDir = path.join(UPLOADS_DIR, "temp_update_extract");
+
     try {
       // Step 1: Back up system
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      softwareUpdateProgress = 20;
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      softwareUpdateProgress = 15;
       logSoftwareUpdate("Compiling safe database backup of active configurations...", "info");
       
       try {
@@ -3560,50 +3580,142 @@ app.post("/api/updates/apply", authenticateRequest, (req, res) => {
         logSoftwareUpdate(`Backup warning: ${backErr.message}. Continuing safe upgrade...`, "info");
       }
 
-      // Step 2: Download packages / Verify Repository
+      // Step 2: Download master ZIP from GitHub repo
       softwareUpdateStatus = "downloading";
-      softwareUpdateProgress = 40;
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      logSoftwareUpdate("Fetching latest production asset package from GitHub origin 'tywentghxst/FatGoats-BDS-manager'...", "info");
-      logSoftwareUpdate("Repository handshake successful. Release binary and scripts verified.", "success");
-
-      // Step 3: Installing schemas
-      softwareUpdateStatus = "installing";
-      softwareUpdateProgress = 65;
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      logSoftwareUpdate("Applying new schema structures for players, whitelists, and property validations...", "info");
+      softwareUpdateProgress = 35;
+      logSoftwareUpdate("Downloading latest production asset bundle from GitHub repository 'tywentghxst/FatGoats-BDS-manager'...", "info");
       
-      // Physically update package.json version!
+      const zipUrl = "https://github.com/tywentghxst/FatGoats-BDS-manager/archive/refs/heads/master.zip";
+      await downloadUrlToFile(zipUrl, zipDest);
+      logSoftwareUpdate("Repository download completed successfully.", "success");
+
+      // Step 3: Extract & Install Codebase Files
+      softwareUpdateStatus = "installing";
+      softwareUpdateProgress = 60;
+      logSoftwareUpdate("Extracting downloaded zip and validating repository contents...", "info");
+      
+      if (fs.existsSync(extractDir)) {
+        fs.rmSync(extractDir, { recursive: true, force: true });
+      }
+      fs.mkdirSync(extractDir, { recursive: true });
+
+      const updateZip = new AdmZip(zipDest);
+      updateZip.extractAllTo(extractDir, true);
+
+      // Locate top level folder in zip
+      const rootItems = fs.readdirSync(extractDir);
+      const gitHubRootFolder = rootItems.find(item => fs.statSync(path.join(extractDir, item)).isDirectory());
+      if (!gitHubRootFolder) {
+        throw new Error("No top-level folder detected inside downloaded ZIP archive.");
+      }
+      const sourceDir = path.join(extractDir, gitHubRootFolder);
+      logSoftwareUpdate(`Source dir extracted: ${gitHubRootFolder}`, "info");
+
+      // Set skip directories
+      const skipList = ["bedrock-server", "node_modules", "uploads", ".git", ".env", "dist"];
+      
+      function copyRecursiveSync(src: string, dest: string) {
+        const stats = fs.statSync(src);
+        const isDirectory = stats.isDirectory();
+        if (isDirectory) {
+          const baseName = path.basename(src);
+          if (skipList.includes(baseName)) {
+            return;
+          }
+          if (!fs.existsSync(dest)) {
+            fs.mkdirSync(dest, { recursive: true });
+          }
+          fs.readdirSync(src).forEach((child) => {
+            copyRecursiveSync(path.join(src, child), path.join(dest, child));
+          });
+        } else {
+          fs.copyFileSync(src, dest);
+        }
+      }
+
+      logSoftwareUpdate("Synchronizing codebase files and UI components securely...", "info");
+      copyRecursiveSync(sourceDir, WORK_DIR);
+      logSoftwareUpdate("Files successfully merged with live environment.", "success");
+
+      // Securely update package.json version manifest
       try {
         const pkgPath = path.join(WORK_DIR, "package.json");
         if (fs.existsSync(pkgPath)) {
           const pkgData = JSON.parse(fs.readFileSync(pkgPath, "utf-8"));
-          pkgData.version = latestVersion.replace(/^v/i, "");
+          pkgData.version = latestVersion.replace(/^v/i, "").split("-")[0];
           fs.writeFileSync(pkgPath, JSON.stringify(pkgData, null, 2), "utf-8");
-          logSoftwareUpdate(`Rewrote 'package.json' manifest version successfully to ${latestVersion}.`, "success");
+          logSoftwareUpdate(`Local 'package.json' manifest version updated to ${pkgData.version}`, "success");
         }
       } catch (pkgErr: any) {
-        logSoftwareUpdate(`Manifest warning: ${pkgErr.message}`, "info");
+        logSoftwareUpdate(`Manifest version write warning: ${pkgErr.message}`, "info");
       }
 
-      // Step 4: Rebuilding references
+      // Securely update local commit SHA
+      if (latestSha) {
+        fs.writeFileSync(path.join(WORK_DIR, ".last_commit_sha"), latestSha, "utf-8");
+        logSoftwareUpdate(`Written local check SHA ref: ${latestSha.substring(0, 10)}`, "success");
+      } else {
+        // Fallback to query latest commit SHA automatically
+        fs.writeFileSync(path.join(WORK_DIR, ".last_commit_sha"), "latest", "utf-8");
+      }
+
+      // Step 4: Rebuild/Recompile references dynamically
       softwareUpdateStatus = "rebuilding";
-      softwareUpdateProgress = 85;
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      logSoftwareUpdate("Rebuilding static client assets & purging cache stores...", "info");
-      logSoftwareUpdate("Pruning temporary compilation states...", "info");
+      softwareUpdateProgress = 80;
+      logSoftwareUpdate("Triggering high-speed production compiler (Vite & ESBuild)...", "info");
+
+      const npmCmd = process.platform === "win32" ? "npm.cmd" : "npm";
+      
+      await new Promise<void>((resolve, reject) => {
+        const buildProc = spawn(npmCmd, ["run", "build"], { cwd: WORK_DIR });
+        
+        buildProc.stdout.on("data", (data) => {
+          const line = data.toString().trim();
+          if (line) {
+            logSoftwareUpdate(`[Build] ${line}`, "info");
+          }
+        });
+        
+        buildProc.stderr.on("data", (data) => {
+          const line = data.toString().trim();
+          if (line) {
+            // Standard compilation details or warnings
+            logSoftwareUpdate(`[Compiler] ${line}`, "info");
+          }
+        });
+        
+        buildProc.on("close", (code) => {
+          if (code === 0) {
+            resolve();
+          } else {
+            reject(new Error(`Vite compiler ended with non-zero exit code: ${code}`));
+          }
+        });
+        
+        buildProc.on("error", (err) => {
+          reject(err);
+        });
+      });
+
+      logSoftwareUpdate("Dynamic compilation completes successfully. Server modules ready.", "success");
 
       // Complete Update
       softwareUpdateStatus = "completed";
       softwareUpdateProgress = 100;
       logSoftwareUpdate("SW-UPGRADE SUCCESSFUL! The server scripts and DB schemas are ready.", "success");
-      logSoftwareUpdate("Click 'Reboot BDS Manager' below to stop current process and reload the updated software.", "info");
+      logSoftwareUpdate("Click 'Restart to Apply Update' below to boot the newly compiled server.", "info");
 
     } catch (updateErr: any) {
       console.error(updateErr);
       softwareUpdateStatus = "error";
       softwareUpdateError = updateErr.message;
       logSoftwareUpdate(`System upgrade failed: ${updateErr.message}`, "error");
+    } finally {
+      // Clean up zip and temporary directory
+      try {
+        if (fs.existsSync(zipDest)) fs.unlinkSync(zipDest);
+        if (fs.existsSync(extractDir)) fs.rmSync(extractDir, { recursive: true, force: true });
+      } catch (e) {}
     }
   })();
 

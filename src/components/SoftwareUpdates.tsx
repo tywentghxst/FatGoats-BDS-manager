@@ -26,6 +26,7 @@ interface UpdateStatus {
   url: string;
   isNew: boolean;
   isFallback?: boolean;
+  latestSha?: string;
 }
 
 export default function SoftwareUpdates({ token, onShowMessage }: SoftwareUpdatesProps) {
@@ -172,7 +173,10 @@ export default function SoftwareUpdates({ token, onShowMessage }: SoftwareUpdate
           "Content-Type": "application/json",
           "Authorization": `Bearer ${token}`
         },
-        body: JSON.stringify({ latestVersion: updateInfo.latestVersion })
+        body: JSON.stringify({ 
+          latestVersion: updateInfo.latestVersion,
+          latestSha: updateInfo.latestSha
+        })
       });
       const resData = await res.json();
       if (!res.ok) throw new Error(resData.error || "Failed to trigger update.");
