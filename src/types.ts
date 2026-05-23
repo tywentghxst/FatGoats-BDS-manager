@@ -79,7 +79,7 @@ export interface AppConfig {
   levelName: string;
   difficulty: string;
   gamemode: string;
-  simulationMode: boolean;
+  simulationMode?: boolean;
   selectedVersion: string;
   serverName?: string;
   emitServerTelemetry?: boolean;

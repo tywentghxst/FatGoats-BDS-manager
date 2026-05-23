@@ -340,7 +340,6 @@ export default function App() {
     levelName: "BedrockWorld",
     difficulty: "normal",
     gamemode: "survival",
-    simulationMode: false,
     selectedVersion: "1.21.71",
     serverName: "Bedrock Dedicated Server",
     emitServerTelemetry: false,
@@ -4187,7 +4186,7 @@ export default function App() {
                       <div className="p-4 bg-zinc-950/40 rounded-xl border border-zinc-900 flex items-center justify-between">
                         <div className="space-y-1">
                           <h4 className="text-xs font-bold text-white">Allow Administrative Cheats</h4>
-                          <p className="text-[9px] text-zinc-500 leading-normal max-w-2xs">
+                          <p className="text-[9px] text-zinc-550 leading-normal max-w-2xs">
                             Enables cheat commands like coordinates teleporting, changing gamemodes on active runs, or spawning custom block elements.
                           </p>
                         </div>
@@ -4196,22 +4195,6 @@ export default function App() {
                           disabled={!isAdmin}
                           checked={appConfig.allowCheats ?? true}
                           onChange={e => updateSettingsField({ allowCheats: e.target.checked })}
-                          className="w-4.5 h-4.5 accent-emerald-500 cursor-pointer disabled:opacity-50"
-                        />
-                      </div>
-
-                      <div className="p-4 bg-zinc-950/40 rounded-xl border border-zinc-900 flex items-center justify-between">
-                        <div className="space-y-1">
-                          <h4 className="text-xs font-bold text-white">Simulate Server Execution</h4>
-                          <p className="text-[9px] text-zinc-500 leading-normal max-w-2xs">
-                            Turn this on to fully simulate the application running back-end features (BDS commands and telemetry simulator). Defaults to OFF for live server binary execution.
-                          </p>
-                        </div>
-                        <input
-                          type="checkbox"
-                          disabled={!isAdmin}
-                          checked={appConfig.simulationMode}
-                          onChange={e => updateSettingsField({ simulationMode: e.target.checked })}
                           className="w-4.5 h-4.5 accent-emerald-500 cursor-pointer disabled:opacity-50"
                         />
                       </div>

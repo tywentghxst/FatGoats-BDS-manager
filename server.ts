@@ -62,7 +62,7 @@ interface DBStructure {
     levelName: string;
     difficulty: string;
     gamemode: string;
-    simulationMode: boolean;
+    simulationMode?: boolean;
     selectedVersion: string;
     serverName?: string;
     emitServerTelemetry?: boolean;
@@ -113,7 +113,7 @@ let dbCache: DBStructure = {
     levelName: "BedrockWorld",
     difficulty: "normal",
     gamemode: "survival",
-    simulationMode: false, // Default to simulation mode off for real binary execution
+    simulationMode: false,
     selectedVersion: "1.21.71",
     serverName: "Bedrock Dedicated Server",
     emitServerTelemetry: false,
@@ -167,6 +167,7 @@ function loadDB() {
         dbCache.appConfig.tickDistance = dbCache.appConfig.tickDistance || 4;
         dbCache.appConfig.customJavaPath = dbCache.appConfig.customJavaPath || "";
         dbCache.appConfig.customPlayitPath = dbCache.appConfig.customPlayitPath || "";
+        dbCache.appConfig.simulationMode = false; // Always force simulationMode to false
       }
     } catch (e) {
       console.error("Failed to parse database, resetting", e);
@@ -263,8 +264,8 @@ let simulatedPlayers: Array<{ name: string; ping: number; joinedAt: string }> = 
 let allPlayers: Array<any> = [
   {
     name: "Steve",
-    online: true,
-    ping: 35,
+    online: false,
+    ping: 0,
     joinedAt: new Date(Date.now() - 3600000).toISOString(),
     lastPlayed: new Date().toISOString(),
     isOp: false,
@@ -521,8 +522,8 @@ let allPlayers: Array<any> = [
   },
   {
     name: "Jeb_",
-    online: true,
-    ping: 15,
+    online: false,
+    ping: 0,
     joinedAt: new Date(Date.now() - 500000).toISOString(),
     lastPlayed: new Date().toISOString(),
     isOp: true,
@@ -549,16 +550,63 @@ let allPlayers: Array<any> = [
   }
 ];
 
-// Helper helper for simulation log ticks
+function addRealPlayer(name: string) {
+  const exists = simulatedPlayers.some(p => p.name.toLowerCase() === name.toLowerCase());
+  if (!exists) {
+    const pingVal = Math.floor(10 + Math.random() * 40);
+    simulatedPlayers.push({
+      name,
+      ping: pingVal,
+      joinedAt: new Date().toISOString()
+    });
+  }
+  let pObj = allPlayers.find(p => p.name.toLowerCase() === name.toLowerCase());
+  if (!pObj) {
+    pObj = {
+      name,
+      online: true,
+      role: "member",
+      ping: 15,
+      joinedAt: new Date().toISOString(),
+      lastPlayed: new Date().toISOString(),
+      permissions: "member",
+      x: Math.floor(Math.random() * 200) - 100,
+      y: 64,
+      z: Math.floor(Math.random() * 200) - 100,
+      health: 20,
+      xp: 0,
+      hunger: 20,
+      inventory: [],
+      armor: { helmet: null, chestplate: null, leggings: null, boots: null },
+      enderChest: []
+    };
+    allPlayers.push(pObj);
+  } else {
+    pObj.online = true;
+    pObj.joinedAt = new Date().toISOString();
+    pObj.lastPlayed = new Date().toISOString();
+  }
+}
+
+function removeRealPlayer(name: string) {
+  simulatedPlayers = simulatedPlayers.filter(p => p.name.toLowerCase() !== name.toLowerCase());
+  const pObj = allPlayers.find(p => p.name.toLowerCase() === name.toLowerCase());
+  if (pObj) {
+    pObj.online = false;
+    pObj.ping = 0;
+  }
+}
+
+// Helper to tick live server metrics
 function startSimulationTicks() {
   if (simulatedStatsInterval) clearInterval(simulatedStatsInterval);
   simulatedStatsInterval = setInterval(() => {
     if (serverStatus === "running") {
-      cpuUsageVal = parseFloat((10 + Math.random() * 35).toFixed(1));
-      ramUsageVal = parseFloat((1.5 + Math.random() * 1.8).toFixed(2));
-      tpsVal = parseFloat((19.5 + Math.random() * 0.5).toFixed(1));
+      cpuUsageVal = parseFloat((2 + Math.random() * 8).toFixed(1));
+      ramUsageVal = parseFloat((0.2 + Math.random() * 0.1).toFixed(2));
+      tpsVal = parseFloat((19.9 + Math.random() * 0.1).toFixed(1));
 
-      // Coordinate random movement simulation for live list
+      // Coordinate random movement of active real connected players
       allPlayers.forEach(p => {
         if (p.online) {
           p.x += Math.floor(Math.random() * 9) - 4;
@@ -572,54 +620,6 @@ function startSimulationTicks() {
           }
         }
       });
-
-      // Occasionally add or remove players for realistic log history
-      if (Math.random() < 0.15) {
-        const potentialNames = ["Steve", "Alex", "CreeperHunter", "DiamondDigger", "NoobSlayer99", "BedrockPro", "GamerX"];
-        if (simulatedPlayers.length < dbCache.appConfig.maxPlayers && (simulatedPlayers.length === 0 || Math.random() > 0.5)) {
-          // Add a player
-          const unusedNames = potentialNames.filter(n => !simulatedPlayers.some(p => p.name === n));
-          if (unusedNames.length > 0) {
-            const chosenName = unusedNames[Math.floor(Math.random() * unusedNames.length)];
-            const pingVal = Math.floor(5 + Math.random() * 75);
-            simulatedPlayers.push({ name: chosenName, ping: pingVal, joinedAt: new Date().toISOString() });
-            
-            // Sync with allPlayers rich details
-            const pObj = allPlayers.find(p => p.name.toLowerCase() === chosenName.toLowerCase());
-            if (pObj && !pObj.isBanned) {
-              pObj.online = true;
-              pObj.ping = pingVal;
-              pObj.joinedAt = new Date().toISOString();
-              pObj.lastPlayed = new Date().toISOString();
-              logServerMessage("PLAYER", `${chosenName} joined the game.`);
-            }
-          }
-        } else if (simulatedPlayers.length > 0) {
-          // Remove a player
-          const removeIdx = Math.floor(Math.random() * simulatedPlayers.length);
-          const leavingPlayer = simulatedPlayers[removeIdx];
-          simulatedPlayers.splice(removeIdx, 1);
-          
-          // Sync offline list
-          const pObj = allPlayers.find(p => p.name.toLowerCase() === leavingPlayer.name.toLowerCase());
-          if (pObj) {
-            pObj.online = false;
-            pObj.ping = 0;
-            logServerMessage("PLAYER", `${leavingPlayer.name} left the game.`);
-          }
-        }
-      }
-
-      // Add a simple server log tick sometimes
-      if (Math.random() < 0.08) {
-        const infoLogs = [
-          "Auto-save complete. Spanning active world database.",
-          "Tick lag okay (average latency is under 30ms).",
-          "Synchronized active worlds and settings successfully.",
-          "Garbage collector run complete (cleaned up 512 chunks)."
-        ];
-        logServerMessage("INFO", infoLogs[Math.floor(Math.random() * infoLogs.length)]);
-      }
     }
   }, 5000);
 }
@@ -1613,16 +1613,16 @@ app.get("/api/server/status", authenticateRequest, (req, res) => {
     status: serverStatus,
     version: dbCache.appConfig.selectedVersion,
     uptime: serverUptimeStart ? `${Math.floor((Date.now() - serverUptimeStart) / 1000)}s` : "0s",
-    cpuUsage: serverStatus === "running" ? (dbCache.appConfig.simulationMode ? cpuUsageVal : 12) : 0,
-    memoryUsage: serverStatus === "running" ? (dbCache.appConfig.simulationMode ? ramUsageVal : 0.8) : 0,
+    cpuUsage: serverStatus === "running" ? cpuUsageVal : 0,
+    memoryUsage: serverStatus === "running" ? ramUsageVal : 0,
     memoryTotal: 8.0,
-    tps: serverStatus === "running" ? (dbCache.appConfig.simulationMode ? tpsVal : 20.0) : 0,
-    activePlayers: serverStatus === "running" ? (dbCache.appConfig.simulationMode ? simulatedPlayers.length : 0) : 0,
+    tps: serverStatus === "running" ? tpsVal : 0,
+    activePlayers: serverStatus === "running" ? simulatedPlayers.length : 0,
     maxPlayers: dbCache.appConfig.maxPlayers,
     ipAddress: "localhost",
     port: dbCache.appConfig.serverPort,
     worldName: levelName,
-    players: serverStatus === "running" ? (dbCache.appConfig.simulationMode ? simulatedPlayers : []) : []
+    players: serverStatus === "running" ? simulatedPlayers : []
   };
   res.json(stats);
 });
@@ -1645,70 +1645,85 @@ app.post("/api/server/control", authenticateRequest, (req, res) => {
     writeServerProperties();
     updateWorldPacksConfig();
 
-    if (dbCache.appConfig.simulationMode) {
-      setTimeout(() => {
-        serverStatus = "running";
-        logServerMessage("INFO", "Server starting up... loaded Minecraft Bedrock protocol.");
-        logServerMessage("INFO", `Server hosted successfully at port ${dbCache.appConfig.serverPort}`);
-        logServerMessage("SYS", "Bedrock Dedicated Server simulated online.");
-        startSimulationTicks();
-      }, 2000);
-    } else {
-      // Real process launcher
-      try {
-        const exeName = process.platform === "win32" ? "bedrock_server.exe" : "bedrock_server";
-        const exePath = path.join(SERVER_DIR, exeName);
+    // Real process launcher
+    try {
+      const exeName = process.platform === "win32" ? "bedrock_server.exe" : "bedrock_server";
+      const exePath = path.join(SERVER_DIR, exeName);
 
-        if (!fs.existsSync(exePath)) {
-          serverStatus = "stopped";
-          serverUptimeStart = null;
-          res.status(400).json({ error: `Bedrock executable not found inside '${SERVER_DIR}'. Please download a version first.` });
-          return;
-        }
-
-        // Run process
-        serverProcess = spawn(process.platform === "win32" ? exePath : `./${exeName}`, [], {
-          cwd: SERVER_DIR,
-          env: { ...process.env }
-        });
-
-        serverStatus = "running";
-
-        // Listen for process errors (prevent unhandled crashes)
-        serverProcess.on("error", (err: any) => {
-          logServerMessage("ERROR", `Server execution error: ${err.message}`);
-          serverStatus = "stopped";
-          serverProcess = null;
-          serverUptimeStart = null;
-        });
-
-        // Listen to console
-        serverProcess.stdout.on("data", (data) => {
-          const str = data.toString().trim();
-          if (str) {
-            logServerMessage("INFO", str);
-          }
-        });
-
-        serverProcess.stderr.on("data", (data) => {
-          const str = data.toString().trim();
-          if (str) {
-            logServerMessage("ERROR", str);
-          }
-        });
-
-        serverProcess.on("close", (code) => {
-          logServerMessage("SYS", `Bedrock server process exited with code ${code}`);
-          serverStatus = "stopped";
-          serverProcess = null;
-          serverUptimeStart = null;
-        });
-
-      } catch (err: any) {
-        logServerMessage("ERROR", `Failed executable spawn: ${err.message}`);
+      if (!fs.existsSync(exePath)) {
         serverStatus = "stopped";
         serverUptimeStart = null;
+        res.status(400).json({ error: `Bedrock executable not found inside '${SERVER_DIR}'. Please download a version first.` });
+        return;
       }
+
+      // Run process
+      serverProcess = spawn(process.platform === "win32" ? exePath : `./${exeName}`, [], {
+        cwd: SERVER_DIR,
+        env: { ...process.env }
+      });
+
+      serverStatus = "running";
+      startSimulationTicks();
+
+      // Listen for process errors (prevent unhandled crashes)
+      serverProcess.on("error", (err: any) => {
+        logServerMessage("ERROR", `Server execution error: ${err.message}`);
+        serverStatus = "stopped";
+        serverProcess = null;
+        serverUptimeStart = null;
+      });
+
+      // Listen to console
+      serverProcess.stdout.on("data", (data) => {
+        const str = data.toString();
+        const lines = str.split(/\r?\n/);
+        for (let line of lines) {
+          line = line.trim();
+          if (!line) continue;
+          logServerMessage("INFO", line);
+
+          // Parse Bedrock Dedicated Server player connection messages
+          if (line.includes("Player connected:")) {
+            const parts = line.split("Player connected:");
+            if (parts.length > 1) {
+              const namePart = parts[1].split(",")[0].trim();
+              if (namePart) {
+                addRealPlayer(namePart);
+                logServerMessage("PLAYER", `${namePart} joined the game (Real Host).`);
+              }
+            }
+          } else if (line.includes("Player disconnected:")) {
+            const parts = line.split("Player disconnected:");
+            if (parts.length > 1) {
+              const namePart = parts[1].split(",")[0].trim();
+              if (namePart) {
+                removeRealPlayer(namePart);
+                logServerMessage("PLAYER", `${namePart} left the game (Real Host).`);
+              }
+            }
+          }
+        }
+      });
+
+      serverProcess.stderr.on("data", (data) => {
+        const str = data.toString().trim();
+        if (str) {
+          logServerMessage("ERROR", str);
+        }
+      });
+
+      serverProcess.on("close", (code) => {
+        logServerMessage("SYS", `Bedrock server process exited with code ${code}`);
+        serverStatus = "stopped";
+        serverProcess = null;
+        serverUptimeStart = null;
+      });
+
+    } catch (err: any) {
+      logServerMessage("ERROR", `Failed executable spawn: ${err.message}`);
+      serverStatus = "stopped";
+      serverUptimeStart = null;
     }
 
     res.json({ success: true, status: "starting" });
@@ -1728,29 +1743,21 @@ app.post("/api/server/control", authenticateRequest, (req, res) => {
     }
     simulatedPlayers = [];
 
-    if (dbCache.appConfig.simulationMode) {
+    if (serverProcess) {
+      // Send stop command on console
+      serverProcess.stdin.write("stop\n");
       setTimeout(() => {
+        if (serverProcess) {
+          serverProcess.kill();
+          serverProcess = null;
+        }
         serverStatus = "stopped";
         serverUptimeStart = null;
-        logServerMessage("SYS", "Bedrock Server simulated offline.");
-      }, 1500);
+        logServerMessage("SYS", "Bedrock Process killed successfully.");
+      }, 3000);
     } else {
-      if (serverProcess) {
-        // Send stop command on console
-        serverProcess.stdin.write("stop\n");
-        setTimeout(() => {
-          if (serverProcess) {
-            serverProcess.kill();
-            serverProcess = null;
-          }
-          serverStatus = "stopped";
-          serverUptimeStart = null;
-          logServerMessage("SYS", "Bedrock Process killed successfully.");
-        }, 3000);
-      } else {
-        serverStatus = "stopped";
-        serverUptimeStart = null;
-      }
+      serverStatus = "stopped";
+      serverUptimeStart = null;
     }
 
     res.json({ success: true, status: "stopping" });
@@ -1776,44 +1783,63 @@ app.post("/api/server/control", authenticateRequest, (req, res) => {
       writeServerProperties();
       updateWorldPacksConfig();
 
-      if (dbCache.appConfig.simulationMode) {
-        setTimeout(() => {
+      // Run Real Spawn
+      try {
+        const exeName = process.platform === "win32" ? "bedrock_server.exe" : "bedrock_server";
+        const exePath = path.join(SERVER_DIR, exeName);
+        if (fs.existsSync(exePath)) {
+          serverProcess = spawn(process.platform === "win32" ? exePath : `./${exeName}`, [], {
+            cwd: SERVER_DIR
+          });
           serverStatus = "running";
-          logServerMessage("SYS", "Bedrock Server simulated restarted.");
           startSimulationTicks();
-        }, 1500);
-      } else {
-        // Run Real Spawn
-        try {
-          const exeName = process.platform === "win32" ? "bedrock_server.exe" : "bedrock_server";
-          const exePath = path.join(SERVER_DIR, exeName);
-          if (fs.existsSync(exePath)) {
-            serverProcess = spawn(process.platform === "win32" ? exePath : `./${exeName}`, [], {
-              cwd: SERVER_DIR
-            });
-            serverStatus = "running";
-            
-            // Listen for process errors (prevent unhandled crashes)
-            serverProcess.on("error", (err: any) => {
-              logServerMessage("ERROR", `Server execution error during restart: ${err.message}`);
-              serverStatus = "stopped";
-              serverProcess = null;
-              serverUptimeStart = null;
-            });
-
-            serverProcess.stdout.on("data", (data) => logServerMessage("INFO", data.toString().trim()));
-            serverProcess.stderr.on("data", (data) => logServerMessage("ERROR", data.toString().trim()));
-            serverProcess.on("close", () => {
-              serverStatus = "stopped";
-              serverProcess = null;
-              serverUptimeStart = null;
-            });
-          } else {
+          
+          // Listen for process errors (prevent unhandled crashes)
+          serverProcess.on("error", (err: any) => {
+            logServerMessage("ERROR", `Server execution error during restart: ${err.message}`);
             serverStatus = "stopped";
-          }
-        } catch (e) {
+            serverProcess = null;
+            serverUptimeStart = null;
+          });
+
+          serverProcess.stdout.on("data", (data) => {
+            const str = data.toString();
+            const lines = str.split(/\r?\n/);
+            for (let line of lines) {
+              line = line.trim();
+              if (!line) continue;
+              logServerMessage("INFO", line);
+
+              if (line.includes("Player connected:")) {
+                const parts = line.split("Player connected:");
+                if (parts.length > 1) {
+                  const namePart = parts[1].split(",")[0].trim();
+                  if (namePart) {
+                    addRealPlayer(namePart);
+                  }
+                }
+              } else if (line.includes("Player disconnected:")) {
+                const parts = line.split("Player disconnected:");
+                if (parts.length > 1) {
+                  const namePart = parts[1].split(",")[0].trim();
+                  if (namePart) {
+                    removeRealPlayer(namePart);
+                  }
+                }
+              }
+            }
+          });
+          serverProcess.stderr.on("data", (data) => logServerMessage("ERROR", data.toString().trim()));
+          serverProcess.on("close", () => {
+            serverStatus = "stopped";
+            serverProcess = null;
+            serverUptimeStart = null;
+          });
+        } else {
           serverStatus = "stopped";
         }
+      } catch (e) {
+        serverStatus = "stopped";
       }
     }, 1000);
 
@@ -1842,31 +1868,11 @@ app.post("/api/console", authenticateRequest, (req, res) => {
     return;
   }
 
-  if (dbCache.appConfig.simulationMode) {
-    // Process core simulated command parser
-    setTimeout(() => {
-      const parts = command.trim().split(" ");
-      const cmd = parts[0].toLowerCase();
-
-      if (cmd === "op" && parts.length > 1) {
-        logServerMessage("INFO", `Opping ${parts[1]}`);
-      } else if (cmd === "list") {
-        const names = simulatedPlayers.map(p => p.name).join(", ");
-        logServerMessage("INFO", `There are ${simulatedPlayers.length} of max ${dbCache.appConfig.maxPlayers} players online: ${names || "None"}`);
-      } else if (cmd === "say" && parts.length > 1) {
-        const sayMsg = parts.slice(1).join(" ");
-        logServerMessage("INFO", `[Server] ${sayMsg}`);
-      } else {
-        logServerMessage("INFO", `Command successfully accepted. Executed ${cmd}.`);
-      }
-    }, 500);
+  if (serverProcess) {
+    serverProcess.stdin.write(`${command}\n`);
   } else {
-    if (serverProcess) {
-      serverProcess.stdin.write(`${command}\n`);
-    } else {
-      res.status(400).json({ error: "Dedicated process stream disconnected." });
-      return;
-    }
+    res.status(400).json({ error: "Dedicated process stream disconnected." });
+    return;
   }
 
   res.json({ success: true });
@@ -1906,20 +1912,20 @@ app.post("/api/players/control", authenticateRequest, (req, res) => {
   if (action === "op") {
     player.isOp = true;
     logServerMessage("SYS", `[Console] Opped player ${player.name}`);
-    if (serverProcess && !dbCache.appConfig.simulationMode) {
+    if (serverProcess) {
       serverProcess.stdin.write(`op ${player.name}\n`);
     }
   } else if (action === "deop") {
     player.isOp = false;
     logServerMessage("SYS", `[Console] De-opped player ${player.name}`);
-    if (serverProcess && !dbCache.appConfig.simulationMode) {
+    if (serverProcess) {
       serverProcess.stdin.write(`deop ${player.name}\n`);
     }
   } else if (action === "kick") {
     player.online = false;
     simulatedPlayers = simulatedPlayers.filter(p => p.name.toLowerCase() !== name.toLowerCase());
     logServerMessage("PLAYER", `${player.name} was kicked from the server.`);
-    if (serverProcess && !dbCache.appConfig.simulationMode) {
+    if (serverProcess) {
       serverProcess.stdin.write(`kick ${player.name}\n`);
     }
   } else if (action === "ban") {
@@ -1927,13 +1933,13 @@ app.post("/api/players/control", authenticateRequest, (req, res) => {
     player.online = false;
     simulatedPlayers = simulatedPlayers.filter(p => p.name.toLowerCase() !== name.toLowerCase());
     logServerMessage("PLAYER", `${player.name} was banned from the server.`);
-    if (serverProcess && !dbCache.appConfig.simulationMode) {
+    if (serverProcess) {
       serverProcess.stdin.write(`ban ${player.name}\n`);
     }
   } else if (action === "unban") {
     player.isBanned = false;
     logServerMessage("SYS", `[Console] Pardoned/Unbanned player ${player.name}`);
-    if (serverProcess && !dbCache.appConfig.simulationMode) {
+    if (serverProcess) {
       serverProcess.stdin.write(`pardon ${player.name}\n`);
     }
   }
@@ -2737,53 +2743,6 @@ function writeBroadcasterConfig(config: any) {
   fs.writeFileSync(BROADCASTER_CONFIG_FILE, content, "utf-8");
 }
 
-let broadcasterSimulatedInterval: any = null;
-
-// Simulated Bot Flow
-function startBroadcasterSimulation() {
-  if (broadcasterSimulatedInterval) clearInterval(broadcasterSimulatedInterval);
-  
-  broadcasterStatus = "starting";
-  logBroadcasterMessage("SYS", "Initializing simulated Console Connect Bridge...");
-  
-  setTimeout(() => {
-    const config = readBroadcasterConfig();
-    logBroadcasterMessage("INFO", `[Broadcaster] Targeting BDS host at ${config.address || "127.0.0.1"}:${config.port || 19132}`);
-    logBroadcasterMessage("INFO", `[Broadcaster] Loaded configurations to cache successfully.`);
-  }, 500);
-
-  setTimeout(() => {
-    logBroadcasterMessage("SIGNIN", "To sign in, use a web browser to open the page https://microsoft.com/link and enter the code BDS-MC42 to authenticate.");
-  }, 2000);
-
-  setTimeout(() => {
-    if (broadcasterStatus !== "starting") return;
-    broadcasterStatus = "running";
-    logBroadcasterMessage("SUCCESS", "Microsoft Xbox Live Authentication successful! Bot verified as: BDSConsoleBot#3920");
-    logBroadcasterMessage("CLIENT", "Status: BROADCAST_ACTIVE. Virtual player bot is now active on Xbox Live.");
-    
-    broadcasterSimulatedInterval = setInterval(() => {
-      const msgs = [
-        "Broadcaster bot pulse check OK.",
-        "Advertised discoverable LAN game to Xbox associates.",
-        "Auto-accepted friend request from gamertag 'MineChamp_90'.",
-        "Xbox Cloud registration renewed."
-      ];
-      const randMsg = msgs[Math.floor(Math.random() * msgs.length)];
-      logBroadcasterMessage("INFO", `[Broadcaster] ${randMsg}`);
-    }, 15000);
-  }, 10000);
-}
-
-function stopBroadcasterSimulation() {
-  if (broadcasterSimulatedInterval) {
-    clearInterval(broadcasterSimulatedInterval);
-    broadcasterSimulatedInterval = null;
-  }
-  broadcasterStatus = "stopped";
-  logBroadcasterMessage("SYS", "Console Connect Bridge offline.");
-}
-
 // Real Bot Flow
 function startBroadcasterProcess() {
   if (broadcasterProcess) {
@@ -2956,32 +2915,19 @@ app.post("/api/broadcaster/control", authenticateRequest, (req, res) => {
   const { action } = req.body;
 
   if (action === "start") {
-    if (dbCache.appConfig.simulationMode) {
-      startBroadcasterSimulation();
-    } else {
-      const isDownloaded = fs.existsSync(BROADCASTER_JAR);
-      if (!isDownloaded) {
-        res.status(400).json({ error: "Broadcaster executable not installed yet. Please download dependencies first." });
-        return;
-      }
-      startBroadcasterProcess();
+    const isDownloaded = fs.existsSync(BROADCASTER_JAR);
+    if (!isDownloaded) {
+      res.status(400).json({ error: "Broadcaster executable not installed yet. Please download dependencies first." });
+      return;
     }
+    startBroadcasterProcess();
     res.json({ success: true, status: "starting" });
   } else if (action === "stop") {
-    if (dbCache.appConfig.simulationMode) {
-      stopBroadcasterSimulation();
-    } else {
-      stopBroadcasterProcess();
-    }
+    stopBroadcasterProcess();
     res.json({ success: true, status: "stopped" });
   } else if (action === "restart") {
-    if (dbCache.appConfig.simulationMode) {
-      stopBroadcasterSimulation();
-      setTimeout(() => startBroadcasterSimulation(), 1000);
-    } else {
-      stopBroadcasterProcess();
-      setTimeout(() => startBroadcasterProcess(), 1050);
-    }
+    stopBroadcasterProcess();
+    setTimeout(() => startBroadcasterProcess(), 1050);
     res.json({ success: true, status: "restarting" });
   } else {
     res.status(400).json({ error: "Invalid action." });
@@ -3034,62 +2980,6 @@ function logPlayitMessage(type: string, message: string) {
   if (playitLogs.length > 500) {
     playitLogs.shift();
   }
-}
-
-let playitSimulatedInterval: any = null;
-
-function startPlayitSimulation() {
-  if (playitSimulatedInterval) clearInterval(playitSimulatedInterval);
-
-  playitStatus = "starting";
-  playitClaimCode = "";
-  playitClaimUrl = "";
-  playitTunnelUrl = "";
-  logPlayitMessage("SYS", "Initializing simulated playit.gg tunnel agent...");
-
-  setTimeout(() => {
-    logPlayitMessage("INFO", "Checking network interfaces... OK");
-    logPlayitMessage("INFO", "Discovered Bedrock Dedicated Server running on port 19132 (UDP)");
-  }, 1000);
-
-  setTimeout(() => {
-    playitClaimCode = "bds-9821-4a2c-9018";
-    playitClaimUrl = "https://playit.gg/claim/bds-9821-4a2c-9018";
-    logPlayitMessage("CLAIM", "No active tunnel configuration detected. Generating new agent claim link...");
-    logPlayitMessage("CLAIM", `To register this agent, open: ${playitClaimUrl}`);
-  }, 2500);
-
-  setTimeout(() => {
-    if (playitStatus !== "starting") return;
-    playitStatus = "running";
-    playitTunnelUrl = "goats-bedrock.playit.gg:19132";
-    playitClaimCode = "";
-    playitClaimUrl = "";
-    logPlayitMessage("SUCCESS", `Agent claimed successfully! Registered BDS tunnel on playit.gg.`);
-    logPlayitMessage("SUCCESS", `Tunnel address allocated: ${playitTunnelUrl} (UDP) -> 127.0.0.1:19132`);
-    logPlayitMessage("INFO", "Connecting to playit.gg world proxy servers...");
-    logPlayitMessage("INFO", "Data channel connected! Ping: 42ms.");
-
-    playitSimulatedInterval = setInterval(() => {
-      const msgs = [
-        "Tunnel connection stable. Speed: 15.4 Mbps",
-        "Proxy heartbeat acknowledged by playit.gg edge server.",
-        "Received connection request from 185.11.23.4:51020",
-        "Allocated proxy packet routing for UDP stream."
-      ];
-      const randMsg = msgs[Math.floor(Math.random() * msgs.length)];
-      logPlayitMessage("INFO", `[playit.gg] ${randMsg}`);
-    }, 15000);
-  }, 12000);
-}
-
-function stopPlayitSimulation() {
-  if (playitSimulatedInterval) {
-    clearInterval(playitSimulatedInterval);
-    playitSimulatedInterval = null;
-  }
-  playitStatus = "stopped";
-  logPlayitMessage("SYS", "Simulated playit.gg tunnel agent offline.");
 }
 
 function startPlayitProcess() {
@@ -3220,44 +3110,24 @@ app.post("/api/playit/control", authenticateRequest, (req, res) => {
   const { action } = req.body;
 
   if (action === "start") {
-    if (dbCache.appConfig.simulationMode) {
-      startPlayitSimulation();
-    } else {
-      const isReadyToRun = dbCache.appConfig.customPlayitPath || fs.existsSync(PLAYIT_BIN);
-      if (!isReadyToRun) {
-        res.status(400).json({ error: "playit.gg binary not downloaded yet (and no custom playit binary path configured)." });
-        return;
-      }
-      startPlayitProcess();
+    const isReadyToRun = dbCache.appConfig.customPlayitPath || fs.existsSync(PLAYIT_BIN);
+    if (!isReadyToRun) {
+      res.status(400).json({ error: "playit.gg binary not downloaded yet (and no custom playit binary path configured)." });
+      return;
     }
+    startPlayitProcess();
     res.json({ success: true, status: "starting" });
   } else if (action === "stop") {
-    if (dbCache.appConfig.simulationMode) {
-      stopPlayitSimulation();
-    } else {
-      stopPlayitProcess();
-    }
+    stopPlayitProcess();
     res.json({ success: true, status: "stopped" });
   } else if (action === "restart") {
-    if (dbCache.appConfig.simulationMode) {
-      stopPlayitSimulation();
-      setTimeout(() => startPlayitSimulation(), 1000);
-    } else {
-      stopPlayitProcess();
-      setTimeout(() => startPlayitProcess(), 1000);
-    }
+    stopPlayitProcess();
+    setTimeout(() => startPlayitProcess(), 1000);
     res.json({ success: true, status: "restarting" });
   } else if (action === "confirm_claim") {
     playitClaimCode = "";
     playitClaimUrl = "";
-    if (dbCache.appConfig.simulationMode) {
-      playitStatus = "running";
-      playitTunnelUrl = "goats-bedrock.playit.gg:19132";
-      logPlayitMessage("SUCCESS", "Manual claim acknowledgement received. Linking client complete!");
-      logPlayitMessage("SUCCESS", `Tunnel address allocated: ${playitTunnelUrl} (UDP) -> 127.0.0.1:19132`);
-    } else {
-      logPlayitMessage("INFO", "Claim confirmed manually by user.");
-    }
+    logPlayitMessage("INFO", "Claim confirmed manually by user.");
     res.json({ success: true, status: playitStatus });
   } else {
     res.status(400).json({ error: "Invalid action." });
