@@ -305,6 +305,12 @@ export default function ConsoleConnect({
   const isStarting = data?.status === "starting";
   const isDownloaded = data?.isDownloaded;
 
+  const javaMissing = data?.logs?.some(l => 
+    (l.message.toLowerCase().includes("not recognized") && l.message.toLowerCase().includes("java")) ||
+    l.message.toLowerCase().includes("broadcaster process failed to start: java") ||
+    l.message.toLowerCase().includes("java is not recognized")
+  );
+
   return (
     <div className="flex-1 flex flex-col h-full overflow-hidden p-4 md:p-8 space-y-4 md:space-y-6">
       
@@ -624,6 +630,27 @@ export default function ConsoleConnect({
         {/* Sub-Tab 4.3: Console Log Bridge terminal */}
         {activeSubTab === "terminal" && (
           <div className="flex-1 flex flex-col min-h-0 space-y-4 bg-zinc-950">
+            {javaMissing && (
+              <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="space-y-0.5">
+                  <h4 className="text-xs font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+                    <AlertTriangle className="w-4 h-4" />
+                    Java Runtime (JRE) Not Installed or Not in PATH
+                  </h4>
+                  <p className="text-[10px] text-zinc-300 leading-normal">
+                    The standard <strong>"java"</strong> command is not recognized on your Windows host. 
+                    Please define your custom Java executable path under <strong>Visual Settings &rarr; Host Runtime Compatibility Settings</strong> to run your companion bot!
+                  </p>
+                </div>
+                <button
+                  onClick={() => setActiveSubTab("settings")}
+                  className="px-3.5 py-1.5 bg-amber-500 hover:bg-amber-400 text-black font-extrabold text-[10px] uppercase tracking-wider rounded-lg transition-all shrink-0 cursor-pointer"
+                >
+                  Configure Java Path
+                </button>
+              </div>
+            )}
+
             <div className="flex items-center justify-between flex-shrink-0 bg-zinc-900/20 p-3 rounded-xl border border-zinc-900 select-none">
               <div className="flex items-center gap-1.5">
                 <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />

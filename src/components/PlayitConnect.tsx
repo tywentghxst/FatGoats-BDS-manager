@@ -31,6 +31,7 @@ interface PlayitStatus {
   claimUrl: string;
   tunnelUrl: string;
   customPlayitPath?: string;
+  playitSecretKey?: string;
 }
 
 interface PlayitConnectProps {
@@ -51,6 +52,7 @@ export default function PlayitConnect({
   const [actionLoading, setActionLoading] = useState(false);
   const [copiedType, setCopiedType] = useState<"code" | "ip" | null>(null);
   const [customPlayitPath, setCustomPlayitPath] = useState("");
+  const [playitSecretKey, setPlayitSecretKey] = useState("");
 
   const terminalEndRef = useRef<HTMLDivElement | null>(null);
 
@@ -68,6 +70,9 @@ export default function PlayitConnect({
       setData(result);
       if (result.customPlayitPath !== undefined) {
         setCustomPlayitPath(result.customPlayitPath);
+      }
+      if (result.playitSecretKey !== undefined) {
+        setPlayitSecretKey(result.playitSecretKey);
       }
     } catch (err: any) {
       console.error(err);
@@ -161,7 +166,7 @@ export default function PlayitConnect({
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`
         },
-        body: JSON.stringify({ customPlayitPath })
+        body: JSON.stringify({ customPlayitPath, playitSecretKey })
       });
       const resData = await res.json();
       if (!res.ok) throw new Error(resData.error || "Failed to save compatibility settings");
@@ -423,6 +428,20 @@ export default function PlayitConnect({
                 />
                 <span className="text-[10px] text-zinc-500">
                   Leave completely blank to let the manager use the standard built-in downloaded agent binary.
+                </span>
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <label className="text-xs font-semibold text-zinc-300">Playit Agent Secret Key (Custom / Existing)</label>
+                <input
+                  type="password"
+                  value={playitSecretKey}
+                  onChange={(e) => setPlayitSecretKey(e.target.value)}
+                  placeholder="Paste your playit.gg secret key here"
+                  className="w-full px-4 py-2.5 bg-zinc-900/60 border border-zinc-850 rounded-xl text-xs text-white focus:outline-none focus:border-zinc-750 font-mono"
+                />
+                <span className="text-[10px] text-zinc-500 leading-relaxed">
+                  If playit hangs waiting for secret provisioning on Windows, paste your pre-existing agent secret key here. Your secret is safely persisted inside playit.toml.
                 </span>
               </div>
 

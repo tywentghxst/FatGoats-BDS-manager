@@ -72,6 +72,7 @@ interface DBStructure {
     tickDistance?: number;
     customJavaPath?: string;
     customPlayitPath?: string;
+    playitSecretKey?: string;
   };
   addons: Array<{
     uuid: string;
@@ -122,7 +123,8 @@ let dbCache: DBStructure = {
     viewDistance: 10,
     tickDistance: 4,
     customJavaPath: "",
-    customPlayitPath: ""
+    customPlayitPath: "",
+    playitSecretKey: ""
   },
   addons: [],
   pastLogs: [],
@@ -156,7 +158,8 @@ function loadDB() {
           viewDistance: 10,
           tickDistance: 4,
           customJavaPath: "",
-          customPlayitPath: ""
+          customPlayitPath: "",
+          playitSecretKey: ""
         };
       } else {
         dbCache.appConfig.serverName = dbCache.appConfig.serverName || "Bedrock Dedicated Server";
@@ -167,6 +170,7 @@ function loadDB() {
         dbCache.appConfig.tickDistance = dbCache.appConfig.tickDistance || 4;
         dbCache.appConfig.customJavaPath = dbCache.appConfig.customJavaPath || "";
         dbCache.appConfig.customPlayitPath = dbCache.appConfig.customPlayitPath || "";
+        dbCache.appConfig.playitSecretKey = dbCache.appConfig.playitSecretKey || "";
         dbCache.appConfig.simulationMode = false; // Always force simulationMode to false
       }
     } catch (e) {
@@ -3003,7 +3007,26 @@ function startPlayitProcess() {
       return;
     }
 
+    if (!fs.existsSync(PLAYIT_DIR)) {
+      fs.mkdirSync(PLAYIT_DIR, { recursive: true });
+    }
+
     const secretPath = path.join(PLAYIT_DIR, "playit.toml");
+    
+    // Manage secret_key logic inside playit.toml
+    if (dbCache.appConfig.playitSecretKey && dbCache.appConfig.playitSecretKey.trim()) {
+      fs.writeFileSync(secretPath, `secret_key = "${dbCache.appConfig.playitSecretKey.trim()}"\n`, "utf-8");
+      logPlayitMessage("SYS", "Configured Playit Secret Key in playit.toml config file.");
+    } else if (fs.existsSync(secretPath)) {
+      const content = fs.readFileSync(secretPath, "utf-8");
+      const match = content.match(/secret_key\s*=\s*"([^"]+)"/);
+      if (match && match[1]) {
+        dbCache.appConfig.playitSecretKey = match[1];
+        saveDB();
+        logPlayitMessage("SYS", "Successfully detected and loaded active Playit Secret Key from playit.toml file.");
+      }
+    }
+
     playitProcess = spawn(playitCmd, ["--secret-path", secretPath], {
       cwd: PLAYIT_DIR,
       env: { ...process.env }
@@ -3019,7 +3042,7 @@ function startPlayitProcess() {
       playitProcess = null;
     });
 
-    playitProcess.stdout.on("data", (data: any) => {
+    const handlePlayitDataStream = (data: any, isStderr: boolean) => {
       const line = data.toString().trim();
       if (!line) return;
 
@@ -3029,10 +3052,18 @@ function startPlayitProcess() {
         if (!trimmed) continue;
 
         let type = "INFO";
-        if (trimmed.toLowerCase().includes("error") || trimmed.toLowerCase().includes("failed")) {
+        // Check for common trace, debug, info indicators to prevent false error classification on stderr streams
+        if (trimmed.toLowerCase().includes("error") || trimmed.toLowerCase().includes("failed") || trimmed.toLowerCase().includes("panic")) {
           type = "ERROR";
         } else if (trimmed.toLowerCase().includes("warn")) {
           type = "WARN";
+        } else if (trimmed.toLowerCase().includes("claim")) {
+          type = "CLAIM";
+        } else if (trimmed.toLowerCase().includes("info") || trimmed.toLowerCase().includes("starting") || trimmed.toLowerCase().includes("running")) {
+          type = "INFO";
+        } else if (isStderr) {
+          // If it is on stderr and there's no diagnostic tag, call it INFO by default rather than scary ERROR
+          type = "INFO";
         }
 
         // Detect claim link
@@ -3055,14 +3086,10 @@ function startPlayitProcess() {
 
         logPlayitMessage(type, trimmed);
       }
-    });
+    };
 
-    playitProcess.stderr.on("data", (data: any) => {
-      const line = data.toString().trim();
-      if (line) {
-        logPlayitMessage("ERROR", line);
-      }
-    });
+    playitProcess.stdout.on("data", (data: any) => handlePlayitDataStream(data, false));
+    playitProcess.stderr.on("data", (data: any) => handlePlayitDataStream(data, true));
 
     playitProcess.on("close", (code: any) => {
       logPlayitMessage("SYS", `Playit agent process closed with code ${code}`);
@@ -3102,7 +3129,8 @@ app.get("/api/playit/status", authenticateRequest, (req, res) => {
     claimCode: playitClaimCode,
     claimUrl: playitClaimUrl,
     tunnelUrl: playitTunnelUrl,
-    customPlayitPath: dbCache.appConfig.customPlayitPath || ""
+    customPlayitPath: dbCache.appConfig.customPlayitPath || "",
+    playitSecretKey: dbCache.appConfig.playitSecretKey || ""
   });
 });
 
