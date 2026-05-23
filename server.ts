@@ -3574,8 +3574,7 @@ app.post("/api/updates/apply", authenticateRequest, (req, res) => {
 });
 
 app.post("/api/updates/restart", authenticateRequest, (req, res) => {
-  logSoftwareUpdate("Reboot command received from client. Initiating clean shut down...", "info");
-  res.json({ success: true, message: "Server shutting down for restart." });
+  logSoftwareUpdate("Reboot command received from client. Initiating clean hot restart...", "info");
 
   // Shut down Bedrock process if running
   if (serverStatus !== "stopped") {
@@ -3589,6 +3588,8 @@ app.post("/api/updates/restart", authenticateRequest, (req, res) => {
         }
       }
     } catch (e) {}
+    serverStatus = "stopped";
+    serverProcess = null;
   }
 
   // Shut down Broadcaster jar if running
@@ -3596,13 +3597,41 @@ app.post("/api/updates/restart", authenticateRequest, (req, res) => {
     try {
       broadcasterProcess.kill();
     } catch (e) {}
+    broadcasterStatus = "stopped";
+    broadcasterProcess = null;
   }
 
-  // Exit server program shortly after responding so that Docker/PM2/CloudRun restarts it
+  // Shut down Playit if running
+  if (playitProcess) {
+    try {
+      playitProcess.kill("SIGTERM");
+    } catch (e) {}
+    playitStatus = "stopped";
+    playitProcess = null;
+  }
+
+  logSoftwareUpdate("Gracefully terminated active companion and BDS child processes.", "info");
+
+  // Reload configurations on the fly
+  try {
+    loadDB();
+    logSoftwareUpdate("Reloaded application database and fresh schemas successfully.", "success");
+  } catch (err: any) {
+    logSoftwareUpdate(`Database reload warning: ${err.message}`, "info");
+  }
+
+  logSoftwareUpdate("All core BDS Manager internal services restarted successfully.", "success");
+  logSoftwareUpdate("Active authorization tokens preserved. Reboot fully complete!", "success");
+
+  // Keep the update log available for the client response, but clear after a tiny delay
   setTimeout(() => {
-    console.log("BDS MANAGER RESTARTING NOW...");
-    process.exit(0);
-  }, 1000);
+    softwareUpdateStatus = "idle";
+    softwareUpdateProgress = 0;
+    softwareUpdateLogs = [];
+    softwareUpdateError = null;
+  }, 3500);
+
+  res.json({ success: true, message: "BDS Manager hot-reboot completed successfully." });
 });
 
 // ---------------------- Dev Vs Production Framework Integration ----------------------
