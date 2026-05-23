@@ -1114,27 +1114,99 @@ async function fetchLatestBedrockVersion(folder: string): Promise<{ version: str
     
     if (response.statusCode === 200) {
       const html = response.data;
-      // Search for download links matching official pattern in page source
-      const regex = new RegExp(`(https:\\/\\/www\\.minecraft\\.net\\/bedrockdedicatedserver\\/${folder}\\/bedrock-server-([^"]+?)\\.zip|https:\\/\\/minecraft\\.azureedge\\.net\\/bin-(?:win|linux)\\/${folder}\\/bedrock-server-([^"]+?)\\.zip|https:\\/\\/minecraft\\.azureedge\\.net\\/${folder}\\/bedrock-server-([^"]+?)\\.zip)`, "i");
-      let match = html.match(regex);
-      if (!match) {
-        // Fallback more general regex that captures any bedrock-server-*.zip link
-        const generalRegex = new RegExp(`(https?:\\/\\/[^\\s"']+\\/${folder}\\/bedrock-server-([0-9\\.]+)\\.zip)`, "i");
-        match = html.match(generalRegex);
+      
+      const isVersionNewer = (current: string, remote: string): boolean => {
+        const norm = (v: string) => v.replace(/^v/i, "").split(".").map(Number);
+        const c = norm(current);
+        const r = norm(remote);
+        for (let i = 0; i < Math.max(c.length, r.length); i++) {
+          const cVal = c[i] || 0;
+          const rVal = r[i] || 0;
+          if (rVal > cVal) return true;
+          if (rVal < cVal) return false;
+        }
+        return false;
+      };
+
+      let bestMatch: { url: string; version: string; displayVersion: string } | null = null;
+      let m;
+      // Capture any bedrock-server link ending in .zip, with its version
+      const downloadLinkRegex = /href=["']([^"']+?bedrock-server-([0-9.]+)[^"']*?\.zip)["']/gi;
+      
+      while ((m = downloadLinkRegex.exec(html)) !== null) {
+        let fullUrl = m[1];
+        const rawVersion = m[2];
+        
+        // Resolve relative URLs
+        if (fullUrl.startsWith("/")) {
+          if (fullUrl.startsWith("//")) {
+            fullUrl = "https:" + fullUrl;
+          } else {
+            fullUrl = "https://www.minecraft.net" + fullUrl;
+          }
+        }
+        
+        // Check if the URL matches our specific subfolder folder criteria (e.g. /bin-win/ or /bin-linux-preview/)
+        if (fullUrl.toLowerCase().includes(`/${folder.toLowerCase()}/`)) {
+          const parts = rawVersion.split(".");
+          const displayVersion = parts.length >= 3 ? parts.slice(0, 3).join(".") : rawVersion;
+          
+          if (!bestMatch || isVersionNewer(bestMatch.version, rawVersion)) {
+            bestMatch = { url: fullUrl, version: rawVersion, displayVersion };
+          }
+        }
       }
       
-      if (match) {
-        const fullUrl = match[1];
-        const versionStr = match[2] || match[3] || match[4] || "";
-        if (versionStr) {
-          // Clean version string e.g. 1.21.71.01 -> 1.21.71
-          const parts = versionStr.split(".");
-          const displayVersion = parts.length >= 3 ? parts.slice(0, 3).join(".") : versionStr;
-          return {
-            version: displayVersion,
-            downloadUrl: fullUrl
-          };
+      // Secondary fallback check using looser criteria if exact subfolder matching wasn't found
+      if (!bestMatch) {
+        downloadLinkRegex.lastIndex = 0;
+        while ((m = downloadLinkRegex.exec(html)) !== null) {
+          let fullUrl = m[1];
+          const rawVersion = m[2];
+          
+          if (fullUrl.startsWith("/")) {
+            if (fullUrl.startsWith("//")) {
+              fullUrl = "https:" + fullUrl;
+            } else {
+              fullUrl = "https://www.minecraft.net" + fullUrl;
+            }
+          }
+          
+          const urlLower = fullUrl.toLowerCase();
+          const targetPlatformWin = folder.toLowerCase().includes("win");
+          const wantsPreview = folder.toLowerCase().includes("preview");
+          
+          let platformMatch = false;
+          if (targetPlatformWin) {
+            platformMatch = (urlLower.includes("win") || urlLower.includes("windows")) && !urlLower.includes("linux") && !urlLower.includes("ubuntu");
+          } else {
+            platformMatch = (urlLower.includes("linux") || urlLower.includes("ubuntu")) && !urlLower.includes("win") && !urlLower.includes("windows");
+          }
+          
+          const isPreviewUrl = urlLower.includes("preview");
+          const previewMatch = wantsPreview === isPreviewUrl;
+          
+          if (platformMatch && previewMatch) {
+            const parts = rawVersion.split(".");
+            const displayVersion = parts.length >= 3 ? parts.slice(0, 3).join(".") : rawVersion;
+            
+            if (!bestMatch || isVersionNewer(bestMatch.version, rawVersion)) {
+              bestMatch = { url: fullUrl, version: rawVersion, displayVersion };
+            }
+          }
         }
+      }
+
+      if (bestMatch) {
+        // Return displays, and ensure downloadUrl uses minecraft.azureedge.net to bypass restrictions
+        let downloadUrl = bestMatch.url;
+        if (downloadUrl.includes("www.minecraft.net/bedrockdedicatedserver")) {
+          downloadUrl = downloadUrl.replace("www.minecraft.net/bedrockdedicatedserver", "minecraft.azureedge.net");
+        }
+        return {
+          version: bestMatch.version,
+          downloadUrl
+        };
       }
     }
   } catch (error) {
@@ -1996,62 +2068,72 @@ app.post("/api/tasks/clear", authenticateRequest, (req, res) => {
 app.get("/api/versions", authenticateRequest, async (req, res) => {
   const isWin = process.platform === "win32";
   const folder = isWin ? "bin-win" : "bin-linux";
+  const previewFolder = isWin ? "bin-win-preview" : "bin-linux-preview";
   
   const versions: Array<{ version: string; releaseDate: string; isLatest: boolean; downloadUrl: string }> = [
     {
       version: "1.21.71",
       releaseDate: "2025-05 stable (Latest)",
       isLatest: true,
-      downloadUrl: `https://www.minecraft.net/bedrockdedicatedserver/${folder}/bedrock-server-1.21.71.01.zip`
+      downloadUrl: `https://minecraft.azureedge.net/${folder}/bedrock-server-1.21.71.01.zip`
     },
     {
       version: "1.21.62",
       releaseDate: "2025-03 stable",
       isLatest: false,
-      downloadUrl: `https://www.minecraft.net/bedrockdedicatedserver/${folder}/bedrock-server-1.21.62.01.zip`
+      downloadUrl: `https://minecraft.azureedge.net/${folder}/bedrock-server-1.21.62.01.zip`
     },
     {
       version: "1.21.60",
       releaseDate: "2025-02 stable",
       isLatest: false,
-      downloadUrl: `https://www.minecraft.net/bedrockdedicatedserver/${folder}/bedrock-server-1.21.60.10.zip`
+      downloadUrl: `https://minecraft.azureedge.net/${folder}/bedrock-server-1.21.60.10.zip`
     },
     {
       version: "1.21.50",
       releaseDate: "2024-12",
       isLatest: false,
-      downloadUrl: `https://www.minecraft.net/bedrockdedicatedserver/${folder}/bedrock-server-1.21.50.10.zip`
+      downloadUrl: `https://minecraft.azureedge.net/${folder}/bedrock-server-1.21.50.10.zip`
     },
     {
       version: "1.21.30",
       releaseDate: "2024-10",
       isLatest: false,
-      downloadUrl: `https://www.minecraft.net/bedrockdedicatedserver/${folder}/bedrock-server-1.21.30.03.zip`
+      downloadUrl: `https://minecraft.azureedge.net/${folder}/bedrock-server-1.21.30.03.zip`
     },
     {
       version: "1.20.80",
       releaseDate: "2024-05",
       isLatest: false,
-      downloadUrl: `https://www.minecraft.net/bedrockdedicatedserver/${folder}/bedrock-server-1.20.80.05.zip`
+      downloadUrl: `https://minecraft.azureedge.net/${folder}/bedrock-server-1.20.80.05.zip`
     }
   ];
 
+  // Try scraping the latest stable release
   try {
-    const scraped = await fetchLatestBedrockVersion(folder);
-    if (scraped) {
-      const existsIdx = versions.findIndex(v => v.version === scraped.version);
+    const scrapedStable = await fetchLatestBedrockVersion(folder);
+    if (scrapedStable) {
+      const existsIdx = versions.findIndex(v => v.version === scrapedStable.version);
       if (existsIdx === -1) {
-        versions.forEach(v => v.isLatest = false);
+        versions.forEach(v => {
+          if (!v.releaseDate.includes("preview") && !v.releaseDate.includes("Preview")) {
+            v.isLatest = false;
+          }
+        });
         versions.unshift({
-          version: scraped.version,
-          releaseDate: "Official Dynamic (Latest)",
+          version: scrapedStable.version,
+          releaseDate: "Official Dynamic Stable (Latest)",
           isLatest: true,
-          downloadUrl: scraped.downloadUrl
+          downloadUrl: scrapedStable.downloadUrl
         });
       } else {
-        versions.forEach(v => v.isLatest = false);
+        versions.forEach(v => {
+          if (!v.releaseDate.includes("preview") && !v.releaseDate.includes("Preview")) {
+            v.isLatest = false;
+          }
+        });
         versions[existsIdx].isLatest = true;
-        versions[existsIdx].downloadUrl = scraped.downloadUrl;
+        versions[existsIdx].downloadUrl = scrapedStable.downloadUrl;
         if (!versions[existsIdx].releaseDate.includes("(Latest)")) {
           versions[existsIdx].releaseDate += " (Latest)";
         }
@@ -2061,7 +2143,31 @@ app.get("/api/versions", authenticateRequest, async (req, res) => {
       }
     }
   } catch (err) {
-    console.warn("Failed retrieving latest Bedrock release dynamically: ", err);
+    console.warn("Failed retrieving latest Bedrock stable release dynamically: ", err);
+  }
+
+  // Try scraping the latest preview/beta release
+  try {
+    const scrapedPreview = await fetchLatestBedrockVersion(previewFolder);
+    if (scrapedPreview) {
+      const existsIdx = versions.findIndex(v => v.version === scrapedPreview.version);
+      if (existsIdx === -1) {
+        // Unshift right after the latest stable version if possible, or build at top
+        versions.unshift({
+          version: scrapedPreview.version,
+          releaseDate: "Official Dynamic Preview (Latest Beta)",
+          isLatest: false,
+          downloadUrl: scrapedPreview.downloadUrl
+        });
+      } else {
+        versions[existsIdx].downloadUrl = scrapedPreview.downloadUrl;
+        if (!versions[existsIdx].releaseDate.includes("Preview") && !versions[existsIdx].releaseDate.includes("Beta")) {
+          versions[existsIdx].releaseDate += " (Preview Beta)";
+        }
+      }
+    }
+  } catch (err) {
+    console.warn("Failed retrieving latest Bedrock preview release dynamically: ", err);
   }
 
   res.json(versions);
