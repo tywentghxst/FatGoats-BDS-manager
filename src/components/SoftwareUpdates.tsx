@@ -29,7 +29,7 @@ interface UpdateStatus {
 }
 
 export default function SoftwareUpdates({ token, onShowMessage }: SoftwareUpdatesProps) {
-  const [currentVersion, setCurrentVersion] = useState("v1.3.0");
+  const [currentVersion, setCurrentVersion] = useState("Scanning...");
   const [checking, setChecking] = useState(false);
   const [updateInfo, setUpdateInfo] = useState<UpdateStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -269,11 +269,11 @@ export default function SoftwareUpdates({ token, onShowMessage }: SoftwareUpdate
           <button
             onClick={handleApplyUpdate}
             disabled={applying}
-            className="w-full md:w-auto px-8 py-5 bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 disabled:from-zinc-800 disabled:to-zinc-850 text-white font-extrabold text-sm rounded-2xl shadow-lg hover:shadow-emerald-500/20 hover:scale-[1.02] active:scale-[0.98] transition-all inline-flex items-center justify-center gap-3 cursor-pointer shrink-0 duration-300"
+            className="w-full md:w-auto px-10 py-5.5 bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-400 hover:from-emerald-400 hover:to-teal-300 disabled:from-zinc-800 disabled:to-zinc-850 text-zinc-950 font-black text-sm rounded-2xl shadow-[0_0_25px_rgba(16,185,129,0.4)] hover:shadow-[0_0_40px_rgba(16,185,129,0.73)] border border-emerald-300/40 hover:scale-[1.04] active:scale-[0.97] transition-all inline-flex items-center justify-center gap-3.5 cursor-pointer shrink-0 duration-300"
           >
             {applying ? (
               <>
-                <RefreshCw className="w-5 h-5 animate-spin text-white" />
+                <RefreshCw className="w-5 h-5 animate-spin text-zinc-950 stroke-[2.5px]" />
                 INITIATING SYSTEM UPGRADE...
               </>
             ) : (

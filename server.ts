@@ -3101,7 +3101,8 @@ function startPlayitProcess() {
       return;
     }
 
-    playitProcess = spawn(PLAYIT_BIN, [], {
+    const secretPath = path.join(PLAYIT_DIR, "playit.toml");
+    playitProcess = spawn(PLAYIT_BIN, ["--secret-path", secretPath], {
       cwd: PLAYIT_DIR,
       env: { ...process.env }
     });
@@ -3618,26 +3619,15 @@ app.post("/api/updates/restart", authenticateRequest, (req, res) => {
 
   logSoftwareUpdate("Gracefully terminated active companion and BDS child processes.", "info");
 
-  // Reload configurations on the fly
-  try {
-    loadDB();
-    logSoftwareUpdate("Reloaded application database and fresh schemas successfully.", "success");
-  } catch (err: any) {
-    logSoftwareUpdate(`Database reload warning: ${err.message}`, "info");
-  }
+  logSoftwareUpdate("Initiating true hardware/container level restart to apply updated server modules and scripts...", "info");
 
-  logSoftwareUpdate("All core BDS Manager internal services restarted successfully.", "success");
-  logSoftwareUpdate("Active authorization tokens preserved. Reboot fully complete!", "success");
+  res.json({ success: true, message: "Server shutting down for a clean full process restart." });
 
-  // Keep the update log available for the client response, but clear after a tiny delay
+  // Physically exit process so container/host wrapper reboots the program cleanly
   setTimeout(() => {
-    softwareUpdateStatus = "idle";
-    softwareUpdateProgress = 0;
-    softwareUpdateLogs = [];
-    softwareUpdateError = null;
-  }, 3500);
-
-  res.json({ success: true, message: "BDS Manager hot-reboot completed successfully." });
+    console.log("BDS MANAGER RESTARTING NOW (PROCESS EXIT)...");
+    process.exit(0);
+  }, 1200);
 });
 
 // ---------------------- Dev Vs Production Framework Integration ----------------------
