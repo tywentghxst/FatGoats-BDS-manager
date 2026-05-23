@@ -369,6 +369,7 @@ export default function App() {
   const [editAddonDownloadUrl, setEditAddonDownloadUrl] = useState("");
   const [isSavingAddon, setIsSavingAddon] = useState(false);
   const [updatingAddonUuid, setUpdatingAddonUuid] = useState<string | null>(null);
+  const [tasksWidgetExpanded, setTasksWidgetExpanded] = useState(true);
 
   // File editor states
   const [propertiesTab, setPropertiesTab] = useState<"gui" | "files">("gui");
@@ -4271,6 +4272,82 @@ export default function App() {
           </form>
         </div>
       )}
+
+      {/* Real-time Floating Active tasks progress overlay panel */}
+      {(() => {
+        const runningTasks = activeTasks.filter(t => t.status === "running" || t.status === "pending" || t.status === "starting" || t.status === "downloading");
+        if (runningTasks.length === 0) return null;
+
+        if (!tasksWidgetExpanded) {
+          return (
+            <div 
+              onClick={() => setTasksWidgetExpanded(true)}
+              className="fixed bottom-6 right-6 z-[9999] px-5 py-3 rounded-2xl bg-emerald-600 border border-emerald-500 text-white font-bold text-xs flex items-center gap-3 shadow-2xl shadow-emerald-950/50 cursor-pointer hover:bg-emerald-500 transition-all hover:scale-105 active:scale-95 animate-fade-in"
+            >
+              <div className="w-2 h-2 rounded-full bg-white animate-ping" />
+              <span>{runningTasks.length} Active Task{runningTasks.length > 1 ? "s" : ""} in Progress... ({runningTasks[0]?.progress || 0}%)</span>
+            </div>
+          );
+        }
+
+        return (
+          <div className="fixed bottom-6 right-6 z-[9999] w-96 max-w-[calc(100vw-3rem)] rounded-2xl bg-zinc-950/95 border border-emerald-500/30 shadow-2xl shadow-emerald-950/20 backdrop-blur-md text-white select-none animate-fade-in flex flex-col overflow-hidden">
+            <div className="px-5 py-4 bg-zinc-900 border-b border-zinc-850 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                <h4 className="text-xs font-black uppercase tracking-widest text-zinc-200">Server Tasks Progress</h4>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setTasksWidgetExpanded(false)}
+                  className="p-1 text-zinc-500 hover:text-zinc-300 rounded hover:bg-zinc-850 transition-all text-[10px] uppercase font-bold cursor-pointer"
+                  title="Minimize"
+                >
+                  Minimize
+                </button>
+              </div>
+            </div>
+
+            <div className="p-5 max-h-80 overflow-y-auto space-y-4">
+              {runningTasks.map((t, idx) => (
+                <div key={t.id || idx} className="space-y-2.5">
+                  <div className="flex justify-between items-start gap-2">
+                    <div className="min-w-0 flex-1">
+                      <h5 className="text-xs font-bold text-white truncate">{t.name}</h5>
+                      <span className="text-[10px] text-zinc-500 truncate block mt-0.5">{t.description}</span>
+                    </div>
+                    <span className="text-xs font-mono font-bold text-emerald-400 shrink-0">{t.progress || 0}%</span>
+                  </div>
+
+                  <div className="w-full bg-zinc-900 border border-zinc-850/50 h-2 rounded-full overflow-hidden relative">
+                    <div
+                      className="bg-emerald-500 h-full rounded-full transition-all duration-300"
+                      style={{ width: `${t.progress || 0}%` }}
+                    />
+                  </div>
+
+                  <div className="flex justify-between items-center text-[10px]">
+                    <span className="text-zinc-400 italic font-medium truncate max-w-[80%]">{t.message || "Working..."}</span>
+                    <span className="text-[9px] uppercase tracking-wider text-amber-400 font-extrabold animate-pulse">{t.status}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="px-5 py-3 bg-zinc-900/40 border-t border-zinc-900/60 text-[10px] text-zinc-500 flex justify-between items-center">
+              <span>Auto-updates in real-time</span>
+              <button 
+                type="button"
+                onClick={() => setNavTab("tasks_history")}
+                className="text-emerald-500 hover:text-emerald-400 font-bold cursor-pointer"
+              >
+                View History
+              </button>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

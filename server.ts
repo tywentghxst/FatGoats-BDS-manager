@@ -2345,10 +2345,34 @@ function startBroadcasterProcess() {
     broadcasterStatus = "starting";
     logBroadcasterMessage("SYS", "Launching Console Connect companion process...");
     
-    broadcasterProcess = spawn("java", ["-jar", BROADCASTER_JAR], {
-      cwd: BROADCASTER_DIR,
-      env: { ...process.env }
-    });
+    if (process.platform === "win32") {
+      logBroadcasterMessage("SYS", "Running on Windows. Launching companion bridge in its own separate command prompt window...");
+      logBroadcasterMessage("SYS", "==========================================================");
+      logBroadcasterMessage("SYS", "  WINDOWS RUNTIME DETECTED!");
+      logBroadcasterMessage("SYS", "  The Companion Bridge is launching in a new Command Prompt window.");
+      logBroadcasterMessage("SYS", "  - Locate the newly opened CMD window on your taskbar/desktop.");
+      logBroadcasterMessage("SYS", "  - It contains the Microsoft Link & Xbox Live Pairing Code.");
+      logBroadcasterMessage("SYS", "  - Keep that window open; closing it stops the bridge.");
+      logBroadcasterMessage("SYS", "==========================================================");
+
+      broadcasterProcess = spawn("cmd.exe", [
+        "/c",
+        "start",
+        "Console Connect Bridge",
+        "/wait",
+        "java",
+        "-jar",
+        "Broadcaster.jar"
+      ], {
+        cwd: BROADCASTER_DIR,
+        env: { ...process.env }
+      });
+    } else {
+      broadcasterProcess = spawn("java", ["-jar", BROADCASTER_JAR], {
+        cwd: BROADCASTER_DIR,
+        env: { ...process.env }
+      });
+    }
 
     logBroadcasterMessage("SYS", "Spawned Broadcaster JVM instance.");
 
