@@ -251,6 +251,296 @@ let ramUsageVal = 0;
 let tpsVal = 20.0;
 let simulatedPlayers: Array<{ name: string; ping: number; joinedAt: string }> = [];
 
+// Rich global player database with inventories, coordinates, dimensions, ops, bans
+let allPlayers: Array<any> = [
+  {
+    name: "Steve",
+    online: true,
+    ping: 35,
+    joinedAt: new Date(Date.now() - 3600000).toISOString(),
+    lastPlayed: new Date().toISOString(),
+    isOp: false,
+    isBanned: false,
+    x: 120,
+    y: 68,
+    z: -250,
+    dimension: "Overworld",
+    health: 20,
+    xp: 14,
+    hunger: 18,
+    inventory: [
+      { slot: 0, id: "diamond_sword", name: "Diamond Sword", count: 1 },
+      { slot: 1, id: "iron_pickaxe", name: "Iron Pickaxe", count: 1 },
+      { slot: 2, id: "cooked_beef", name: "Cooked Beef", count: 32 },
+      { slot: 3, id: "cobblestone", name: "Cobblestone", count: 64 },
+      { slot: 4, id: "oak_log", name: "Oak Log", count: 16 },
+      { slot: 9, id: "torch", name: "Torch", count: 48 },
+      { slot: 10, id: "water_bucket", name: "Water Bucket", count: 1 },
+      { slot: 11, id: "bed", name: "Red Bed", count: 1 },
+      { slot: 35, id: "coal", name: "Coal", count: 12 }
+    ],
+    armor: {
+      helmet: { id: "iron_helmet", name: "Iron Helmet" },
+      chestplate: { id: "iron_chestplate", name: "Iron Chestplate" },
+      leggings: { id: "iron_leggings", name: "Iron Leggings" },
+      boots: { id: "iron_boots", name: "Iron Boots" }
+    },
+    enderChest: [
+      { slot: 0, id: "golden_apple", name: "Golden Apple", count: 5 },
+      { slot: 1, id: "diamond", name: "Diamond", count: 16 },
+      { slot: 2, id: "obsidian", name: "Obsidian", count: 10 },
+      { slot: 13, id: "totem_of_undying", name: "Totem of Undying", count: 1 }
+    ]
+  },
+  {
+    name: "Alex",
+    online: false,
+    ping: 0,
+    joinedAt: new Date(Date.now() - 7200000).toISOString(),
+    lastPlayed: new Date(Date.now() - 300000).toISOString(),
+    isOp: false,
+    isBanned: false,
+    x: -45,
+    y: 72,
+    z: 82,
+    dimension: "Overworld",
+    health: 18,
+    xp: 22,
+    hunger: 15,
+    inventory: [
+      { slot: 0, id: "bow", name: "Bow", count: 1 },
+      { slot: 1, id: "arrow", name: "Arrow", count: 64 },
+      { slot: 2, id: "golden_apple", name: "Golden Apple", count: 4 },
+      { slot: 3, id: "diamond_axe", name: "Diamond Axe", count: 1 },
+      { slot: 4, id: "pumpkin_pie", name: "Pumpkin Pie", count: 8 },
+      { slot: 12, id: "oak_log", name: "Oak Log", count: 32 },
+      { slot: 15, id: "feather", name: "Feather", count: 12 }
+    ],
+    armor: {
+      helmet: { id: "leather_helmet", name: "Leather Cap" },
+      chestplate: { id: "leather_chestplate", name: "Leather Tunic" },
+      leggings: { id: "leather_leggings", name: "Leather Pants" },
+      boots: { id: "leather_boots", name: "Leather Boots" }
+    },
+    enderChest: [
+      { slot: 0, id: "enchanted_golden_apple", name: "Notch Apple", count: 2 },
+      { slot: 1, id: "netherite_ingot", name: "Netherite Ingot", count: 4 }
+    ]
+  },
+  {
+    name: "CreeperHunter",
+    online: false,
+    ping: 0,
+    joinedAt: new Date(Date.now() - 15000000).toISOString(),
+    lastPlayed: new Date(Date.now() - 1000000).toISOString(),
+    isOp: false,
+    isBanned: false,
+    x: 350,
+    y: 64,
+    z: 1200,
+    dimension: "Overworld",
+    health: 20,
+    xp: 5,
+    hunger: 20,
+    inventory: [
+      { slot: 0, id: "diamond_sword", name: "Diamond Sword", count: 1 },
+      { slot: 1, id: "bow", name: "Bow", count: 1 },
+      { slot: 2, id: "tnt", name: "TNT", count: 16 },
+      { slot: 3, id: "flint_and_steel", name: "Flint & Steel", count: 1 },
+      { slot: 4, id: "gunpowder", name: "Gunpowder", count: 24 }
+    ],
+    armor: {
+      helmet: { id: "diamond_helmet", name: "Diamond Helmet" },
+      chestplate: { id: "diamond_chestplate", name: "Diamond Chestplate" },
+      leggings: { id: "diamond_leggings", name: "Diamond Leggings" },
+      boots: { id: "diamond_boots", name: "Diamond Boots" }
+    },
+    enderChest: [
+      { slot: 0, id: "elytra", name: "Elytra", count: 1 }
+    ]
+  },
+  {
+    name: "DiamondDigger",
+    online: false,
+    ping: 0,
+    joinedAt: new Date(Date.now() - 40000000).toISOString(),
+    lastPlayed: new Date(Date.now() - 5000000).toISOString(),
+    isOp: false,
+    isBanned: false,
+    x: 450,
+    y: -12,
+    z: -420,
+    dimension: "Overworld",
+    health: 12,
+    xp: 45,
+    hunger: 10,
+    inventory: [
+      { slot: 0, id: "netherite_pickaxe", name: "Netherite Pickaxe", count: 1 },
+      { slot: 1, id: "torch", name: "Torch", count: 64 },
+      { slot: 2, id: "iron_ore", name: "Raw Iron", count: 48 },
+      { slot: 3, id: "diamond", name: "Diamond", count: 8 },
+      { slot: 4, id: "cobblestone", name: "Cobblestone", count: 64 },
+      { slot: 5, id: "redstone", name: "Redstone Dust", count: 64 }
+    ],
+    armor: {
+      helmet: { id: "iron_helmet", name: "Iron Helmet" },
+      chestplate: { id: "diamond_chestplate", name: "Diamond Chestplate" },
+      leggings: { id: "iron_leggings", name: "Iron Leggings" },
+      boots: { id: "iron_boots", name: "Iron Boots" }
+    },
+    enderChest: [
+      { slot: 0, id: "diamond_block", name: "Diamond Block", count: 3 }
+    ]
+  },
+  {
+    name: "BedrockPro",
+    online: false,
+    ping: 0,
+    joinedAt: new Date(Date.now() - 50000000).toISOString(),
+    lastPlayed: new Date(Date.now() - 8000000).toISOString(),
+    isOp: false,
+    isBanned: false,
+    x: -80,
+    y: 110,
+    z: -40,
+    dimension: "Nether",
+    health: 20,
+    xp: 88,
+    hunger: 20,
+    inventory: [
+      { slot: 0, id: "diamond_sword", name: "Diamond Sword", count: 1 },
+      { slot: 1, id: "obsidian", name: "Obsidian", count: 20 },
+      { slot: 2, id: "golden_apple", name: "Golden Apple", count: 64 },
+      { slot: 3, id: "water_bucket", name: "Water Bucket", count: 1 },
+      { slot: 4, id: "ender_pearl", name: "Ender Pearl", count: 16 }
+    ],
+    armor: {
+      helmet: { id: "netherite_helmet", name: "Netherite Helmet" },
+      chestplate: { id: "netherite_chestplate", name: "Netherite Chestplate" },
+      leggings: { id: "netherite_leggings", name: "Netherite Leggings" },
+      boots: { id: "netherite_boots", name: "Netherite Boots" }
+    },
+    enderChest: [
+      { slot: 0, id: "ancient_debris", name: "Ancient Debris", count: 8 },
+      { slot: 1, id: "blaze_rod", name: "Blaze Rod", count: 12 }
+    ]
+  },
+  {
+    name: "GamerX",
+    online: false,
+    ping: 0,
+    joinedAt: new Date(Date.now() - 60000000).toISOString(),
+    lastPlayed: new Date(Date.now() - 10000000).toISOString(),
+    isOp: false,
+    isBanned: false,
+    x: 1100,
+    y: 75,
+    z: -80,
+    dimension: "The End",
+    health: 20,
+    xp: 102,
+    hunger: 19,
+    inventory: [
+      { slot: 0, id: "diamond_sword", name: "Gamer Sword", count: 1 },
+      { slot: 1, id: "dragon_egg", name: "Dragon Egg", count: 1 },
+      { slot: 2, id: "shulker_shell", name: "Shulker Shell", count: 6 },
+      { slot: 3, id: "chorus_fruit", name: "Chorus Fruit", count: 42 }
+    ],
+    armor: {
+      helmet: { id: "diamond_helmet", name: "Diamond Helmet" },
+      chestplate: { id: "elytra", name: "Elytra" },
+      leggings: { id: "diamond_leggings", name: "Diamond Leggings" },
+      boots: { id: "diamond_boots", name: "Diamond Boots" }
+    },
+    enderChest: [
+      { slot: 0, id: "elytra", name: "Backup Elytra", count: 1 }
+    ]
+  },
+  {
+    name: "Herobrine",
+    online: false,
+    ping: 0,
+    joinedAt: new Date(Date.now() - 100000000).toISOString(),
+    lastPlayed: new Date(Date.now() - 20000000).toISOString(),
+    isOp: false,
+    isBanned: true,
+    x: 0,
+    y: 66,
+    z: 0,
+    dimension: "Overworld",
+    health: 20,
+    xp: 666,
+    hunger: 20,
+    inventory: [
+      { slot: 0, id: "redstone_torch", name: "Redstone Torch", count: 64 },
+      { slot: 1, id: "netherrack", name: "Netherrack", count: 64 }
+    ],
+    armor: {
+      helmet: null,
+      chestplate: null,
+      leggings: null,
+      boots: null
+    },
+    enderChest: [
+      { slot: 0, id: "bedrock", name: "Bedrock", count: 64 }
+    ]
+  },
+  {
+    name: "Notch",
+    online: false,
+    ping: 0,
+    joinedAt: new Date(Date.now() - 1200000000).toISOString(),
+    lastPlayed: new Date(Date.now() - 400000000).toISOString(),
+    isOp: true,
+    isBanned: false,
+    x: 10,
+    y: 100,
+    z: 10,
+    dimension: "Overworld",
+    health: 20,
+    xp: 999,
+    hunger: 20,
+    inventory: [
+      { slot: 0, id: "golden_apple", name: "Notch Apple", count: 64 }
+    ],
+    armor: {
+      helmet: null,
+      chestplate: null,
+      leggings: null,
+      boots: null
+    },
+    enderChest: []
+  },
+  {
+    name: "Jeb_",
+    online: true,
+    ping: 15,
+    joinedAt: new Date(Date.now() - 500000).toISOString(),
+    lastPlayed: new Date().toISOString(),
+    isOp: true,
+    isBanned: false,
+    x: 15,
+    y: 75,
+    z: -34,
+    dimension: "Overworld",
+    health: 20,
+    xp: 50,
+    hunger: 20,
+    inventory: [
+      { slot: 0, id: "shears", name: "Shears", count: 1 },
+      { slot: 1, id: "pink_wool", name: "Pink Wool", count: 64 },
+      { slot: 2, id: "command_block", name: "Command Block", count: 1 }
+    ],
+    armor: {
+      helmet: null,
+      chestplate: { id: "golden_chestplate", name: "Golden Chestplate" },
+      leggings: null,
+      boots: null
+    },
+    enderChest: []
+  }
+];
+
 // Helper helper for simulation log ticks
 function startSimulationTicks() {
   if (simulatedStatsInterval) clearInterval(simulatedStatsInterval);
@@ -260,6 +550,21 @@ function startSimulationTicks() {
       ramUsageVal = parseFloat((1.5 + Math.random() * 1.8).toFixed(2));
       tpsVal = parseFloat((19.5 + Math.random() * 0.5).toFixed(1));
 
+      // Coordinate random movement simulation for live list
+      allPlayers.forEach(p => {
+        if (p.online) {
+          p.x += Math.floor(Math.random() * 9) - 4;
+          p.z += Math.floor(Math.random() * 9) - 4;
+          if (Math.random() < 0.2) {
+            p.y = Math.max(-64, Math.min(320, p.y + (Math.random() > 0.5 ? 1 : -1)));
+          }
+          if (Math.random() < 0.1) {
+            p.health = Math.max(1, Math.min(20, p.health + (Math.random() > 0.7 ? 1 : -1)));
+            p.hunger = Math.max(5, Math.min(20, p.hunger + (Math.random() > 0.7 ? 1 : -1)));
+          }
+        }
+      });
+
       // Occasionally add or remove players for realistic log history
       if (Math.random() < 0.15) {
         const potentialNames = ["Steve", "Alex", "CreeperHunter", "DiamondDigger", "NoobSlayer99", "BedrockPro", "GamerX"];
@@ -268,15 +573,32 @@ function startSimulationTicks() {
           const unusedNames = potentialNames.filter(n => !simulatedPlayers.some(p => p.name === n));
           if (unusedNames.length > 0) {
             const chosenName = unusedNames[Math.floor(Math.random() * unusedNames.length)];
-            simulatedPlayers.push({ name: chosenName, ping: Math.floor(10 + Math.random() * 80), joinedAt: new Date().toISOString() });
-            logServerMessage("PLAYER", `${chosenName} joined the game.`);
+            const pingVal = Math.floor(5 + Math.random() * 75);
+            simulatedPlayers.push({ name: chosenName, ping: pingVal, joinedAt: new Date().toISOString() });
+            
+            // Sync with allPlayers rich details
+            const pObj = allPlayers.find(p => p.name.toLowerCase() === chosenName.toLowerCase());
+            if (pObj && !pObj.isBanned) {
+              pObj.online = true;
+              pObj.ping = pingVal;
+              pObj.joinedAt = new Date().toISOString();
+              pObj.lastPlayed = new Date().toISOString();
+              logServerMessage("PLAYER", `${chosenName} joined the game.`);
+            }
           }
         } else if (simulatedPlayers.length > 0) {
           // Remove a player
           const removeIdx = Math.floor(Math.random() * simulatedPlayers.length);
           const leavingPlayer = simulatedPlayers[removeIdx];
           simulatedPlayers.splice(removeIdx, 1);
-          logServerMessage("PLAYER", `${leavingPlayer.name} left the game.`);
+          
+          // Sync offline list
+          const pObj = allPlayers.find(p => p.name.toLowerCase() === leavingPlayer.name.toLowerCase());
+          if (pObj) {
+            pObj.online = false;
+            pObj.ping = 0;
+            logServerMessage("PLAYER", `${leavingPlayer.name} left the game.`);
+          }
         }
       }
 
@@ -1523,6 +1845,75 @@ app.post("/api/console", authenticateRequest, (req, res) => {
   }
 
   res.json({ success: true });
+});
+
+// GET Player list
+app.get("/api/players", authenticateRequest, (req, res) => {
+  // If server is not running, all players must be shown as offline
+  const list = allPlayers.map(p => ({
+    ...p,
+    online: serverStatus === "running" ? p.online : false,
+    ping: serverStatus === "running" ? p.ping : 0
+  }));
+  res.json(list);
+});
+
+// POST Player commands and actions (Op, De-op, Kick, Ban, Unban)
+app.post("/api/players/control", authenticateRequest, (req, res) => {
+  const { name, action } = req.body;
+  if (!name || !action) {
+    res.status(400).json({ error: "Missing name or action." });
+    return;
+  }
+
+  const player = allPlayers.find(p => p.name.toLowerCase() === name.toLowerCase());
+  if (!player) {
+    res.status(404).json({ error: "Player not found." });
+    return;
+  }
+
+  if (serverStatus !== "running" && action !== "unban") {
+    res.status(400).json({ error: "Cannot execute moderation on players while the server is offline." });
+    return;
+  }
+
+  // Handle actions
+  if (action === "op") {
+    player.isOp = true;
+    logServerMessage("SYS", `[Console] Opped player ${player.name}`);
+    if (serverProcess && !dbCache.appConfig.simulationMode) {
+      serverProcess.stdin.write(`op ${player.name}\n`);
+    }
+  } else if (action === "deop") {
+    player.isOp = false;
+    logServerMessage("SYS", `[Console] De-opped player ${player.name}`);
+    if (serverProcess && !dbCache.appConfig.simulationMode) {
+      serverProcess.stdin.write(`deop ${player.name}\n`);
+    }
+  } else if (action === "kick") {
+    player.online = false;
+    simulatedPlayers = simulatedPlayers.filter(p => p.name.toLowerCase() !== name.toLowerCase());
+    logServerMessage("PLAYER", `${player.name} was kicked from the server.`);
+    if (serverProcess && !dbCache.appConfig.simulationMode) {
+      serverProcess.stdin.write(`kick ${player.name}\n`);
+    }
+  } else if (action === "ban") {
+    player.isBanned = true;
+    player.online = false;
+    simulatedPlayers = simulatedPlayers.filter(p => p.name.toLowerCase() !== name.toLowerCase());
+    logServerMessage("PLAYER", `${player.name} was banned from the server.`);
+    if (serverProcess && !dbCache.appConfig.simulationMode) {
+      serverProcess.stdin.write(`ban ${player.name}\n`);
+    }
+  } else if (action === "unban") {
+    player.isBanned = false;
+    logServerMessage("SYS", `[Console] Pardoned/Unbanned player ${player.name}`);
+    if (serverProcess && !dbCache.appConfig.simulationMode) {
+      serverProcess.stdin.write(`pardon ${player.name}\n`);
+    }
+  }
+
+  res.json({ success: true, player });
 });
 
 // Active Tasks

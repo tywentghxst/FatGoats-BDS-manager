@@ -50,7 +50,9 @@ import {
   Bomb,
   Grid,
   Menu,
-  X
+  X,
+  Map,
+  MapPin
 } from "lucide-react";
 
 import {
@@ -69,6 +71,7 @@ import {
 import ConsoleConnect from "./components/ConsoleConnect";
 import SoftwareUpdates from "./components/SoftwareUpdates";
 import PlayitConnect from "./components/PlayitConnect";
+import PlayersMap from "./components/PlayersMap";
 
 const ICON_MAP: Record<string, React.ComponentType<any>> = {
   Sun,
@@ -215,7 +218,7 @@ export default function App() {
   const [authError, setAuthError] = useState("");
 
   // Menu Navigation Tab (Dashboard, Players, Settings, Console, Users, Selfhost Guides)
-  const [navTab, setNavTab] = useState<"dashboard" | "addons" | "worlds" | "console" | "users" | "selfhost" | "console_connect" | "updates" | "tasks_history" | "quick_commands" | "properties">("dashboard");
+  const [navTab, setNavTab] = useState<"dashboard" | "addons" | "worlds" | "console" | "users" | "selfhost" | "console_connect" | "updates" | "tasks_history" | "quick_commands" | "properties" | "players_map">("dashboard");
   const [guideMode, setGuideMode] = useState<"windows" | "docker">("windows");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -1586,6 +1589,19 @@ export default function App() {
           </button>
 
           <button
+            id="nav-players-map"
+            onClick={() => setNavTab("players_map")}
+            className={`w-full px-4 py-2.5 rounded-xl flex items-center gap-3 text-sm font-medium transition-all ${
+              navTab === "players_map"
+                ? "bg-emerald-950/40 text-emerald-400 shadow-md border border-emerald-800/40 font-bold"
+                : "text-zinc-400 hover:bg-zinc-800/20 hover:text-zinc-300"
+            }`}
+          >
+            <Map className="w-4 h-4 text-emerald-400 opacity-100" />
+            Players & Live Map
+          </button>
+
+          <button
             id="nav-console"
             onClick={() => setNavTab("console")}
             className={`w-full px-4 py-2.5 rounded-xl flex items-center gap-3 text-sm font-medium transition-all ${
@@ -1870,6 +1886,7 @@ export default function App() {
                   { id: "dashboard", label: "Dashboard Space", icon: Activity, color: "text-emerald-500" },
                   { id: "addons", label: "Addons & Packs", icon: Layers, color: "text-emerald-500" },
                   { id: "worlds", label: "Worlds Vault", icon: FolderOpen, color: "text-emerald-400" },
+                  { id: "players_map", label: "Players & Live Map", icon: Map, color: "text-emerald-400" },
                   { id: "console", label: "Live Terminals", icon: Terminal, color: "text-emerald-400" },
                   { id: "quick_commands", label: "Quick Commands", icon: Grid, color: "text-amber-500" },
                   { id: "properties", label: "Server Properties", icon: Settings, color: "text-emerald-500" },
@@ -2384,6 +2401,11 @@ export default function App() {
               </div>
             );
           })()}
+
+          {/* ==================== PLAYERS & TACTICAL MAP VIEW ==================== */}
+          {navTab === "players_map" && (
+            <PlayersMap token={token} onShowMessage={showBanner} />
+          )}
 
           {/* ==================== B. ADDONS & PACKS MANAGER VIEW ==================== */}
           {navTab === "addons" && (
