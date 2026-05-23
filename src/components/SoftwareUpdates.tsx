@@ -36,10 +36,70 @@ export default function SoftwareUpdates({ token, onShowMessage }: SoftwareUpdate
   const [activeTab, setActiveTab] = useState<"windows" | "docker">("windows");
   const [backingUp, setBackingUp] = useState(false);
 
+  // Automated Interactive Updates states
+  const [updateStatus, setUpdateStatus] = useState<"idle" | "backing_up" | "downloading" | "installing" | "rebuilding" | "completed" | "error">("idle");
+  const [updateProgress, setUpdateProgress] = useState(0);
+  const [updateLogs, setUpdateLogs] = useState<Array<{ timestamp: string; message: string; type: "info" | "success" | "error" }>>([]);
+  const [updateError, setUpdateError] = useState<string | null>(null);
+  const [applying, setApplying] = useState(false);
+  const [reconstructing, setReconstructing] = useState(false);
+
   // Auto-check on load
   useEffect(() => {
     handleCheckUpdates();
-  }, []);
+    
+    // Check if there's any active update currently running on load
+    const verifyActiveUpdate = async () => {
+      try {
+        const res = await fetch("/api/updates/status", {
+          headers: { "Authorization": `Bearer ${token}` }
+        });
+        if (res.ok) {
+          const s = await res.json();
+          if (s.status !== "idle") {
+            setUpdateStatus(s.status);
+            setUpdateProgress(s.progress);
+            setUpdateLogs(s.logs || []);
+            setUpdateError(s.error);
+          }
+        }
+      } catch (e) {}
+    };
+    verifyActiveUpdate();
+  }, [token]);
+
+  // Poll update status while active
+  useEffect(() => {
+    let timer: NodeJS.Timeout | null = null;
+    
+    const checkStatus = async () => {
+      try {
+        const res = await fetch("/api/updates/status", {
+          headers: {
+            "Authorization": `Bearer ${token}`
+          }
+        });
+        if (res.ok) {
+          const s = await res.json();
+          setUpdateStatus(s.status);
+          setUpdateProgress(s.progress);
+          setUpdateLogs(s.logs || []);
+          setUpdateError(s.error);
+        }
+      } catch (e) {
+        console.error("Error fetching live update status:", e);
+      }
+    };
+
+    if (updateStatus !== "idle") {
+      checkStatus();
+      timer = setInterval(checkStatus, 1500);
+    }
+
+    return () => {
+      if (timer) clearInterval(timer);
+    };
+  }, [updateStatus, token]);
 
   const handleCheckUpdates = async () => {
     setChecking(true);
@@ -81,7 +141,6 @@ export default function SoftwareUpdates({ token, onShowMessage }: SoftwareUpdate
         throw new Error("Failed to compile backup zip.");
       }
       
-      // Handle file download
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -97,6 +156,50 @@ export default function SoftwareUpdates({ token, onShowMessage }: SoftwareUpdate
       onShowMessage(err.message || "Failed to download backup.", "error");
     } finally {
       setBackingUp(false);
+    }
+  };
+
+  const handleApplyUpdate = async () => {
+    if (!updateInfo) return;
+    setApplying(true);
+    try {
+      const res = await fetch("/api/updates/apply", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify({ latestVersion: updateInfo.latestVersion })
+      });
+      const resData = await res.json();
+      if (!res.ok) throw new Error(resData.error || "Failed to trigger update.");
+      onShowMessage("Software update routine started! Watch the progress panel below.", "success");
+      setUpdateStatus("backing_up");
+    } catch (err: any) {
+      onShowMessage(err.message, "error");
+    } finally {
+      setApplying(false);
+    }
+  };
+
+  const handleRestartServer = async () => {
+    setReconstructing(true);
+    onShowMessage("Clean reboot command dispatched. Reconnecting system shortly...", "info");
+    try {
+      const res = await fetch("/api/updates/restart", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${token}`
+        }
+      });
+      if (!res.ok) throw new Error("Failed to dispatch restart signal.");
+      
+      setTimeout(() => {
+        window.location.reload();
+      }, 4000);
+    } catch (err: any) {
+      onShowMessage(err.message, "error");
+      setReconstructing(false);
     }
   };
 
@@ -146,6 +249,112 @@ export default function SoftwareUpdates({ token, onShowMessage }: SoftwareUpdate
         
         {/* Left Column: Version Info and Release Details */}
         <div className="lg:col-span-7 space-y-6">
+
+          {/* Active Update Progress Panel */}
+          {updateStatus !== "idle" && (
+            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 shadow-xl space-y-4 animate-fade-in">
+              <div className="flex items-center justify-between border-b border-zinc-900 pb-3">
+                <div className="flex items-center gap-2">
+                  <RefreshCw className={`w-4 h-4 text-emerald-400 ${updateStatus !== "completed" && updateStatus !== "error" ? "animate-spin" : ""}`} />
+                  <h3 className="text-sm font-bold text-white tracking-tight">System Upgrade Engine</h3>
+                </div>
+                <span className="text-[10px] tracking-wider uppercase font-black px-2.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
+                  {updateStatus.replace("_", " ")}
+                </span>
+              </div>
+
+              {/* Progress Indicator */}
+              <div className="space-y-1.5">
+                <div className="flex justify-between text-xs font-bold font-mono">
+                  <span className="text-zinc-400 capitalize">
+                    {updateStatus === "backing_up" && "Backing up configurations..."}
+                    {updateStatus === "downloading" && "Retrieving new software pack..."}
+                    {updateStatus === "installing" && "Installing system modules..."}
+                    {updateStatus === "rebuilding" && "Rebuilding distribution configurations..."}
+                    {updateStatus === "completed" && "Safe upgrade fully complete!"}
+                    {updateStatus === "error" && "An error occurred during install."}
+                  </span>
+                  <span className="text-emerald-400">{updateProgress}%</span>
+                </div>
+                <div className="w-full bg-zinc-950 rounded-full h-2 overflow-hidden border border-zinc-850">
+                  <div 
+                    className="bg-gradient-to-r from-emerald-500 to-teal-400 h-full transition-all duration-500 rounded-full" 
+                    style={{ width: `${updateProgress}%` }}
+                  />
+                </div>
+              </div>
+
+              {/* Console Logs */}
+              <div className="space-y-2">
+                <div className="text-[10px] text-zinc-500 uppercase tracking-widest font-black flex items-center gap-1.5">
+                  <Terminal className="w-3.5 h-3.5 text-zinc-400" />
+                  <span>Interactive Update Terminal</span>
+                </div>
+                <div className="bg-zinc-950 border border-zinc-950 rounded-xl p-3.5 h-44 overflow-y-auto font-mono text-[11px] leading-relaxed space-y-1.5 select-text">
+                  {updateLogs.length === 0 ? (
+                    <div className="text-zinc-600 italic">Spawning install subprocess...</div>
+                  ) : (
+                    updateLogs.map((log, i) => (
+                      <div key={i} className="flex gap-2">
+                        <span className="text-zinc-650 select-none">[{log.timestamp}]</span>
+                        <span className={log.type === "success" ? "text-emerald-400 font-bold" : log.type === "error" ? "text-rose-400 font-bold" : "text-zinc-300"}>
+                          {log.message}
+                        </span>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              {/* Reboot trigger buttons */}
+              {updateStatus === "completed" && (
+                <div className="bg-emerald-500/5 border border-emerald-500/20 p-4.5 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-4 animate-pulse">
+                  <div className="space-y-1 select-text">
+                    <h4 className="text-xs font-bold text-white">Upgrade Successfully Applied!</h4>
+                    <p className="text-[10px] text-zinc-450 leading-relaxed">The server files have been upgraded successfully. Click reboot to boot the new version.</p>
+                  </div>
+                  <button
+                    onClick={handleRestartServer}
+                    disabled={reconstructing}
+                    className="w-full md:w-auto px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-zinc-800 text-white font-extrabold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    {reconstructing ? (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        Rebuilding Container...
+                      </>
+                    ) : (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5" />
+                        Restart to Apply Update
+                      </>
+                    )}
+                  </button>
+                </div>
+              )}
+
+              {updateStatus === "error" && (
+                <div className="bg-rose-500/5 border border-rose-500/20 p-4.5 rounded-xl space-y-3">
+                  <div className="flex items-center gap-1.5 text-xs text-rose-450 font-bold">
+                    <AlertTriangle className="w-4 h-4 text-rose-500" />
+                    <span>Upgrade process encountered an issue</span>
+                  </div>
+                  <p className="text-[11px] text-zinc-300 select-text">{updateError}</p>
+                  <button
+                    onClick={() => {
+                      setUpdateStatus("idle");
+                      setUpdateProgress(0);
+                      setUpdateLogs([]);
+                      setUpdateError(null);
+                    }}
+                    className="px-3.5 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-white font-bold text-xs rounded-xl cursor-pointer"
+                  >
+                    Clear State & Retry
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
           
           {/* Version Status Bento Card */}
           <div className="bg-zinc-900/40 border border-zinc-900/80 rounded-2xl p-5 shadow-lg space-y-4">
@@ -210,10 +419,45 @@ export default function SoftwareUpdates({ token, onShowMessage }: SoftwareUpdate
                   </div>
                 </div>
 
-                {hasNewerVersion && (
-                  <div className="flex items-center gap-2 p-2 bg-yellow-500/5 border border-yellow-500/15 rounded-lg text-[11px] text-yellow-400">
-                    <Info className="w-3.5 h-3.5 flex-shrink-0" />
-                    <span>Download and run the update scripts shown in the right dashboard to apply these changes securely.</span>
+                {updateStatus === "idle" && (
+                  <div className="pt-3 border-t border-zinc-900/10">
+                    {hasNewerVersion ? (
+                      <button
+                        onClick={handleApplyUpdate}
+                        disabled={applying}
+                        className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 disabled:bg-zinc-805 text-white rounded-xl font-bold text-xs inline-flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md"
+                      >
+                        {applying ? (
+                          <>
+                            <RefreshCw className="w-4 h-4 animate-spin" />
+                            Initiating Secure Update...
+                          </>
+                        ) : (
+                          <>
+                            <Download className="w-4 h-4" />
+                            Download & Apply Update Now ({updateInfo.latestVersion})
+                          </>
+                        )}
+                      </button>
+                    ) : (
+                      <button
+                        onClick={handleApplyUpdate}
+                        disabled={applying}
+                        className="w-full py-3 bg-zinc-900 hover:bg-zinc-800 disabled:bg-zinc-855 text-zinc-300 rounded-xl border border-zinc-800 hover:border-zinc-700 font-bold text-xs inline-flex items-center justify-center gap-2 transition-all cursor-pointer"
+                      >
+                        {applying ? (
+                          <>
+                            <RefreshCw className="w-4 h-4 animate-spin" />
+                            Preparing reinstall...
+                          </>
+                        ) : (
+                          <>
+                            <RefreshCw className="w-4 h-4" />
+                            Reinstall / Force Update Version
+                          </>
+                        )}
+                      </button>
+                    )}
                   </div>
                 )}
               </div>

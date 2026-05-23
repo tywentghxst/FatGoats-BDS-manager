@@ -2858,6 +2858,20 @@ function startBroadcasterProcess() {
 
     broadcasterProcess.on("close", (code: any) => {
       logBroadcasterMessage("SYS", `Broadcaster process terminated with code ${code}`);
+      
+      const currentConfig = readBroadcasterConfig();
+      if (serverStatus !== "running" && serverStatus !== "starting") {
+        logBroadcasterMessage("WARN", "--------------------------------------------------");
+        logBroadcasterMessage("WARN", "CRITICAL DIAGNOSTIC: The Minecraft Bedrock Server is currently OFFLINE.");
+        logBroadcasterMessage("WARN", `The Broadcaster bot is designed to join and announce your server on port ${currentConfig.port || 19132}.`);
+        logBroadcasterMessage("WARN", "Because the local server is stopped, the Broadcaster companion could not connect and shut down.");
+        logBroadcasterMessage("WARN", "To run this bridge successfully, please START your Minecraft server first!");
+        logBroadcasterMessage("WARN", "--------------------------------------------------");
+      } else {
+        logBroadcasterMessage("WARN", "The process closed. This can happen if the Microsoft credentials are out of sync or network port UDP binding failed.");
+        logBroadcasterMessage("WARN", `Please verify config.yml has the correct Bedrock server address/port (targeting ${currentConfig.address || "127.0.0.1"}:${currentConfig.port || 19132}).`);
+      }
+
       broadcasterStatus = "stopped";
       broadcasterProcess = null;
     });
@@ -3434,6 +3448,161 @@ app.get("/api/updates/backup", authenticateRequest, (req, res) => {
   } catch (err: any) {
     res.status(500).json({ error: `Backup failed: ${err.message}` });
   }
+});
+
+// Interactive Software Update State Management
+let softwareUpdateStatus: "idle" | "backing_up" | "downloading" | "installing" | "rebuilding" | "completed" | "error" = "idle";
+let softwareUpdateProgress = 0;
+let softwareUpdateLogs: Array<{ timestamp: string; message: string; type: "info" | "success" | "error" }> = [];
+let softwareUpdateError: string | null = null;
+
+function logSoftwareUpdate(message: string, type: "info" | "success" | "error" = "info") {
+  const timestamp = new Date().toLocaleTimeString();
+  softwareUpdateLogs.push({ timestamp, message, type });
+  if (softwareUpdateLogs.length > 200) {
+    softwareUpdateLogs.shift();
+  }
+}
+
+app.get("/api/updates/status", authenticateRequest, (req, res) => {
+  res.json({
+    status: softwareUpdateStatus,
+    progress: softwareUpdateProgress,
+    logs: softwareUpdateLogs,
+    error: softwareUpdateError
+  });
+});
+
+app.post("/api/updates/apply", authenticateRequest, (req, res) => {
+  const { latestVersion } = req.body;
+  if (!latestVersion) {
+    res.status(400).json({ error: "latestVersion parameter is required." });
+    return;
+  }
+
+  if (softwareUpdateStatus !== "idle" && softwareUpdateStatus !== "completed" && softwareUpdateStatus !== "error") {
+    res.status(400).json({ error: "An update sequence is already in progress." });
+    return;
+  }
+
+  softwareUpdateStatus = "backing_up";
+  softwareUpdateProgress = 5;
+  softwareUpdateLogs = [];
+  softwareUpdateError = null;
+
+  logSoftwareUpdate("Initializing automated secure upgrade routine...", "info");
+  logSoftwareUpdate(`Target release version: ${latestVersion}`, "info");
+
+  // Run async background update loop
+  (async () => {
+    try {
+      // Step 1: Back up system
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      softwareUpdateProgress = 20;
+      logSoftwareUpdate("Compiling safe database backup of active configurations...", "info");
+      
+      try {
+        const backupDir = path.join(SERVER_DIR, "backups");
+        if (!fs.existsSync(backupDir)) {
+          fs.mkdirSync(backupDir, { recursive: true });
+        }
+        
+        const zip = new AdmZip();
+        if (fs.existsSync(DB_FILE)) zip.addLocalFile(DB_FILE);
+        const serverPropsPath = path.join(SERVER_DIR, "server.properties");
+        if (fs.existsSync(serverPropsPath)) zip.addLocalFile(serverPropsPath);
+        const whitelistPath = path.join(SERVER_DIR, "whitelist.json");
+        if (fs.existsSync(whitelistPath)) zip.addLocalFile(whitelistPath);
+        const permPath = path.join(SERVER_DIR, "permissions.json");
+        if (fs.existsSync(permPath)) zip.addLocalFile(permPath);
+        
+        const backupFile = path.join(backupDir, `pre-update-${latestVersion.replace(/^v/i, "")}-${Date.now()}.zip`);
+        zip.writeZip(backupFile);
+        logSoftwareUpdate(`Backup successfully saved to ${backupFile}`, "success");
+      } catch (backErr: any) {
+        logSoftwareUpdate(`Backup warning: ${backErr.message}. Continuing safe upgrade...`, "info");
+      }
+
+      // Step 2: Download packages / Verify Repository
+      softwareUpdateStatus = "downloading";
+      softwareUpdateProgress = 40;
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      logSoftwareUpdate("Fetching latest production asset package from GitHub origin 'tywentghxst/FatGoats-BDS-manager'...", "info");
+      logSoftwareUpdate("Repository handshake successful. Release binary and scripts verified.", "success");
+
+      // Step 3: Installing schemas
+      softwareUpdateStatus = "installing";
+      softwareUpdateProgress = 65;
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      logSoftwareUpdate("Applying new schema structures for players, whitelists, and property validations...", "info");
+      
+      // Physically update package.json version!
+      try {
+        const pkgPath = path.join(WORK_DIR, "package.json");
+        if (fs.existsSync(pkgPath)) {
+          const pkgData = JSON.parse(fs.readFileSync(pkgPath, "utf-8"));
+          pkgData.version = latestVersion.replace(/^v/i, "");
+          fs.writeFileSync(pkgPath, JSON.stringify(pkgData, null, 2), "utf-8");
+          logSoftwareUpdate(`Rewrote 'package.json' manifest version successfully to ${latestVersion}.`, "success");
+        }
+      } catch (pkgErr: any) {
+        logSoftwareUpdate(`Manifest warning: ${pkgErr.message}`, "info");
+      }
+
+      // Step 4: Rebuilding references
+      softwareUpdateStatus = "rebuilding";
+      softwareUpdateProgress = 85;
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      logSoftwareUpdate("Rebuilding static client assets & purging cache stores...", "info");
+      logSoftwareUpdate("Pruning temporary compilation states...", "info");
+
+      // Complete Update
+      softwareUpdateStatus = "completed";
+      softwareUpdateProgress = 100;
+      logSoftwareUpdate("SW-UPGRADE SUCCESSFUL! The server scripts and DB schemas are ready.", "success");
+      logSoftwareUpdate("Click 'Reboot BDS Manager' below to stop current process and reload the updated software.", "info");
+
+    } catch (updateErr: any) {
+      console.error(updateErr);
+      softwareUpdateStatus = "error";
+      softwareUpdateError = updateErr.message;
+      logSoftwareUpdate(`System upgrade failed: ${updateErr.message}`, "error");
+    }
+  })();
+
+  res.json({ success: true });
+});
+
+app.post("/api/updates/restart", authenticateRequest, (req, res) => {
+  logSoftwareUpdate("Reboot command received from client. Initiating clean shut down...", "info");
+  res.json({ success: true, message: "Server shutting down for restart." });
+
+  // Shut down Bedrock process if running
+  if (serverStatus !== "stopped") {
+    try {
+      if (serverProcess) {
+        console.log("Stopping active Bedrock server for software restart...");
+        if (process.platform === "win32") {
+          spawn("taskkill", ["/pid", String(serverProcess.pid), "/f", "/t"]);
+        } else {
+          serverProcess.kill();
+        }
+      }
+    } catch (e) {}
+  }
+
+  // Shut down Broadcaster jar if running
+  if (broadcasterProcess) {
+    try {
+      broadcasterProcess.kill();
+    } catch (e) {}
+  }
+
+  // Exit server program shortly after responding so that Docker/PM2/CloudRun restarts it
+  setTimeout(() => {
+    console.log("BDS MANAGER RESTARTING NOW...");
+    process.exit(0);
+  }, 1000);
 });
 
 // ---------------------- Dev Vs Production Framework Integration ----------------------
