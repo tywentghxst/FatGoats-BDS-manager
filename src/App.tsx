@@ -361,6 +361,10 @@ export default function App() {
   // Action states
   const [commandText, setCommandText] = useState("");
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadingFilesNames, setUploadingFilesNames] = useState<string[]>([]);
+  const [uploadBytesTransmitted, setUploadBytesTransmitted] = useState(0);
+  const [uploadBytesTotal, setUploadBytesTotal] = useState(0);
   const [uploadError, setUploadError] = useState("");
   const [actionMessage, setActionMessage] = useState({ text: "", type: "info" });
   const [addonSortBy, setAddonSortBy] = useState<"name" | "date" | "enabled" | "disabled">("name");
@@ -1085,6 +1089,55 @@ export default function App() {
     }
   };
 
+  const uploadWithXHR = (
+    endpoint: string,
+    formData: FormData,
+    onProgress: (percent: number, loaded: number, total: number) => void
+  ): Promise<any> => {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", endpoint);
+      if (token) {
+        xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+      }
+
+      xhr.upload.addEventListener("progress", (event) => {
+        if (event.lengthComputable) {
+          const percent = Math.round((event.loaded / event.total) * 100);
+          onProgress(percent, event.loaded, event.total);
+        } else {
+          onProgress(50, 0, 0); // simulated/indeterminate
+        }
+      });
+
+      xhr.addEventListener("load", () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          try {
+            resolve(JSON.parse(xhr.responseText));
+          } catch (e) {
+            resolve({ success: true });
+          }
+        } else {
+          try {
+            reject(JSON.parse(xhr.responseText));
+          } catch (e) {
+            reject(new Error(`Server returned status code ${xhr.status}`));
+          }
+        }
+      });
+
+      xhr.addEventListener("error", () => {
+        reject(new Error("Network connection lost during upload."));
+      });
+
+      xhr.addEventListener("abort", () => {
+        reject(new Error("Upload aborted by user or system."));
+      });
+
+      xhr.send(formData);
+    });
+  };
+
   // Multer Addons and Worlds uploading trigger hooks
   const handleUploadFile = async (e: React.ChangeEvent<HTMLInputElement>, isWorld: boolean = false) => {
     const files = e.target.files;
@@ -1092,6 +1145,12 @@ export default function App() {
 
     setIsUploading(true);
     setUploadError("");
+    setUploadProgress(0);
+    setUploadBytesTransmitted(0);
+    setUploadBytesTotal(0);
+
+    const names = Array.from(files).map((f: any) => f.name);
+    setUploadingFilesNames(names);
 
     const formData = new FormData();
     const endpoint = isWorld ? "/api/worlds/upload" : "/api/addons/upload";
@@ -1101,7 +1160,7 @@ export default function App() {
       showBanner(`Uploading world ${file.name}...`, "info");
       formData.append("file", file);
     } else {
-      const fileNames = Array.from(files).map((f: any) => f.name).join(", ");
+      const fileNames = names.join(", ");
       showBanner(`Uploading ${files.length} packs (${fileNames})...`, "info");
       for (let i = 0; i < files.length; i++) {
         formData.append("files", files[i]);
@@ -1109,26 +1168,22 @@ export default function App() {
     }
 
     try {
-      const res = await fetch(endpoint, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-        body: formData
+      const data = await uploadWithXHR(endpoint, formData, (percent, loaded, total) => {
+        setUploadProgress(percent);
+        setUploadBytesTransmitted(loaded);
+        setUploadBytesTotal(total);
       });
-      const data = await res.json();
-      if (!res.ok) {
-        setUploadError(data.error || "Failed upload processing.");
-        showBanner(data.error || "Uploader error", "error");
+
+      if (data.taskIds) {
+        showBanner(`Uploaded ${files.length} packs successfully! Background tasks started executing.`, "success");
       } else {
-        if (data.taskIds) {
-          showBanner(`Uploaded ${files.length} packs successfully! Background tasks started executing.`, "success");
-        } else {
-          showBanner(`Uploaded successfully. Background task #${data.taskId} is indexing!`, "success");
-        }
-        fetchDataFeed();
+        showBanner(`Uploaded successfully. Background task #${data.taskId} is indexing!`, "success");
       }
-    } catch (err) {
-      setUploadError("Network uploader fault.");
-      showBanner("Upload transfer failure", "error");
+      fetchDataFeed();
+    } catch (err: any) {
+      const errMsg = err.error || err.message || "Upload transfer failure";
+      setUploadError(errMsg);
+      showBanner(errMsg, "error");
     } finally {
       setIsUploading(false);
       // reset forms
@@ -1142,28 +1197,28 @@ export default function App() {
 
     setIsUploading(true);
     setUploadError("");
+    setUploadProgress(0);
+    setUploadBytesTransmitted(0);
+    setUploadBytesTotal(0);
+    setUploadingFilesNames([file.name]);
     showBanner(`Updating addon with custom file: ${file.name}...`, "info");
 
     const formData = new FormData();
     formData.append("file", file);
 
     try {
-      const res = await fetch(`/api/addons/${updatingAddonUuid}/update-upload`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-        body: formData
+      const data = await uploadWithXHR(`/api/addons/${updatingAddonUuid}/update-upload`, formData, (percent, loaded, total) => {
+        setUploadProgress(percent);
+        setUploadBytesTransmitted(loaded);
+        setUploadBytesTotal(total);
       });
-      const data = await res.json();
-      if (!res.ok) {
-        setUploadError(data.error || "Failed override update processing.");
-        showBanner(data.error || "Override update error", "error");
-      } else {
-        showBanner(`Addon updated and overridden successfully! Background task #${data.taskId} is indexing!`, "success");
-        fetchDataFeed();
-      }
-    } catch (err) {
-      setUploadError("Network update uploader fault.");
-      showBanner("Update upload transfer failure", "error");
+
+      showBanner(`Addon updated and overridden successfully! Background task #${data.taskId} is indexing!`, "success");
+      fetchDataFeed();
+    } catch (err: any) {
+      const errMsg = err.error || err.message || "Update upload transfer failure";
+      setUploadError(errMsg);
+      showBanner(errMsg, "error");
     } finally {
       setIsUploading(false);
       setUpdatingAddonUuid(null);
@@ -1771,9 +1826,79 @@ export default function App() {
           </div>
         )}
 
-        {/* Dynamic Uploader Form Progress Banner */}
+        {/* Dynamic Uploader Form Progress Banner / Modal Overlay */}
         {isUploading && (
-          <div className="absolute top-0 left-0 w-full bg-emerald-500 h-1 z-50 animate-pulse" />
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-[99999] p-4 select-none">
+            <div className="bg-zinc-950 border border-zinc-800/80 max-w-md w-full rounded-2xl p-6 shadow-2xl relative overflow-hidden flex flex-col items-center">
+              {/* Spinning loading halo background */}
+              <div className="absolute -top-24 -left-24 w-48 h-48 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
+              <div className="absolute -bottom-24 -right-24 w-48 h-48 bg-teal-500/10 rounded-full blur-3xl pointer-events-none" />
+              
+              <div className="p-4 bg-emerald-500/10 rounded-full text-emerald-400 mb-4 border border-emerald-500/20 shadow-inner animate-pulse">
+                <UploadCloud className="w-8 h-8" />
+              </div>
+
+              <h3 className="text-sm font-black text-white uppercase tracking-wider text-center">
+                Uploading Minecraft Addons
+              </h3>
+              <p className="text-[11px] text-zinc-400 text-center mt-1">
+                Please wait while we transfer and unpack your files securely.
+              </p>
+
+              {/* Progress Container */}
+              <div className="w-full mt-6 space-y-3">
+                <div className="flex justify-between items-center text-xs">
+                  <span className="font-semibold text-zinc-300">Overall Progress</span>
+                  <span className="font-bold text-emerald-400 font-mono text-xs">{uploadProgress}%</span>
+                </div>
+                
+                {/* Track bar */}
+                <div className="w-full h-3.5 bg-zinc-900 border border-zinc-800/50 rounded-full overflow-hidden p-[2px]">
+                  <div
+                    className="h-full bg-emerald-500 rounded-full transition-all duration-350 ease-out shadow-[0_0_8px_rgba(16,185,129,0.4)]"
+                    style={{ width: `${uploadProgress}%` }}
+                  />
+                </div>
+
+                <div className="flex justify-between items-center text-[10px] text-zinc-500 font-mono">
+                  <span>
+                    {uploadBytesTotal > 0
+                      ? `${(uploadBytesTransmitted / (1024 * 1024)).toFixed(1)} MB`
+                      : "0 MB"}
+                  </span>
+                  <span>
+                    {uploadBytesTotal > 0
+                      ? `${(uploadBytesTotal / (1024 * 1024)).toFixed(1)} MB`
+                      : "Calculating size..."}
+                  </span>
+                </div>
+              </div>
+
+              {/* Active Files list */}
+              {uploadingFilesNames.length > 0 && (
+                <div className="w-full mt-5 bg-zinc-900/55 border border-zinc-850/60 rounded-xl p-3.5 flex flex-col gap-1.5 max-h-32 overflow-y-auto">
+                  <span className="text-[10px] uppercase font-extrabold tracking-wider text-zinc-400">
+                    FILES ({uploadingFilesNames.length}):
+                  </span>
+                  <ul className="space-y-1">
+                    {uploadingFilesNames.map((name, idx) => (
+                      <li key={idx} className="text-xs text-zinc-350 truncate font-mono flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 flex-shrink-0" />
+                        {name}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Keep open message */}
+              <div className="w-full mt-5 px-3 py-2 bg-zinc-900/40 border border-zinc-850 rounded-lg text-center">
+                <p className="text-[10px] text-zinc-500 font-medium font-sans">
+                  Do not close or refresh this page. The server will register and install other packs once transmission completes.
+                </p>
+              </div>
+            </div>
+          </div>
         )}
 
         {/* Mobile Header (Tactly tactile icons, easy thumb access) */}
