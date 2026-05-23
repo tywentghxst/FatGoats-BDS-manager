@@ -1858,21 +1858,25 @@ export default function App() {
 
   // 4. Primary dashboard application frame
   return (
-    <div className="flex h-screen bg-zinc-950 text-zinc-100 font-sans overflow-hidden select-none">
+    <div className="flex h-screen bg-[#060a12] text-zinc-100 font-sans overflow-hidden select-none bg-grid-pattern relative">
+      {/* Background ambient glowing orbs */}
+      <div className="ambient-glow-indigo top-0 right-0" />
+      <div className="ambient-glow-emerald bottom-1/4 left-1/4" />
+
       {/* 4.1 Side Navigation */}
-      <nav id="sidebar-nav" className="hidden md:flex w-68 border-r border-zinc-900 bg-zinc-900/30 flex-col flex-shrink-0">
-        <div className="p-6 border-b border-zinc-900 flex items-center gap-3">
-          <div className="w-9 h-9 bg-emerald-600/20 border border-emerald-500/30 rounded-lg flex items-center justify-center font-black text-xl text-emerald-400 shadow-inner">
+      <nav id="sidebar-nav" className="hidden md:flex w-68 border-r border-[#152033]/50 bg-[#0a0f18]/65 backdrop-blur-xl flex-col flex-shrink-0 z-10">
+        <div className="p-6 border-b border-[#152033]/50 flex items-center gap-3">
+          <div className="w-9 h-9 bg-indigo-600/15 border border-indigo-500/30 rounded-lg flex items-center justify-center font-black text-xl text-indigo-400 shadow-[0_0_12px_rgba(99,102,241,0.25)]">
             F
           </div>
           <div className="flex flex-col">
-            <span className="font-bold tracking-tight text-lg text-white">FatGoats BDS</span>
-            <span className="text-[10px] text-zinc-500 uppercase font-black tracking-widest leading-none mt-0.5">MCPE Dedicate</span>
+            <span className="font-extrabold tracking-tight text-base text-white">FatGoats BDS</span>
+            <span className="text-[10px] text-indigo-400 uppercase font-bold tracking-widest leading-none mt-0.5">MCPE Dedicate</span>
           </div>
         </div>
 
         {/* Menu selections */}
-        <div className="flex-1 p-4 space-y-1.5 overflow-y-auto">
+        <div className="flex-1 p-4 space-y-2 overflow-y-auto">
           {navItems.map((item) => {
             const IconComponent = item.icon;
             const isSelected = navTab === item.id;
@@ -1881,51 +1885,50 @@ export default function App() {
                 key={item.id}
                 id={`nav-${item.id}`}
                 onClick={() => setNavTab(item.id as any)}
-                className={`group w-full px-3 py-2 rounded-xl flex items-center gap-3 text-[13px] font-medium transition-all cursor-pointer ${
+                className={`group relative w-full px-3 py-2.5 rounded-xl flex items-center gap-3.5 text-xs tracking-wider transition-all duration-300 cursor-pointer ${
                   isSelected
-                    ? item.id === "players_map"
-                      ? "bg-emerald-950/45 text-emerald-400 shadow-lg border border-emerald-500/30 font-bold"
-                      : "bg-zinc-900 border border-zinc-800 text-white shadow-lg font-bold"
-                    : "text-zinc-400 hover:bg-zinc-900/30 hover:text-zinc-200"
+                    ? "bg-indigo-600/15 border border-indigo-500/30 text-indigo-200 shadow-[0_0_20px_rgba(99,102,241,0.08)] font-bold"
+                    : "border border-transparent text-zinc-400 hover:bg-[#111927]/40 hover:text-zinc-200 hover:border-[#1c2a41]/20"
                 }`}
               >
+                {isSelected && (
+                  <div className="absolute left-0 top-3 bottom-3 w-1 bg-indigo-500 rounded-r-md" />
+                )}
                 <div className={`p-1.5 rounded-lg flex items-center justify-center transition-all ${
                   isSelected 
-                    ? item.id === "players_map"
-                      ? "bg-emerald-500/10 border border-emerald-400/20"
-                      : "bg-zinc-950 border border-zinc-850"
-                    : "bg-zinc-950/40 border border-zinc-900 group-hover:bg-zinc-950 group-hover:border-zinc-800"
+                    ? "bg-indigo-500/20 border border-indigo-400/30 shadow-[0_0_12px_rgba(99,102,241,0.25)]"
+                    : "bg-[#070a0f] border border-zinc-900 group-hover:bg-[#0c111c] group-hover:border-zinc-800"
                 }`}>
                   <IconComponent className={`w-3.5 h-3.5 ${item.color} ${item.pulse ? "animate-pulse" : ""}`} />
                 </div>
-                <span>{item.label}</span>
+                <span className="text-[11px] font-bold tracking-widest uppercase">{item.label}</span>
               </button>
             );
           })}
         </div>
 
         {/* User profile footer controls */}
-        <div className="p-4 border-t border-zinc-900 bg-zinc-950/20 space-y-2">
-          <div className="flex items-center gap-3 p-2 bg-zinc-900/30 border border-zinc-900 rounded-xl">
-            <div className="w-8 h-8 rounded-full bg-emerald-700 flex items-center justify-center font-bold text-sm text-white">
+        <div className="p-4 border-t border-[#152033]/50 bg-[#070b12]/60 space-y-2">
+          <div className="flex items-center gap-3 p-2.5 bg-[#0a0f18]/80 border border-[#162238]/60 rounded-xl">
+            <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-indigo-600 to-purple-600 flex items-center justify-center font-bold text-sm text-white shadow-md">
               {currentUser.username[0]?.toUpperCase() || "A"}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-xs font-semibold text-white truncate leading-tight">{currentUser.username}</p>
-              <span className={`text-[9px] uppercase font-black tracking-widest ${currentUser.role === "admin" ? "text-emerald-400" : "text-amber-400"}`}>
+              <p className="text-xs font-bold text-white truncate leading-tight">{currentUser.username}</p>
+              <span className={`text-[8px] uppercase tracking-widest font-extrabold ${currentUser.role === "admin" ? "text-indigo-400" : "text-amber-400"}`}>
                 {currentUser.role}
               </span>
             </div>
             <button
               id="user-logout"
               onClick={handleLogout}
-              className="p-1.5 hover:bg-zinc-800 text-zinc-400 hover:text-white rounded-lg transition-colors cursor-pointer"
+              className="p-1.5 hover:bg-[#1a253a]/60 text-zinc-400 hover:text-white rounded-lg transition-colors cursor-pointer border border-transparent hover:border-[#223352]/40"
               title="Logout"
             >
-              <LogOut className="w-4 h-4" />
+              <LogOut className="w-3.5 h-3.5" />
             </button>
           </div>
-          <div className="text-[10px] text-zinc-600 text-center uppercase tracking-wide font-medium">v1.4.2 stable</div>
+          <div className="text-[9px] text-zinc-500 text-center uppercase tracking-widest font-black">v1.4.2 stable</div>
         </div>
       </nav>
 
@@ -2190,214 +2193,220 @@ export default function App() {
         )}
 
         {/* 4.3 App Header Controls Bar */}
-        <header id="app-header-view" className="hidden md:flex h-20 border-b border-zinc-900 bg-zinc-900/10 px-8 items-center justify-between flex-shrink-0 select-none">
+        <header id="app-header-view" className="hidden md:flex h-20 border-b border-[#152033]/50 bg-[#0a0f18]/30 px-8 items-center justify-between flex-shrink-0 select-none backdrop-blur-md z-10">
           <div>
-            <div className="flex items-center gap-2.5">
-              <h1 className="text-xl font-black text-white tracking-tight">{appConfig.levelName}</h1>
+            <div className="flex items-center gap-3">
+              <h1 className="text-lg font-extrabold text-[#f3f4f6] tracking-tight">{appConfig.levelName}</h1>
               {stats?.status === "running" ? (
-                <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-[10px] font-black uppercase text-emerald-400 tracking-wider">
+                <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-[9px] font-black uppercase text-emerald-400 tracking-wider shadow-[0_0_12px_rgba(16,185,129,0.15)] flex items-center gap-1.5 animate-pulse">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
                   Live
                 </span>
               ) : stats?.status === "starting" ? (
-                <span className="px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-[10px] font-black uppercase text-amber-400 tracking-wider animate-pulse">
+                <span className="px-2.5 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-[9px] font-black uppercase text-amber-400 tracking-wider shadow-[0_0_12px_rgba(245,158,11,0.15)] flex items-center gap-1.5 animate-pulse">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
                   Starting
                 </span>
               ) : (
-                <span className="px-2 py-0.5 rounded-full bg-zinc-800 border border-zinc-700 text-[10px] font-black uppercase text-zinc-400 tracking-wider">
+                <span className="px-2.5 py-0.5 rounded-full bg-[#1b2536] border border-zinc-800 text-[9px] font-black uppercase text-zinc-400 tracking-wider flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-zinc-500" />
                   Offline
                 </span>
               )}
             </div>
-            <p className="text-zinc-500 text-xs mt-0.5 font-mono">
-              IP: localhost:{appConfig.serverPort} • MCPE Core: v{appConfig.selectedVersion}
+            <p className="text-zinc-400 text-[11px] mt-1 font-mono">
+              IP: <span className="text-[#f3f4f6]">localhost:{appConfig.serverPort}</span> • CORE: <span className="text-[#6366f1]">v{appConfig.selectedVersion}</span>
             </p>
           </div>
 
-          <div className="flex gap-2.5">
+          <div className="flex gap-3 bg-[#0a0f18]/90 border border-[#152033]/60 p-1.5 rounded-xl shadow-lg">
             <button
               id="server-control-start"
               onClick={() => executeServerControl("start")}
               disabled={stats?.status !== "stopped"}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 tracking-wide transition-all border cursor-pointer ${
+              className={`px-4 py-2 rounded-lg text-xs font-bold leading-none flex items-center gap-2 tracking-wide transition-all border cursor-pointer ${
                 stats?.status === "stopped"
-                  ? "bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-500/20 shadow-lg shadow-emerald-600/10"
-                  : "bg-zinc-900/50 text-zinc-600 border-zinc-950 cursor-not-allowed"
+                  ? "bg-emerald-600/15 border-emerald-500/30 text-emerald-300 hover:bg-emerald-600 hover:text-white hover:border-emerald-500 shadow-md hover:shadow-emerald-600/10"
+                  : "bg-transparent text-zinc-650 border-transparent cursor-not-allowed"
               }`}
             >
-              <Play className="w-3.5 h-3.5" />
-              Start
+              <Play className="w-3.5 h-3.5 fill-current" />
+              <span>Start</span>
             </button>
 
             <button
               id="server-control-stop"
               onClick={() => executeServerControl("stop")}
               disabled={stats?.status === "stopped" || stats?.status === "stopping"}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 tracking-wide transition-all border cursor-pointer ${
+              className={`px-4 py-2 rounded-lg text-xs font-bold leading-none flex items-center gap-2 tracking-wide transition-all border cursor-pointer ${
                 stats?.status !== "stopped" && stats?.status !== "stopping"
-                  ? "bg-red-600/20 hover:bg-red-600/30 text-red-500 border-red-500/20 shadow-lg"
-                  : "bg-zinc-900/50 text-zinc-600 border-zinc-950 cursor-not-allowed"
+                  ? "bg-[#ef4444]/15 border-[#ef4444]/30 text-rose-350 hover:bg-[#ef4444] hover:text-white hover:border-[#ef4444] shadow-md"
+                  : "bg-transparent text-zinc-650 border-transparent cursor-not-allowed"
               }`}
             >
-              <Square className="w-3.5 h-3.5" />
-              Stop
+              <Square className="w-3.5 h-3.5 fill-current" />
+              <span>Stop</span>
             </button>
 
             <button
               id="server-control-restart"
               onClick={() => executeServerControl("restart")}
               disabled={stats?.status === "stopped"}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 tracking-wide bg-zinc-800 hover:bg-zinc-700 text-zinc-100 border border-zinc-700 cursor-pointer transition-all ${
-                stats?.status === "stopped" ? "opacity-40 cursor-not-allowed" : ""
+              className={`px-4 py-2 rounded-lg text-xs font-bold leading-none flex items-center gap-2 tracking-wide transition-all border cursor-pointer ${
+                stats?.status !== "stopped"
+                  ? "bg-[#182335]/70 border border-[#233552]/40 text-zinc-300 hover:bg-[#1f2e46] hover:text-white"
+                  : "bg-transparent text-zinc-650 border-transparent cursor-not-allowed"
               }`}
             >
               <RefreshCw className="w-3.5 h-3.5" />
-              Restart
+              <span>Restart</span>
             </button>
           </div>
         </header>
 
         {/* 4.4 Dynamic routing container depending on visible Nav Tab */}
         <div className="flex-1 p-4 md:p-6 overflow-y-auto min-h-0 select-none">
-          {/* ==================== A. DASHBOARD NAVIGATION VIEW ==================== */}
           {navTab === "dashboard" && (
-            <div className="grid grid-cols-1 xl:grid-cols-4 gap-5">
+            <div className="grid grid-cols-1 xl:grid-cols-4 gap-6 z-10 relative animate-fade-in">
               {/* Stats Widgets Bento */}
-              <div className="xl:col-span-1 space-y-5">
+              <div className="xl:col-span-1 space-y-6">
                 {/* Simulated Stats Core Indicators */}
-                <div id="stat-card-cpu" className="bg-zinc-900/50 border border-zinc-900 rounded-2xl p-5 flex flex-col justify-between h-32 hover:border-zinc-800 transition-colors">
+                <div id="stat-card-cpu" className="glass-panel rounded-2xl p-5 flex flex-col justify-between h-34">
                   <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-black uppercase text-zinc-500 tracking-widest">CPU Ticks</span>
-                    <Cpu className="w-4 h-4 text-zinc-500" />
+                    <span className="text-[10px] uppercase font-bold text-zinc-400 tracking-wider">CPU Threads</span>
+                    <Cpu className="w-4 h-4 text-indigo-400" />
                   </div>
-                  <div className="text-3xl font-black text-white tracking-tight mt-1">
-                    {stats?.cpuUsage ?? 0}<span className="text-sm font-bold text-zinc-500 ml-0.5">%</span>
+                  <div className="text-3xl font-extrabold text-white tracking-tight mt-1 font-mono">
+                    {stats?.cpuUsage ?? 0}<span className="text-sm font-semibold text-zinc-500 ml-0.5">%</span>
                   </div>
-                  <div className="w-full bg-zinc-950 h-1.5 rounded-full overflow-hidden mt-3">
+                  <div className="w-full bg-[#070a0f] h-2 rounded-full overflow-hidden mt-3 p-[1px] border border-[#152033]/30">
                     <div
-                      className="bg-blue-500 h-full transition-all duration-500"
+                      className="bg-gradient-to-r from-indigo-550 via-indigo-550 to-indigo-400 h-full rounded-full transition-all duration-500 shadow-[0_0_8px_rgba(99,102,241,0.4)]"
                       style={{ width: `${stats?.cpuUsage ?? 0}%` }}
                     />
                   </div>
                 </div>
 
-                <div id="stat-card-ram" className="bg-zinc-900/50 border border-zinc-900 rounded-2xl p-5 flex flex-col justify-between h-32 hover:border-zinc-800 transition-colors">
+                <div id="stat-card-ram" className="glass-panel rounded-2xl p-5 flex flex-col justify-between h-34">
                   <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-black uppercase text-zinc-500 tracking-widest">Memory Stack</span>
-                    <Layers className="w-4 h-4 text-zinc-500" />
+                    <span className="text-[10px] uppercase font-bold text-zinc-400 tracking-wider">Memory Allocation</span>
+                    <Layers className="w-4 h-4 text-emerald-400" />
                   </div>
-                  <div className="text-3xl font-black text-white tracking-tight mt-1">
-                    {stats?.memoryUsage ?? 0}<span className="text-sm font-bold text-zinc-500 ml-1">GB / 8GB</span>
+                  <div className="text-3xl font-extrabold text-white tracking-tight mt-1 font-mono">
+                    {stats?.memoryUsage ?? 0}<span className="text-sm font-semibold text-zinc-550 ml-1">GB / 8GB</span>
                   </div>
-                  <div className="w-full bg-zinc-950 h-1.5 rounded-full overflow-hidden mt-3">
+                  <div className="w-full bg-[#070a0f] h-2 rounded-full overflow-hidden mt-3 p-[1px] border border-[#152033]/30">
                     <div
-                      className="bg-emerald-500 h-full transition-all duration-500"
+                      className="bg-gradient-to-r from-emerald-500 via-emerald-500 to-teal-400 h-full rounded-full transition-all duration-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]"
                       style={{ width: `${((stats?.memoryUsage ?? 0) / 8) * 100}%` }}
                     />
                   </div>
                 </div>
 
-                <div id="stat-card-general" className="bg-zinc-900/50 border border-zinc-900 rounded-2xl p-5 space-y-3.5 hover:border-zinc-800 transition-colors">
-                  <span className="text-[10px] font-black uppercase text-zinc-500 tracking-widest block">System Diagnostics</span>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="bg-zinc-950/40 p-3 rounded-lg border border-zinc-950">
-                      <span className="text-[9px] text-zinc-600 block uppercase font-bold tracking-wider mb-0.5">TPS Speed</span>
-                      <p className="text-base font-black text-emerald-400">{stats?.tps ?? "0.0"}</p>
+                <div id="stat-card-general" className="glass-panel rounded-2xl p-5 space-y-4">
+                  <span className="text-[10px] uppercase font-bold text-zinc-400 tracking-wider block">Diagnostics Engine</span>
+                  <div className="grid grid-cols-2 gap-3.5">
+                    <div className="bg-[#080d15]/65 p-3 rounded-xl border border-[#141e2f]/50">
+                      <span className="text-[9px] text-zinc-500 block uppercase font-bold tracking-wider mb-1">Server TPS</span>
+                      <p className="text-base font-extrabold text-emerald-400 font-mono">{stats?.tps ?? "0.0"}</p>
                     </div>
-                    <div className="bg-zinc-950/40 p-3 rounded-lg border border-zinc-950">
-                      <span className="text-[9px] text-zinc-600 block uppercase font-bold tracking-wider mb-0.5">Uptime Run</span>
-                      <p className="text-sm font-black text-zinc-300 truncate">{stats?.uptime ?? "Offline"}</p>
+                    <div className="bg-[#080d15]/65 p-3 rounded-xl border border-[#141e2f]/50">
+                      <span className="text-[9px] text-zinc-500 block uppercase font-bold tracking-wider mb-1">Total Uptime</span>
+                      <p className="text-xs font-extrabold text-indigo-300 truncate font-mono mt-0.5">{stats?.uptime ?? "Offline"}</p>
                     </div>
-                    <div className="bg-zinc-950/40 p-3 rounded-lg border border-zinc-950">
-                      <span className="text-[9px] text-zinc-600 block uppercase font-bold tracking-wider mb-0.5">Active Addons</span>
-                      <p className="text-base font-black text-white">{groupedAddonsCount}</p>
+                    <div className="bg-[#080d15]/65 p-3 rounded-xl border border-[#141e2f]/50">
+                      <span className="text-[9px] text-zinc-500 block uppercase font-bold tracking-wider mb-1">Packs loaded</span>
+                      <p className="text-base font-extrabold text-white font-mono">{groupedAddonsCount}</p>
                     </div>
-                    <div className="bg-zinc-950/40 p-3 rounded-lg border border-zinc-950">
-                      <span className="text-[9px] text-zinc-600 block uppercase font-bold tracking-wider mb-0.5">Backup Worlds</span>
-                      <p className="text-base font-black text-white">{worlds.length}</p>
+                    <div className="bg-[#080d15]/65 p-3 rounded-xl border border-[#141e2f]/50">
+                      <span className="text-[9px] text-zinc-500 block uppercase font-bold tracking-wider mb-1">Backup Vault</span>
+                      <p className="text-base font-extrabold text-white font-mono">{worlds.length}</p>
                     </div>
                   </div>
                 </div>
               </div>
 
               {/* Console Logs Card Interface Bento */}
-              <div className="xl:col-span-2 bg-zinc-900/40 border border-zinc-900 rounded-2xl flex flex-col h-[520px] overflow-hidden shadow-xl">
+              <div className="xl:col-span-2 glass-panel rounded-2xl flex flex-col h-[530px] overflow-hidden">
                 {/* Console card header */}
-                <div id="console-sub-navigation" className="px-5 border-b border-zinc-900 flex justify-between items-center bg-zinc-950/40 h-14">
-                  <h3 className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Live Console Stream</h3>
-                  <div className="flex items-center gap-1.5 text-xs font-black bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded-full select-none">
+                <div id="console-sub-navigation" className="px-5 border-b border-[#152033]/45 flex justify-between items-center bg-[#070b13]/40 h-14">
+                  <h3 className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Live Server Output Stream</h3>
+                  <div className="flex items-center gap-1.5 text-[9px] uppercase font-black tracking-wider bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 px-2.5 py-0.5 rounded-full select-none shadow-[0_0_8px_rgba(16,185,129,0.1)]">
                     <Terminal className="w-3 h-3" />
-                    <span>Real-time</span>
+                    <span>Active Feed</span>
                   </div>
                 </div>
 
                 {/* Sub-tab view renderer blocks */}
-                <div className="flex-1 p-5 overflow-hidden flex flex-col bg-zinc-950/20">
+                <div className="flex-1 p-5 overflow-hidden flex flex-col bg-[#070b13]/10">
                   <div
                     id="terminal-text-sandbox"
                     ref={logContainerRef}
-                    className="flex-1 overflow-y-auto font-mono text-xs space-y-1.5 pr-2"
+                    className="flex-1 overflow-y-auto font-mono text-xs space-y-2 pr-2"
                   >
                     {consoleLogs.length === 0 ? (
-                      <p className="text-zinc-600 italic">No console logs buffered.</p>
+                      <p className="text-zinc-600 italic">No logs currently buffered on server context.</p>
                     ) : (
                       consoleLogs.map((log, idx) => (
-                        <div key={idx} className="flex gap-2.5 leading-relaxed">
-                          <span className="text-zinc-600 font-bold select-none">[ {log.timestamp.slice(11, 19)} ]</span>
+                        <div key={idx} className="flex gap-2.5 leading-relaxed bg-[#070c14]/30 hover:bg-[#070c14]/60 p-1.5 rounded-lg border border-transparent hover:border-[#132034]/20 transition-all">
+                          <span className="text-zinc-500 font-bold select-none text-[11px] font-mono">[ {log.timestamp.slice(11, 19)} ]</span>
                           <span
-                            className={`font-black select-none uppercase tracking-wider text-[9px] px-1 rounded h-4 flex items-center ${
+                            className={`font-black select-none uppercase tracking-wider text-[8px] px-1.5 rounded h-4.5 flex items-center ${
                               log.type === "ERROR"
-                                ? "bg-red-500/10 text-red-400 border border-red-500/20"
+                                ? "bg-red-500/10 text-red-400 border border-red-500/20 shadow-[0_0_8px_rgba(239,68,68,0.06)]"
                                 : log.type === "WARN"
-                                ? "bg-amber-500/10 text-amber-400 border border-amber-500/20"
+                                ? "bg-amber-500/10 text-amber-400 border border-amber-500/20 shadow-[0_0_8px_rgba(245,158,11,0.06)]"
                                 : log.type === "PLAYER"
-                                ? "bg-purple-500/10 text-purple-400 border border-purple-500/20"
+                                ? "bg-indigo-500/10 text-indigo-450 border border-indigo-500/20 shadow-[0_0_8px_rgba(99,102,241,0.06)]"
                                 : log.type === "SYS"
-                                ? "bg-blue-500/10 text-blue-400 border border-blue-500/20"
-                                : "bg-zinc-800 text-zinc-400"
+                                ? "bg-blue-500/10 text-blue-400 border border-blue-500/20 shadow-[0_0_8px_rgba(59,130,246,0.06)]"
+                                : "bg-zinc-805 text-zinc-400 border border-zinc-800"
                             }`}
                           >
                             {log.type}
                           </span>
-                          <span className="text-zinc-300 break-all">{log.message}</span>
+                          <span className="text-zinc-250 break-all font-mono font-medium">{log.message}</span>
                         </div>
                       ))
                     )}
                   </div>
 
                   {/* Redirect to Quick Commands tab */}
-                  <div className="flex items-center justify-between mt-4 p-2.5 bg-zinc-900/35 border border-zinc-900/40 rounded-xl">
+                  <div className="flex items-center justify-between mt-4 p-3 bg-[#080d14]/80 border border-[#141e2e]/60 rounded-xl shadow-inner">
                     <div className="flex items-center gap-2">
-                      <Grid className="w-3.5 h-3.5 text-amber-500 animate-pulse" />
+                      <Grid className="w-3.5 h-3.5 text-indigo-400" />
                       <span className="text-[10px] font-bold text-zinc-400">
-                        Trigger custom macro presets inside the dedicated command space
+                        Trigger custom console macro commands inside the deck space
                       </span>
                     </div>
                     <button
                       type="button"
                       onClick={() => setNavTab("quick_commands")}
-                      className="px-2.5 py-1 text-[9px] uppercase font-black tracking-wider bg-zinc-950 hover:bg-zinc-900 border border-zinc-800 text-amber-400 rounded-lg transition-all cursor-pointer select-none"
+                      className="px-3 py-1 text-[9px] uppercase font-black tracking-wider bg-[#060a11] hover:bg-[#0c121e] border border-[#1a2b44] text-indigo-300 hover:text-indigo-200 rounded-lg transition-all cursor-pointer select-none"
                     >
-                      Open Commands Deck
+                      Open deck
                     </button>
                   </div>
 
                   {/* Command Sender Entry Input */}
-                  <form onSubmit={handleSendCommand} className="mt-3 p-2 bg-zinc-950 border border-zinc-900 rounded-xl flex gap-2">
-                    <span className="text-zinc-600 pl-1 py-1 font-bold font-mono">$</span>
+                  <form onSubmit={handleSendCommand} className="mt-3 p-1 bg-[#05080e]/95 border border-[#141f32]/80 rounded-xl flex gap-2 shadow-inner">
+                    <span className="text-zinc-600 pl-2.5 py-1.5 font-bold font-mono text-xs select-none">$</span>
                     <input
                       id="console-command-bar"
                       type="text"
-                      placeholder={stats?.status === "running" ? "Send Bedrock server console command..." : "Server must be online to execute commands."}
+                      placeholder={stats?.status === "running" ? "Type server console instruction (e.g. op steve)..." : "Launch BDS Core instance to invoke command stream."}
                       disabled={stats?.status !== "running"}
                       value={commandText}
                       onChange={e => setCommandText(e.target.value)}
-                      className="bg-transparent border-none outline-none text-xs w-full text-zinc-300 font-mono placeholder-zinc-700 disabled:cursor-not-allowed"
+                      className="bg-transparent border-none outline-none text-xs w-full text-zinc-200 font-mono placeholder-[#19263a] disabled:cursor-not-allowed py-1.5"
                     />
                     <button
                       type="submit"
                       disabled={stats?.status !== "running"}
-                      className={`px-3 py-1 rounded-lg text-[10px] uppercase font-black tracking-widest shadow cursor-pointer transition-all ${
-                        stats?.status === "running" ? "bg-emerald-600 text-white hover:bg-emerald-500" : "bg-zinc-900 text-zinc-700 cursor-not-allowed"
+                      className={`px-4.5 py-1.5 rounded-lg text-[9px] uppercase font-black tracking-widest cursor-pointer transition-all ${
+                        stats?.status === "running" 
+                          ? "bg-indigo-600 text-white hover:bg-indigo-505 shadow-lg shadow-indigo-600/10" 
+                          : "bg-[#0b1019] text-[#1c2c44] border border-dashed border-[#18263a] cursor-not-allowed"
                       }`}
                     >
                       Execute
@@ -2407,10 +2416,10 @@ export default function App() {
               </div>
 
               {/* Server Active Players list bento */}
-              <div className="xl:col-span-1 bg-zinc-900/40 border border-zinc-900 rounded-2xl p-5 flex flex-col h-[520px] overflow-hidden shadow-lg hover:border-zinc-800 transition-colors">
+              <div className="xl:col-span-1 glass-panel rounded-2xl p-5 flex flex-col h-[530px] overflow-hidden shadow-lg border border-[#152033]/50 transition-colors">
                 <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Active Players</h3>
-                  <div className="flex items-center gap-1.5 text-xs font-black bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded-full select-none">
+                  <h3 className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Active Players</h3>
+                  <div className="flex items-center gap-1.5 text-xs font-black bg-[#10b981]/10 border border-[#10b981]/35 text-emerald-400 px-2 py-0.5 rounded-full select-none">
                     <Users className="w-3 h-3" />
                     <span>{stats?.activePlayers ?? 0} / {appConfig.maxPlayers}</span>
                   </div>
@@ -2419,19 +2428,26 @@ export default function App() {
                 <div className="flex-1 overflow-y-auto space-y-3 pr-1">
                   {!stats?.players || stats.players.length === 0 ? (
                     <div className="h-full flex flex-col items-center justify-center text-center p-4">
-                      <Users className="w-8 h-8 text-zinc-800 mb-2" />
-                      <p className="text-xs text-zinc-500 font-semibold uppercase">No players online</p>
-                      <p className="text-[10px] text-zinc-600 mt-1 leading-snug">Minecraft survivalists join server directly on port 19132.</p>
+                      <div className="p-3 bg-zinc-900/40 border border-[#1d2a41]/50 rounded-2xl text-zinc-650 mb-3 animate-pulse">
+                        <Users className="w-7 h-7" />
+                      </div>
+                      <p className="text-xs text-zinc-400 font-extrabold uppercase tracking-wider">No players online</p>
+                      <p className="text-[10px] text-zinc-500 mt-1 leading-snug max-w-[180px] mx-auto">
+                        MCPE survivalists join directly on default port 19132.
+                      </p>
                     </div>
                   ) : (
                     stats.players.map((p: any, idx: number) => (
-                      <div key={idx} className="flex items-center gap-3 bg-zinc-950/30 border border-zinc-900/60 p-3 rounded-xl hover:border-zinc-800 transition-colors">
-                        <div className="w-9 h-9 bg-zinc-850 rounded-lg border border-zinc-800 flex items-center justify-center font-bold text-sm text-zinc-400 select-none">
+                      <div key={idx} className="flex items-center gap-3 bg-[#0a1019]/60 border border-[#141e2e]/60 p-3 rounded-xl hover:border-indigo-505/30 transition-all">
+                        <div className="w-9 h-9 bg-gradient-to-tr from-[#162238] to-[#1a2b47] rounded-lg border border-[#233552]/40 flex items-center justify-center font-bold text-sm text-[#8f9bb3] select-none shadow-sm">
                           {p.name.slice(0, 2).toUpperCase()}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="text-xs font-semibold text-white truncate leading-tight">{p.name}</p>
-                          <p className="text-[9px] text-zinc-500 font-mono mt-0.5">Ping: <span className="text-emerald-500 font-bold">{p.ping}ms</span></p>
+                          <p className="text-xs font-bold text-[#f3f4f6] truncate leading-tight">{p.name}</p>
+                          <p className="text-[10px] text-zinc-505 font-mono mt-0.5 flex items-center gap-1">
+                            <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.5)]" />
+                            <span>Ping: <span className="text-emerald-400 font-bold">{p.ping}ms</span></span>
+                          </p>
                         </div>
                         {isAdmin && (
                           <button
@@ -2439,7 +2455,7 @@ export default function App() {
                               setCommandText(`kick ${p.name}`);
                               showBanner(`Kicking prompt prefilled. Submit execute on console!`, "info");
                             }}
-                            className="bg-zinc-900 text-zinc-500 hover:text-red-400 px-2 py-1 rounded text-[9px] uppercase font-bold tracking-wider hover:bg-zinc-850 border border-zinc-800 border-dashed"
+                            className="bg-[#1a253a]/60 text-zinc-400 hover:text-rose-400 px-2 py-1 rounded-lg text-[9px] uppercase font-bold tracking-wider hover:bg-rose-500/10 border border-[#233552]/40 hover:border-rose-500/30 transition-all"
                           >
                             Kick
                           </button>
@@ -2449,7 +2465,7 @@ export default function App() {
                   )}
                 </div>
 
-                <div className="pt-4 border-t border-zinc-900 text-center select-none text-[9px] text-zinc-600 font-black tracking-widest uppercase">
+                <div className="pt-4 border-t border-[#152033]/45 text-center select-none text-[9px] text-zinc-500 font-bold tracking-widest uppercase">
                   Player Registries
                 </div>
               </div>
