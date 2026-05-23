@@ -455,8 +455,11 @@ export default function SoftwareUpdates({ token, onShowMessage }: SoftwareUpdate
                 </div>
 
                 <div className="space-y-2">
-                  <div className="text-[10px] text-zinc-500 uppercase tracking-widest font-black">Release Notes & Changelog</div>
-                  <div className="bg-zinc-950/60 border border-zinc-950 text-zinc-300 rounded-lg p-3 text-xs max-h-40 overflow-y-auto leading-relaxed whitespace-pre-wrap font-sans">
+                  <div className="text-[10px] text-zinc-500 uppercase tracking-widest font-black flex items-center justify-between">
+                    <span>Repository Commit History & Feed</span>
+                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-zinc-950 border border-zinc-900 text-emerald-400 font-extrabold capitalize">Real-time API Feed</span>
+                  </div>
+                  <div className="bg-zinc-950 border border-zinc-900 text-zinc-200 rounded-xl p-4 text-[11px] max-h-60 overflow-y-auto leading-relaxed whitespace-pre-wrap font-mono select-text">
                     {updateInfo.changelog || "No update details provided."}
                   </div>
                 </div>

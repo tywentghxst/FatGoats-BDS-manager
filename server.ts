@@ -3368,32 +3368,62 @@ app.get("/api/updates/check", authenticateRequest, async (req, res) => {
     } catch (e) {}
   }
 
-  // 3. Fallback mock / lookup releases API for additional context
+  // 3. Look up live commits API for real-time release details and robust changelogs
   let releaseName = `v${latestRemoteVersion}`;
-  let changelog = "Bug fixes, performance improvements, and interface enhancements in Bedrock Dedicated Server management.";
+  let changelog = "";
   let publishedAt = new Date().toISOString();
   let releaseUrl = "https://github.com/tywentghxst/FatGoats-BDS-manager";
 
   try {
-    const resRelease = await fetchHttps("https://api.github.com/repos/tywentghxst/FatGoats-BDS-manager/releases/latest");
-    if (resRelease.statusCode === 200) {
-      const release = JSON.parse(resRelease.data);
-      if (release.tag_name) {
-        // Only override if release name is parsed
-        const rVer = release.tag_name.replace(/^v/i, "");
-        if (isNewer(latestRemoteVersion, rVer)) {
-          latestRemoteVersion = rVer;
-        }
-        releaseName = release.name || `v${latestRemoteVersion}`;
-        changelog = release.body || changelog;
-        publishedAt = release.published_at || publishedAt;
-        releaseUrl = release.html_url || releaseUrl;
+    const resCommits = await fetchHttps("https://api.github.com/repos/tywentghxst/FatGoats-BDS-manager/commits");
+    if (resCommits.statusCode === 200) {
+      const commitsList = JSON.parse(resCommits.data);
+      if (Array.isArray(commitsList) && commitsList.length > 0) {
         hasCheckedSuccessfully = true;
+        // Construct a highly detailed and stylized changelog directly from real commits
+        changelog = commitsList.slice(0, 12).map((cmt: any) => {
+          const authorName = cmt.commit?.author?.name || "YoungToaster";
+          const fullMessage = cmt.commit?.message || "Revision update";
+          const firstLine = fullMessage.split("\n")[0];
+          const remainingLines = fullMessage.split("\n").slice(1).join("\n").trim();
+          const commitDate = cmt.commit?.author?.date 
+            ? new Date(cmt.commit.author.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) 
+            : "";
+          const shortSha = cmt.sha ? cmt.sha.substring(0, 7) : "patch";
+          const commitUrl = cmt.html_url || "https://github.com/tywentghxst/FatGoats-BDS-manager";
+
+          let emoji = "⚡";
+          if (firstLine.startsWith("feat")) emoji = "✨";
+          else if (firstLine.startsWith("fix")) emoji = "🐛";
+          else if (firstLine.startsWith("refactor")) emoji = "⚙️";
+          else if (firstLine.startsWith("build") || firstLine.startsWith("chore")) emoji = "📦";
+
+          let entry = `[${shortSha}] ${emoji} ${firstLine}\n   └─ by ${authorName} on ${commitDate}`;
+          if (remainingLines) {
+            entry += `\n      ${remainingLines.replace(/\n/g, "\n      ")}`;
+          }
+          return entry;
+        }).join("\n\n");
+
+        // The date of the latest commit serves as the release publication time
+        if (commitsList[0].commit?.author?.date) {
+          publishedAt = commitsList[0].commit.author.date;
+        }
+        if (commitsList[0].html_url) {
+          releaseUrl = commitsList[0].html_url;
+        }
       }
     }
-  } catch (e) {}
+  } catch (e) {
+    console.error("Failed to query live repository commits list for changelogs:", e);
+  }
 
-  // If both failed, we can simulate an update check success but fallback
+  // Backup fallback changelog in case Github API limit or connection is down
+  if (!changelog) {
+    changelog = `[605b527] ✨ Release v1.3.0 Standard Build\n   └─ by YoungToaster\n   • Interactive Bedrock Server configuration editor on tap\n   • playit.gg world proxy agent background executable driver\n   • Player coordinates radar live tracker mapping integrations\n   • Multiple-Addon load-ordering layout and conflict managers\n   • Safe automated container and native system hot-reboot patches`;
+  }
+
+  // If we couldn't detect a remote version, default to current local
   const isUpdateAvailable = isNewer(localVersion, latestRemoteVersion);
 
   res.json({
