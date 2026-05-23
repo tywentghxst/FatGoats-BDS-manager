@@ -39,6 +39,7 @@ interface BroadcasterStatus {
   logs: Array<{ timestamp: string; type: string; message: string }>;
   config: BroadcasterConfig;
   rawConfig: string;
+  customJavaPath?: string;
 }
 
 interface ConsoleConnectProps {
@@ -70,6 +71,7 @@ export default function ConsoleConnect({
 
   // Field states for the raw config YAML
   const [rawConfig, setRawConfig] = useState("");
+  const [customJavaPath, setCustomJavaPath] = useState("");
 
   const terminalEndRef = useRef<HTMLDivElement | null>(null);
 
@@ -97,6 +99,9 @@ export default function ConsoleConnect({
       }
       if (result.rawConfig) {
         setRawConfig(result.rawConfig);
+      }
+      if (result.customJavaPath !== undefined) {
+        setCustomJavaPath(result.customJavaPath);
       }
     } catch (err: any) {
       console.error(err);
@@ -240,6 +245,29 @@ export default function ConsoleConnect({
       const resData = await res.json();
       if (!res.ok) throw new Error(resData.error || "Failed to save config.yml");
       onShowMessage("config.yml file rewritten and verified successfully!", "success");
+      await fetchStatus();
+    } catch (err: any) {
+      onShowMessage(err.message, "error");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleSaveCompatibility = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setActionLoading(true);
+    try {
+      const res = await fetch("/api/server/config", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ customJavaPath })
+      });
+      const resData = await res.json();
+      if (!res.ok) throw new Error(resData.error || "Failed to save compatibility settings");
+      onShowMessage("Java executable path updated successfully!", "success");
       await fetchStatus();
     } catch (err: any) {
       onShowMessage(err.message, "error");
@@ -531,6 +559,36 @@ export default function ConsoleConnect({
                 className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-zinc-800 text-white font-semibold text-xs rounded-xl shadow-md transition-all cursor-pointer"
               >
                 Save Bridge Settings
+              </button>
+            </form>
+
+            {/* Host Compatibility settings Form */}
+            <form onSubmit={handleSaveCompatibility} className="bg-zinc-900/10 border border-zinc-900/80 p-6 rounded-2xl space-y-5">
+              <h3 className="text-sm font-bold text-white uppercase tracking-wider mb-2">Host Runtime Compatibility Settings</h3>
+              <p className="text-[10px] text-zinc-400 leading-relaxed">
+                If the Console Connect bridge does not start on your physical host machine and logs <strong>"'java' is not recognized as an internal or external command"</strong>, Java is not in your system's global system PATH. Configure the absolute or relative path to your Java JVM binary below.
+              </p>
+
+              <div className="flex flex-col gap-2">
+                <label className="text-xs font-semibold text-zinc-300">Custom Java Runtime (java / java.exe) Path</label>
+                <input
+                  type="text"
+                  value={customJavaPath}
+                  onChange={(e) => setCustomJavaPath(e.target.value)}
+                  placeholder="e.g. C:\Program Files\Java\jdk-17\bin\java.exe (or /usr/bin/java on Linux)"
+                  className="px-4 py-2.5 bg-zinc-900/60 border border-zinc-800 rounded-xl text-xs text-white focus:outline-none focus:border-zinc-700 font-mono"
+                />
+                <span className="text-[10px] text-zinc-500">
+                  Leave completely blank to use the standard fallback system <strong>"java"</strong> command.
+                </span>
+              </div>
+
+              <button
+                type="submit"
+                disabled={actionLoading}
+                className="px-6 py-2.5 bg-zinc-800 hover:bg-zinc-700 disabled:bg-zinc-900/40 text-zinc-200 hover:text-white font-semibold text-xs rounded-xl shadow-md transition-all border border-zinc-700 hover:border-zinc-600 cursor-pointer"
+              >
+                Apply Custom Java Path
               </button>
             </form>
           </div>

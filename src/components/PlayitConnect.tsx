@@ -30,6 +30,7 @@ interface PlayitStatus {
   claimCode: string;
   claimUrl: string;
   tunnelUrl: string;
+  customPlayitPath?: string;
 }
 
 interface PlayitConnectProps {
@@ -49,6 +50,7 @@ export default function PlayitConnect({
   const [loading, setLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [copiedType, setCopiedType] = useState<"code" | "ip" | null>(null);
+  const [customPlayitPath, setCustomPlayitPath] = useState("");
 
   const terminalEndRef = useRef<HTMLDivElement | null>(null);
 
@@ -64,6 +66,9 @@ export default function PlayitConnect({
       if (!res.ok) throw new Error("Failed to load playit.gg status");
       const result: PlayitStatus = await res.json();
       setData(result);
+      if (result.customPlayitPath !== undefined) {
+        setCustomPlayitPath(result.customPlayitPath);
+      }
     } catch (err: any) {
       console.error(err);
       if (!quiet) onShowMessage(err.message, "error");
@@ -141,6 +146,29 @@ export default function PlayitConnect({
     } catch (err: any) {
       onShowMessage(err.message, "error");
       await fetchStatus();
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleSavePlayitCompatibility = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setActionLoading(true);
+    try {
+      const res = await fetch("/api/server/config", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ customPlayitPath })
+      });
+      const resData = await res.json();
+      if (!res.ok) throw new Error(resData.error || "Failed to save compatibility settings");
+      onShowMessage("Playit executable path updated successfully!", "success");
+      await fetchStatus();
+    } catch (err: any) {
+      onShowMessage(err.message, "error");
     } finally {
       setActionLoading(false);
     }
@@ -371,6 +399,41 @@ export default function PlayitConnect({
                 )}
               </div>
             )}
+          </div>
+
+          {/* Host Compatibility Playit Card */}
+          <div className="p-6 bg-zinc-900/40 border border-zinc-900 rounded-2xl space-y-4 shadow-xl">
+            <h2 className="text-base font-semibold text-white flex items-center gap-2 border-b border-zinc-800/60 pb-3">
+              <ShieldAlert className="w-4 h-4 text-emerald-400" />
+              Host Compatibility Settings
+            </h2>
+            <form onSubmit={handleSavePlayitCompatibility} className="space-y-4">
+              <p className="text-[10px] text-zinc-400 leading-relaxed">
+                If the playit.gg tunnel agent cannot download or fails to execute on your custom physical host, enter the file path to your pre-installed local playit binary here:
+              </p>
+
+              <div className="flex flex-col gap-2">
+                <label className="text-xs font-semibold text-zinc-300">Custom Playit Binary Path</label>
+                <input
+                  type="text"
+                  value={customPlayitPath}
+                  onChange={(e) => setCustomPlayitPath(e.target.value)}
+                  placeholder="e.g. C:\Program Files\playit\playit.exe"
+                  className="w-full px-4 py-2.5 bg-zinc-900/60 border border-zinc-850 rounded-xl text-xs text-white focus:outline-none focus:border-zinc-750 font-mono"
+                />
+                <span className="text-[10px] text-zinc-500">
+                  Leave completely blank to let the manager use the standard built-in downloaded agent binary.
+                </span>
+              </div>
+
+              <button
+                type="submit"
+                disabled={actionLoading}
+                className="w-full py-2.5 px-3 rounded-xl font-bold text-xs bg-zinc-800 hover:bg-zinc-700 disabled:bg-zinc-900/40 text-zinc-200 hover:text-white transition-all flex items-center justify-center border border-zinc-700 hover:border-zinc-650 active:scale-98 cursor-pointer"
+              >
+                Apply Custom Playit Path
+              </button>
+            </form>
           </div>
         </div>
 

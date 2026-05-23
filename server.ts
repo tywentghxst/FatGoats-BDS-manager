@@ -70,6 +70,8 @@ interface DBStructure {
     allowCheats?: boolean;
     viewDistance?: number;
     tickDistance?: number;
+    customJavaPath?: string;
+    customPlayitPath?: string;
   };
   addons: Array<{
     uuid: string;
@@ -118,7 +120,9 @@ let dbCache: DBStructure = {
     onlineMode: false,
     allowCheats: true,
     viewDistance: 10,
-    tickDistance: 4
+    tickDistance: 4,
+    customJavaPath: "",
+    customPlayitPath: ""
   },
   addons: [],
   pastLogs: [],
@@ -150,7 +154,9 @@ function loadDB() {
           onlineMode: false,
           allowCheats: true,
           viewDistance: 10,
-          tickDistance: 4
+          tickDistance: 4,
+          customJavaPath: "",
+          customPlayitPath: ""
         };
       } else {
         dbCache.appConfig.serverName = dbCache.appConfig.serverName || "Bedrock Dedicated Server";
@@ -159,6 +165,8 @@ function loadDB() {
         dbCache.appConfig.allowCheats = dbCache.appConfig.allowCheats ?? true;
         dbCache.appConfig.viewDistance = dbCache.appConfig.viewDistance || 10;
         dbCache.appConfig.tickDistance = dbCache.appConfig.tickDistance || 4;
+        dbCache.appConfig.customJavaPath = dbCache.appConfig.customJavaPath || "";
+        dbCache.appConfig.customPlayitPath = dbCache.appConfig.customPlayitPath || "";
       }
     } catch (e) {
       console.error("Failed to parse database, resetting", e);
@@ -2789,16 +2797,17 @@ function startBroadcasterProcess() {
     broadcasterStatus = "starting";
     logBroadcasterMessage("SYS", "Launching Console Connect companion process in the background...");
 
+    const javaCmd = dbCache.appConfig.customJavaPath || "java";
     if (process.platform === "win32") {
-      logBroadcasterMessage("SYS", "Running on Windows. Spawning background JVM instance...");
-      broadcasterProcess = spawn("java", ["-jar", BROADCASTER_JAR], {
+      logBroadcasterMessage("SYS", `Running on Windows. Spawning background JVM instance using '${javaCmd}'...`);
+      broadcasterProcess = spawn(javaCmd, ["-jar", BROADCASTER_JAR], {
         cwd: BROADCASTER_DIR,
         shell: true,
         env: { ...process.env }
       });
     } else {
-      logBroadcasterMessage("SYS", "Running on Linux. Spawning background JVM instance...");
-      broadcasterProcess = spawn("java", ["-jar", BROADCASTER_JAR], {
+      logBroadcasterMessage("SYS", `Running on Linux. Spawning background JVM instance using '${javaCmd}'...`);
+      broadcasterProcess = spawn(javaCmd, ["-jar", BROADCASTER_JAR], {
         cwd: BROADCASTER_DIR,
         env: { ...process.env }
       });
@@ -2916,7 +2925,8 @@ app.get("/api/broadcaster/status", authenticateRequest, (req, res) => {
     isDownloaded,
     logs: broadcasterLogs,
     config: currentConfig,
-    rawConfig: rawYml
+    rawConfig: rawYml,
+    customJavaPath: dbCache.appConfig.customJavaPath || ""
   });
 });
 
@@ -3093,16 +3103,18 @@ function startPlayitProcess() {
     playitClaimCode = "";
     playitClaimUrl = "";
     playitTunnelUrl = "";
-    logPlayitMessage("SYS", "Launching playit.gg tunnel agent binary...");
 
-    if (!fs.existsSync(PLAYIT_BIN)) {
+    const playitCmd = dbCache.appConfig.customPlayitPath || PLAYIT_BIN;
+    logPlayitMessage("SYS", `Launching playit.gg tunnel agent binary using '${playitCmd}'...`);
+
+    if (!dbCache.appConfig.customPlayitPath && !fs.existsSync(PLAYIT_BIN)) {
       playitStatus = "stopped";
       logPlayitMessage("ERROR", "playit.gg binary not found! Please download the binary first.");
       return;
     }
 
     const secretPath = path.join(PLAYIT_DIR, "playit.toml");
-    playitProcess = spawn(PLAYIT_BIN, ["--secret-path", secretPath], {
+    playitProcess = spawn(playitCmd, ["--secret-path", secretPath], {
       cwd: PLAYIT_DIR,
       env: { ...process.env }
     });
@@ -3192,14 +3204,15 @@ function stopPlayitProcess() {
 
 // Endpoints
 app.get("/api/playit/status", authenticateRequest, (req, res) => {
-  const isDownloaded = fs.existsSync(PLAYIT_BIN);
+  const isDownloaded = dbCache.appConfig.customPlayitPath ? true : fs.existsSync(PLAYIT_BIN);
   res.json({
     status: playitStatus,
     isDownloaded,
     logs: playitLogs,
     claimCode: playitClaimCode,
     claimUrl: playitClaimUrl,
-    tunnelUrl: playitTunnelUrl
+    tunnelUrl: playitTunnelUrl,
+    customPlayitPath: dbCache.appConfig.customPlayitPath || ""
   });
 });
 
@@ -3210,9 +3223,9 @@ app.post("/api/playit/control", authenticateRequest, (req, res) => {
     if (dbCache.appConfig.simulationMode) {
       startPlayitSimulation();
     } else {
-      const isDownloaded = fs.existsSync(PLAYIT_BIN);
-      if (!isDownloaded) {
-        res.status(400).json({ error: "playit.gg binary not downloaded yet." });
+      const isReadyToRun = dbCache.appConfig.customPlayitPath || fs.existsSync(PLAYIT_BIN);
+      if (!isReadyToRun) {
+        res.status(400).json({ error: "playit.gg binary not downloaded yet (and no custom playit binary path configured)." });
         return;
       }
       startPlayitProcess();
