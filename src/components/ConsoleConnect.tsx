@@ -88,20 +88,22 @@ export default function ConsoleConnect({
       const result: BroadcasterStatus = await res.json();
       setData(result);
       
-      // Update form fields to match current values from server
-      if (result.config) {
-        setAddress(result.config.address || "127.0.0.1");
-        setPort(result.config.port || 19132);
-        setAutoReconnect(result.config["auto-reconnect"] !== false);
-        setEmail(result.config.email || "");
-        setPassword(result.config.password || "");
-        setPrefix(result.config.prefix || "[Console Connect] ");
-      }
-      if (result.rawConfig) {
-        setRawConfig(result.rawConfig);
-      }
-      if (result.customJavaPath !== undefined) {
-        setCustomJavaPath(result.customJavaPath);
+      // Update form fields to match current values from server on non-quiet initial fetches or saves
+      if (!quiet) {
+        if (result.config) {
+          setAddress(result.config.address || "127.0.0.1");
+          setPort(result.config.port || 19132);
+          setAutoReconnect(result.config["auto-reconnect"] !== false);
+          setEmail(result.config.email || "");
+          setPassword(result.config.password || "");
+          setPrefix(result.config.prefix || "[Console Connect] ");
+        }
+        if (result.rawConfig) {
+          setRawConfig(result.rawConfig);
+        }
+        if (result.customJavaPath !== undefined) {
+          setCustomJavaPath(result.customJavaPath);
+        }
       }
     } catch (err: any) {
       console.error(err);
@@ -643,7 +645,7 @@ export default function ConsoleConnect({
                   </p>
                 </div>
                 <button
-                  onClick={() => setActiveSubTab("settings")}
+                  onClick={() => setActiveSubTab("visual")}
                   className="px-3.5 py-1.5 bg-amber-500 hover:bg-amber-400 text-black font-extrabold text-[10px] uppercase tracking-wider rounded-lg transition-all shrink-0 cursor-pointer"
                 >
                   Configure Java Path

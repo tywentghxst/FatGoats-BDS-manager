@@ -68,11 +68,13 @@ export default function PlayitConnect({
       if (!res.ok) throw new Error("Failed to load playit.gg status");
       const result: PlayitStatus = await res.json();
       setData(result);
-      if (result.customPlayitPath !== undefined) {
-        setCustomPlayitPath(result.customPlayitPath);
-      }
-      if (result.playitSecretKey !== undefined) {
-        setPlayitSecretKey(result.playitSecretKey);
+      if (!quiet) {
+        if (result.customPlayitPath !== undefined) {
+          setCustomPlayitPath(result.customPlayitPath);
+        }
+        if (result.playitSecretKey !== undefined) {
+          setPlayitSecretKey(result.playitSecretKey);
+        }
       }
     } catch (err: any) {
       console.error(err);
