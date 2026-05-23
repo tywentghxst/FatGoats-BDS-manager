@@ -120,7 +120,7 @@ let dbCache: DBStructure = {
     difficulty: "normal",
     gamemode: "survival",
     simulationMode: false,
-    selectedVersion: "1.21.71",
+    selectedVersion: "1.26.21.1",
     serverName: "Bedrock Dedicated Server",
     emitServerTelemetry: false,
     onlineMode: false,
@@ -160,7 +160,7 @@ function loadDB() {
           difficulty: "normal",
           gamemode: "survival",
           simulationMode: false,
-          selectedVersion: "1.21.71",
+          selectedVersion: "1.26.21.1",
           serverName: "Bedrock Dedicated Server",
           emitServerTelemetry: false,
           onlineMode: false,
@@ -2109,19 +2109,19 @@ app.get("/api/versions", authenticateRequest, async (req, res) => {
   // Fallback defaults if scraper holds no results (e.g. offline, rate-limited, Mojang structure changed)
   if (!obtainedStable) {
     versions.push({
-      version: "1.21.71.01",
+      version: "1.26.21.1",
       releaseDate: "Official Latest Stable (Fallback Default)",
       isLatest: true,
-      downloadUrl: `https://minecraft.azureedge.net/${folder}/bedrock-server-1.21.71.01.zip`
+      downloadUrl: `https://minecraft.azureedge.net/${folder}/bedrock-server-1.26.21.1.zip`
     });
   }
 
   if (!obtainedPreview) {
     versions.push({
-      version: "1.21.71.10",
+      version: "1.26.21.1",
       releaseDate: "Official Latest Preview (Fallback Default)",
       isLatest: false,
-      downloadUrl: `https://minecraft.azureedge.net/${previewFolder}/bedrock-server-1.21.71.10.zip`
+      downloadUrl: `https://minecraft.azureedge.net/${previewFolder}/bedrock-server-1.26.21.1.zip`
     });
   }
 

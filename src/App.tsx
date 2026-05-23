@@ -345,7 +345,7 @@ export default function App() {
     levelName: "BedrockWorld",
     difficulty: "normal",
     gamemode: "survival",
-    selectedVersion: "1.21.71",
+    selectedVersion: "1.26.21.1",
     serverName: "Bedrock Dedicated Server",
     emitServerTelemetry: false,
     onlineMode: false,
