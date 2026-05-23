@@ -2070,104 +2070,59 @@ app.get("/api/versions", authenticateRequest, async (req, res) => {
   const folder = isWin ? "bin-win" : "bin-linux";
   const previewFolder = isWin ? "bin-win-preview" : "bin-linux-preview";
   
-  const versions: Array<{ version: string; releaseDate: string; isLatest: boolean; downloadUrl: string }> = [
-    {
-      version: "1.21.71",
-      releaseDate: "2025-05 stable (Latest)",
-      isLatest: true,
-      downloadUrl: `https://minecraft.azureedge.net/${folder}/bedrock-server-1.21.71.01.zip`
-    },
-    {
-      version: "1.21.62",
-      releaseDate: "2025-03 stable",
-      isLatest: false,
-      downloadUrl: `https://minecraft.azureedge.net/${folder}/bedrock-server-1.21.62.01.zip`
-    },
-    {
-      version: "1.21.60",
-      releaseDate: "2025-02 stable",
-      isLatest: false,
-      downloadUrl: `https://minecraft.azureedge.net/${folder}/bedrock-server-1.21.60.10.zip`
-    },
-    {
-      version: "1.21.50",
-      releaseDate: "2024-12",
-      isLatest: false,
-      downloadUrl: `https://minecraft.azureedge.net/${folder}/bedrock-server-1.21.50.10.zip`
-    },
-    {
-      version: "1.21.30",
-      releaseDate: "2024-10",
-      isLatest: false,
-      downloadUrl: `https://minecraft.azureedge.net/${folder}/bedrock-server-1.21.30.03.zip`
-    },
-    {
-      version: "1.20.80",
-      releaseDate: "2024-05",
-      isLatest: false,
-      downloadUrl: `https://minecraft.azureedge.net/${folder}/bedrock-server-1.20.80.05.zip`
-    }
-  ];
+  const versions: Array<{ version: string; releaseDate: string; isLatest: boolean; downloadUrl: string }> = [];
+  let obtainedStable = false;
+  let obtainedPreview = false;
 
-  // Try scraping the latest stable release
+  // Try scraping the latest stable release dynamically
   try {
     const scrapedStable = await fetchLatestBedrockVersion(folder);
     if (scrapedStable) {
-      const existsIdx = versions.findIndex(v => v.version === scrapedStable.version);
-      if (existsIdx === -1) {
-        versions.forEach(v => {
-          if (!v.releaseDate.includes("preview") && !v.releaseDate.includes("Preview")) {
-            v.isLatest = false;
-          }
-        });
-        versions.unshift({
-          version: scrapedStable.version,
-          releaseDate: "Official Dynamic Stable (Latest)",
-          isLatest: true,
-          downloadUrl: scrapedStable.downloadUrl
-        });
-      } else {
-        versions.forEach(v => {
-          if (!v.releaseDate.includes("preview") && !v.releaseDate.includes("Preview")) {
-            v.isLatest = false;
-          }
-        });
-        versions[existsIdx].isLatest = true;
-        versions[existsIdx].downloadUrl = scrapedStable.downloadUrl;
-        if (!versions[existsIdx].releaseDate.includes("(Latest)")) {
-          versions[existsIdx].releaseDate += " (Latest)";
-        }
-        // Move to head of array
-        const [matched] = versions.splice(existsIdx, 1);
-        versions.unshift(matched);
-      }
+      versions.push({
+        version: scrapedStable.version,
+        releaseDate: "Official Latest Stable (Direct from Site)",
+        isLatest: true,
+        downloadUrl: scrapedStable.downloadUrl
+      });
+      obtainedStable = true;
     }
   } catch (err) {
     console.warn("Failed retrieving latest Bedrock stable release dynamically: ", err);
   }
 
-  // Try scraping the latest preview/beta release
+  // Try scraping the latest preview/beta release dynamically
   try {
     const scrapedPreview = await fetchLatestBedrockVersion(previewFolder);
     if (scrapedPreview) {
-      const existsIdx = versions.findIndex(v => v.version === scrapedPreview.version);
-      if (existsIdx === -1) {
-        // Unshift right after the latest stable version if possible, or build at top
-        versions.unshift({
-          version: scrapedPreview.version,
-          releaseDate: "Official Dynamic Preview (Latest Beta)",
-          isLatest: false,
-          downloadUrl: scrapedPreview.downloadUrl
-        });
-      } else {
-        versions[existsIdx].downloadUrl = scrapedPreview.downloadUrl;
-        if (!versions[existsIdx].releaseDate.includes("Preview") && !versions[existsIdx].releaseDate.includes("Beta")) {
-          versions[existsIdx].releaseDate += " (Preview Beta)";
-        }
-      }
+      versions.push({
+        version: scrapedPreview.version,
+        releaseDate: "Official Latest Preview / Beta (Direct from Site)",
+        isLatest: false,
+        downloadUrl: scrapedPreview.downloadUrl
+      });
+      obtainedPreview = true;
     }
   } catch (err) {
     console.warn("Failed retrieving latest Bedrock preview release dynamically: ", err);
+  }
+
+  // Fallback defaults if scraper holds no results (e.g. offline, rate-limited, Mojang structure changed)
+  if (!obtainedStable) {
+    versions.push({
+      version: "1.21.71.01",
+      releaseDate: "Official Latest Stable (Fallback Default)",
+      isLatest: true,
+      downloadUrl: `https://minecraft.azureedge.net/${folder}/bedrock-server-1.21.71.01.zip`
+    });
+  }
+
+  if (!obtainedPreview) {
+    versions.push({
+      version: "1.21.71.10",
+      releaseDate: "Official Latest Preview (Fallback Default)",
+      isLatest: false,
+      downloadUrl: `https://minecraft.azureedge.net/${previewFolder}/bedrock-server-1.21.71.10.zip`
+    });
   }
 
   res.json(versions);

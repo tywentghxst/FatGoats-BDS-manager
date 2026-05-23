@@ -62,7 +62,9 @@ import {
   Sliders,
   Link,
   CloudDownload,
-  FlaskConical
+  FlaskConical,
+  GripVertical,
+  Search
 } from "lucide-react";
 
 import {
@@ -399,6 +401,8 @@ export default function App() {
   const [backups, setBackups] = useState<any[]>([]);
   const [loadingBackups, setLoadingBackups] = useState<boolean>(false);
   const [versions, setVersions] = useState<BedrockVersion[]>([]);
+  const [customDeployUrl, setCustomDeployUrl] = useState("");
+  const [customDeployVersion, setCustomDeployVersion] = useState("");
   const [usersList, setUsersList] = useState<UserAccount[]>([]);
   const [invitesList, setInvitesList] = useState<UserInvite[]>([]);
   const [newInviteRole, setNewInviteRole] = useState<"admin" | "viewer">("viewer");
@@ -420,9 +424,45 @@ export default function App() {
   const [actionMessage, setActionMessage] = useState({ text: "", type: "info" });
   const [addonSortBy, setAddonSortBy] = useState<"name" | "date" | "enabled" | "disabled">("name");
   const [addonViewMode, setAddonViewMode] = useState<"grid" | "order">("grid");
+  const [addonSearch, setAddonSearch] = useState("");
   const [localBehaviorOrder, setLocalBehaviorOrder] = useState<AddonMetadata[]>([]);
   const [localResourceOrder, setLocalResourceOrder] = useState<AddonMetadata[]>([]);
   const [isSavingLoadOrder, setIsSavingLoadOrder] = useState(false);
+
+  // Drag and Drop reordering states & handlers
+  const [draggedCmdIdx, setDraggedCmdIdx] = useState<number | null>(null);
+  const [draggedBehaviorIdx, setDraggedBehaviorIdx] = useState<number | null>(null);
+  const [draggedResourceIdx, setDraggedResourceIdx] = useState<number | null>(null);
+
+  const handleReorderQuickCommands = (targetIdx: number) => {
+    if (draggedCmdIdx === null || draggedCmdIdx === targetIdx) return;
+    const reordered = [...quickCommands];
+    const draggedItem = reordered[draggedCmdIdx];
+    reordered.splice(draggedCmdIdx, 1);
+    reordered.splice(targetIdx, 0, draggedItem);
+    setDraggedCmdIdx(targetIdx);
+    setQuickCommands(reordered);
+  };
+
+  const handleReorderBehaviorPacks = (targetIdx: number) => {
+    if (draggedBehaviorIdx === null || draggedBehaviorIdx === targetIdx) return;
+    const reordered = [...localBehaviorOrder];
+    const draggedItem = reordered[draggedBehaviorIdx];
+    reordered.splice(draggedBehaviorIdx, 1);
+    reordered.splice(targetIdx, 0, draggedItem);
+    setDraggedBehaviorIdx(targetIdx);
+    setLocalBehaviorOrder(reordered);
+  };
+
+  const handleReorderResourcePacks = (targetIdx: number) => {
+    if (draggedResourceIdx === null || draggedResourceIdx === targetIdx) return;
+    const reordered = [...localResourceOrder];
+    const draggedItem = reordered[draggedResourceIdx];
+    reordered.splice(draggedResourceIdx, 1);
+    reordered.splice(targetIdx, 0, draggedItem);
+    setDraggedResourceIdx(targetIdx);
+    setLocalResourceOrder(reordered);
+  };
 
   // Edit Addon States
   const [editingAddon, setEditingAddon] = useState<AddonMetadata | null>(null);
@@ -2863,9 +2903,31 @@ export default function App() {
                             return (
                               <div
                                 key={addon.uuid}
-                                className="flex items-center justify-between bg-zinc-900/40 hover:bg-zinc-900/60 border border-zinc-900 hover:border-zinc-800 p-3 rounded-xl transition-all shadow-sm"
+                                draggable={isAdmin}
+                                onDragStart={(e) => {
+                                  e.dataTransfer.setData("text/plain", addon.uuid);
+                                  e.dataTransfer.effectAllowed = "move";
+                                  setDraggedBehaviorIdx(index);
+                                }}
+                                onDragOver={(e) => {
+                                  e.preventDefault();
+                                }}
+                                onDragEnter={() => {
+                                  handleReorderBehaviorPacks(index);
+                                }}
+                                onDragEnd={() => setDraggedBehaviorIdx(null)}
+                                className={`flex items-center justify-between bg-zinc-900/40 hover:bg-zinc-900/60 border p-3 rounded-xl transition-all shadow-sm select-none ${
+                                  draggedBehaviorIdx === index
+                                    ? "border-purple-500 bg-purple-955/20 opacity-60 scale-[0.98]"
+                                    : "border-zinc-900 hover:border-zinc-800"
+                                }`}
                               >
                                 <div className="flex items-center gap-3 min-w-0">
+                                  {isAdmin && (
+                                    <div className="text-zinc-650 hover:text-zinc-400 cursor-grab active:cursor-grabbing p-1 transition-colors flex-shrink-0">
+                                      <GripVertical className="w-4 h-4" />
+                                    </div>
+                                  )}
                                   <div className="text-xs font-black font-mono text-purple-400 bg-purple-500/5 w-6 h-6 rounded flex items-center justify-center border border-purple-500/15 flex-shrink-0">
                                     {index + 1}
                                   </div>
@@ -2958,9 +3020,31 @@ export default function App() {
                             return (
                               <div
                                 key={addon.uuid}
-                                className="flex items-center justify-between bg-zinc-900/40 hover:bg-zinc-900/60 border border-zinc-900 hover:border-zinc-800 p-3 rounded-xl transition-all shadow-sm"
+                                draggable={isAdmin}
+                                onDragStart={(e) => {
+                                  e.dataTransfer.setData("text/plain", addon.uuid);
+                                  e.dataTransfer.effectAllowed = "move";
+                                  setDraggedResourceIdx(index);
+                                }}
+                                onDragOver={(e) => {
+                                  e.preventDefault();
+                                }}
+                                onDragEnter={() => {
+                                  handleReorderResourcePacks(index);
+                                }}
+                                onDragEnd={() => setDraggedResourceIdx(null)}
+                                className={`flex items-center justify-between bg-zinc-900/40 hover:bg-zinc-900/60 border p-3 rounded-xl transition-all shadow-sm select-none ${
+                                  draggedResourceIdx === index
+                                    ? "border-blue-500 bg-blue-955/20 opacity-60 scale-[0.98]"
+                                    : "border-zinc-900 hover:border-zinc-800"
+                                }`}
                               >
                                 <div className="flex items-center gap-3 min-w-0">
+                                  {isAdmin && (
+                                    <div className="text-zinc-650 hover:text-zinc-400 cursor-grab active:cursor-grabbing p-1 transition-colors flex-shrink-0">
+                                      <GripVertical className="w-4 h-4" />
+                                    </div>
+                                  )}
                                   <div className="text-xs font-black font-mono text-blue-400 bg-blue-500/5 w-6 h-6 rounded flex items-center justify-center border border-blue-500/15 flex-shrink-0">
                                     {index + 1}
                                   </div>
@@ -3013,18 +3097,41 @@ export default function App() {
                 // ------------------ STANDALONE GRID LIST MANAGER VIEW ------------------
                 <>
                   <div className="flex flex-wrap items-center gap-4 bg-zinc-900/15 border border-zinc-900 rounded-2xl p-4 justify-between animate-fade-in">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold text-zinc-500 uppercase tracking-wide">Sort by:</span>
-                      <select
-                        value={addonSortBy}
-                        onChange={(e) => setAddonSortBy(e.target.value as any)}
-                        className="bg-zinc-950 text-zinc-350 text-xs font-semibold px-3 py-1.5 rounded-lg border border-zinc-900 outline-none cursor-pointer focus:border-zinc-700 transition-colors"
-                      >
-                        <option value="name">Name</option>
-                        <option value="date">Date Added</option>
-                        <option value="enabled">Enabled First</option>
-                        <option value="disabled">Disabled First</option>
-                      </select>
+                    <div className="flex flex-wrap items-center gap-3">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold text-zinc-500 uppercase tracking-wide">Sort by:</span>
+                        <select
+                          value={addonSortBy}
+                          onChange={(e) => setAddonSortBy(e.target.value as any)}
+                          className="bg-zinc-950 text-zinc-350 text-xs font-semibold px-3 py-1.5 rounded-lg border border-zinc-900 outline-none cursor-pointer focus:border-zinc-700 transition-colors"
+                        >
+                          <option value="name">Name</option>
+                          <option value="date">Date Added</option>
+                          <option value="enabled">Enabled First</option>
+                          <option value="disabled">Disabled First</option>
+                        </select>
+                      </div>
+
+                      {/* Addon Quick Filter Search Bar */}
+                      <div className="relative w-64">
+                        <Search className="absolute left-3 top-2.5 w-3.5 h-3.5 text-zinc-500" />
+                        <input
+                          type="text"
+                          placeholder="Quick search addons..."
+                          value={addonSearch}
+                          onChange={(e) => setAddonSearch(e.target.value)}
+                          className="w-full pl-9 pr-8 py-1.5 bg-zinc-950 border border-zinc-900 rounded-lg text-xs text-white placeholder-zinc-550 outline-none focus:border-zinc-750 focus:bg-zinc-950 transition-all font-sans"
+                        />
+                        {addonSearch && (
+                          <button
+                            onClick={() => setAddonSearch("")}
+                            className="absolute right-2 top-1.5 p-1 text-zinc-500 hover:text-white transition-colors"
+                            title="Clear search"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        )}
+                      </div>
                     </div>
 
                     {isAdmin && addons.length > 0 && (
@@ -3079,10 +3186,37 @@ export default function App() {
                       return 0;
                     });
 
-                    const activeBehaviorPacks = sortedAddons.filter(a => a.type === "behavior" && a.isEnabled);
-                    const activeResourcePacks = sortedAddons.filter(a => (a.type === "resource" || a.type === "world") && a.isEnabled);
-                    const disabledBehaviorPacks = sortedAddons.filter(a => a.type === "behavior" && !a.isEnabled);
-                    const disabledResourcePacks = sortedAddons.filter(a => (a.type === "resource" || a.type === "world") && !a.isEnabled);
+                    // Search filtering
+                    const searchFilteredAddons = addonSearch.trim()
+                      ? sortedAddons.filter(addon => 
+                          addon.name.toLowerCase().includes(addonSearch.toLowerCase()) ||
+                          (addon.description && addon.description.toLowerCase().includes(addonSearch.toLowerCase())) ||
+                          (addon.originalName && addon.originalName.toLowerCase().includes(addonSearch.toLowerCase()))
+                        )
+                      : sortedAddons;
+
+                    if (addons.length > 0 && searchFilteredAddons.length === 0) {
+                      return (
+                        <div className="bg-zinc-900/10 border border-zinc-900 border-dashed p-12 text-center rounded-2xl flex flex-col items-center mt-6">
+                          <Search className="w-10 h-10 text-zinc-700 mb-3" />
+                          <h3 className="text-sm font-black text-white tracking-wide">No listing matches found</h3>
+                          <p className="text-xs text-zinc-500 max-w-sm mt-1 leading-relaxed">
+                            No addon names, descriptions, or filenames match the search query <strong className="text-zinc-400">"{addonSearch}"</strong>.
+                          </p>
+                          <button
+                            onClick={() => setAddonSearch("")}
+                            className="mt-4 px-4 py-2 bg-zinc-850 hover:bg-zinc-800 text-white text-xs font-semibold rounded-xl border border-zinc-700 transition-colors cursor-pointer"
+                          >
+                            Clear Search Filters
+                          </button>
+                        </div>
+                      );
+                    }
+
+                    const activeBehaviorPacks = searchFilteredAddons.filter(a => a.type === "behavior" && a.isEnabled);
+                    const activeResourcePacks = searchFilteredAddons.filter(a => (a.type === "resource" || a.type === "world") && a.isEnabled);
+                    const disabledBehaviorPacks = searchFilteredAddons.filter(a => a.type === "behavior" && !a.isEnabled);
+                    const disabledResourcePacks = searchFilteredAddons.filter(a => (a.type === "resource" || a.type === "world") && !a.isEnabled);
 
                     const renderAddonCard = (addon: AddonMetadata) => {
                       const isGrouped = addons.some(a => 
@@ -4218,7 +4352,7 @@ export default function App() {
                         <p className="text-xs text-zinc-500 max-w-sm mx-auto">Click "Add Custom Button" above or click "Restore Defaults" to populate standard administrative console macros.</p>
                       </div>
                     ) : (
-                      quickCommands.map((item) => {
+                      quickCommands.map((item, idx) => {
                         const IconComponent = ICON_MAP[item.icon] || Terminal;
                         const colors = COLOR_CLASSES[item.color] || COLOR_CLASSES.zinc;
                         const isOnline = stats?.status === "running";
@@ -4226,6 +4360,19 @@ export default function App() {
                         return (
                           <div
                             key={item.id}
+                            draggable={true}
+                            onDragStart={(e) => {
+                              e.dataTransfer.setData("text/plain", item.id);
+                              e.dataTransfer.effectAllowed = "move";
+                              setDraggedCmdIdx(idx);
+                            }}
+                            onDragOver={(e) => {
+                              e.preventDefault();
+                            }}
+                            onDragEnter={() => {
+                              handleReorderQuickCommands(idx);
+                            }}
+                            onDragEnd={() => setDraggedCmdIdx(null)}
                             onClick={() => {
                               if (isOnline) {
                                 sendPresetCommand(item.command);
@@ -4233,12 +4380,19 @@ export default function App() {
                                 showBanner("The Minecraft server must be ONLINE to execute quick commands.", "error");
                               }
                             }}
-                            className={`group relative border rounded-2xl p-5 flex items-start gap-4 transition-all shadow-sm ${
-                              isOnline 
-                                ? `${colors.bg} ${colors.border} cursor-pointer active:scale-[0.98]` 
-                                : "border-zinc-900 bg-zinc-950/40 opacity-50 cursor-not-allowed"
+                            className={`group relative border rounded-2xl p-5 pl-11 flex items-start gap-4 transition-all shadow-sm ${
+                              draggedCmdIdx === idx
+                                ? "border-amber-500 bg-amber-950/20 opacity-55 scale-[0.98] cursor-grabbing"
+                                : isOnline 
+                                  ? `${colors.bg} ${colors.border} cursor-pointer active:scale-[0.98]` 
+                                  : "border-zinc-900 bg-zinc-950/40 opacity-50 cursor-not-allowed"
                             }`}
                           >
+                            {/* Graceful drag handle indicator */}
+                            <div className="absolute left-3 top-0 bottom-0 flex items-center text-zinc-650 group-hover:text-zinc-400 cursor-grab active:cursor-grabbing transition-colors">
+                              <GripVertical className="w-4 h-4" />
+                            </div>
+
                             {/* Accent Icon Badge */}
                             <div className={`p-3 rounded-xl flex items-center justify-center border font-semibold ${
                               isOnline ? `${colors.badge}` : "bg-zinc-950 border-zinc-900 text-zinc-600"
@@ -5215,7 +5369,7 @@ export default function App() {
                           <UploadCloud className="w-4 h-4 text-emerald-450" />
                           <h4 className="text-xs font-black text-white uppercase tracking-wider">Upload Dedicated Server File</h4>
                         </div>
-                        <p className="text-[10px] text-zinc-500 leading-relaxed">
+                        <p className="text-[10px] text-zinc-500 leading-relaxed font-sans">
                           Alternatively, upload a custom or pre-downloaded Bedrock Dedicated Server <code className="text-zinc-300 font-mono">.zip</code> package to extract and deploy automatically on this host.
                         </p>
                         
@@ -5263,37 +5417,122 @@ export default function App() {
                               }}
                             />
                           </label>
-                          <span className="text-[9px] text-zinc-600 font-mono italic">Accepts Bedrock Dedicated Server ZIP package</span>
+                          <span className="text-[9px] text-zinc-650 font-mono italic">Accepts Bedrock Dedicated Server ZIP package</span>
                         </div>
                       </div>
                     )}
 
-                    <div className="space-y-3">
-                      {versions.map((ver, idx) => (
-                        <div key={idx} className="bg-zinc-950/40 border border-zinc-900 p-3 rounded-xl flex items-center justify-between hover:border-zinc-805 transition-colors">
-                          <div>
-                            <div className="flex items-center gap-1.5">
-                              <h4 className="text-xs font-black text-white tracking-wide">{ver.version}</h4>
-                              {ver.isLatest && (
-                                <span className="text-[8px] bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-black tracking-widest px-1 py-px rounded uppercase">
-                                  Latest
-                                </span>
-                              )}
-                            </div>
-                            <span className="text-[9px] text-zinc-600 block mt-0.5">{ver.releaseDate}</span>
-                          </div>
-                          {isAdmin ? (
-                            <button
-                              onClick={() => installBedrockVersion(ver.version, ver.downloadUrl)}
-                              className="bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest text-zinc-300 transition-colors cursor-pointer select-none"
-                            >
-                              Deploy Build
-                            </button>
-                          ) : (
-                            <Lock className="w-3.5 h-3.5 text-zinc-700" />
-                          )}
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Available Real-Time Releases</h3>
+                        <span className="text-[8px] bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-bold px-2 py-0.5 rounded-full uppercase tracking-wider animate-pulse">
+                          Auto-Fetched Live
+                        </span>
+                      </div>
+
+                      {versions.length === 0 ? (
+                        <div className="bg-zinc-950/40 border border-zinc-900 rounded-xl p-5 text-center text-[10px] text-zinc-500 font-sans">
+                          Loading latest direct download packages from Minecraft...
                         </div>
-                      ))}
+                      ) : (
+                        <div className="space-y-3">
+                          {versions.map((ver, idx) => {
+                            const isStable = ver.releaseDate.toLowerCase().includes("stable");
+                            return (
+                              <div key={idx} className="bg-zinc-950/40 border border-zinc-900 p-3.5 rounded-xl flex items-center justify-between hover:border-zinc-805 transition-colors">
+                                <div className="min-w-0 pr-4">
+                                  <div className="flex items-center gap-2">
+                                    <h4 className="text-xs font-black text-white tracking-wide font-mono">{ver.version}</h4>
+                                    <span className={`text-[8px] font-black tracking-widest px-1.5 py-0.5 rounded uppercase ${
+                                      isStable 
+                                        ? "bg-emerald-500/10 border border-emerald-500/20 text-emerald-400" 
+                                        : "bg-purple-500/10 border border-purple-500/20 text-purple-400"
+                                    }`}>
+                                      {isStable ? "Stable Live" : "Preview Beta"}
+                                    </span>
+                                  </div>
+                                  <span className="text-[9px] text-zinc-500 block mt-1 truncate max-w-[200px] sm:max-w-xs font-mono" title={ver.downloadUrl}>
+                                    {ver.releaseDate}
+                                  </span>
+                                </div>
+                                {isAdmin ? (
+                                  <button
+                                    onClick={() => installBedrockVersion(ver.version, ver.downloadUrl)}
+                                    className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all cursor-pointer select-none border whitespace-nowrap active:scale-[0.98] ${
+                                      isStable
+                                        ? "bg-emerald-600 hover:bg-emerald-500 border-emerald-550 text-white"
+                                        : "bg-purple-600 hover:bg-purple-500 border-purple-550 text-white"
+                                    }`}
+                                  >
+                                    Deploy {isStable ? "Stable" : "Beta"}
+                                  </button>
+                                ) : (
+                                  <Lock className="w-3.5 h-3.5 text-zinc-700 flex-shrink-0" />
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {/* Dynamic Link Downloader */}
+                      {isAdmin && (
+                        <div className="pt-4 border-t border-zinc-900/60 space-y-3">
+                          <div className="flex items-center gap-1.5">
+                            <Link className="w-3.5 h-3.5 text-indigo-400" />
+                            <h4 className="text-[10px] font-black text-white uppercase tracking-wider">Direct Minecraft URL Installer</h4>
+                          </div>
+                          <p className="text-[10px] text-zinc-500 leading-relaxed font-sans">
+                            Paste any direct zip download link from <a href="https://www.minecraft.net/en-us/download/server/bedrock" target="_blank" rel="noreferrer" className="text-indigo-400 hover:underline">Mojang's official site</a> to download and deploy any build instantly.
+                          </p>
+
+                          <div className="grid grid-cols-3 gap-2">
+                            <div className="col-span-1">
+                              <label className="text-[8px] text-zinc-500 font-black uppercase tracking-wider block mb-1">Target Version</label>
+                              <input
+                                type="text"
+                                placeholder="e.g. 1.21.72.01"
+                                value={customDeployVersion}
+                                onChange={(e) => setCustomDeployVersion(e.target.value)}
+                                className="w-full px-2.5 py-2 bg-zinc-950 border border-zinc-900 rounded-lg text-xs text-white placeholder-zinc-750 font-mono outline-none focus:border-indigo-500 transition-colors"
+                              />
+                            </div>
+                            <div className="col-span-2">
+                              <label className="text-[8px] text-zinc-500 font-black uppercase tracking-wider block mb-1">Direct ZIP URL</label>
+                              <input
+                                type="text"
+                                placeholder="https://minecraft.azureedge.net/bin/..."
+                                value={customDeployUrl}
+                                onChange={(e) => setCustomDeployUrl(e.target.value)}
+                                className="w-full px-2.5 py-2 bg-zinc-950 border border-zinc-900 rounded-lg text-xs text-white placeholder-zinc-750 font-mono outline-none focus:border-indigo-500 transition-colors"
+                              />
+                            </div>
+                          </div>
+
+                          <button
+                            onClick={() => {
+                              if (!customDeployUrl.trim()) {
+                                showBanner("Please enter a valid direct ZIP download URL.", "error");
+                                return;
+                              }
+                              let urlToUse = customDeployUrl.trim();
+                              let detectedVersion = customDeployVersion.trim();
+                              
+                              if (!detectedVersion) {
+                                // Try parsing version from url
+                                const match = urlToUse.match(/bedrock-server-([0-9.]+)\.zip/i);
+                                detectedVersion = match ? match[1] : "Custom";
+                              }
+
+                              installBedrockVersion(detectedVersion, urlToUse);
+                            }}
+                            className="w-full mt-2 bg-indigo-600 hover:bg-indigo-500 border border-indigo-550 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest text-white transition-colors cursor-pointer select-none flex items-center justify-center gap-2"
+                          >
+                            <CloudDownload className="w-3.5 h-3.5" />
+                            <span>Deploy Custom Direct Link</span>
+                          </button>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
