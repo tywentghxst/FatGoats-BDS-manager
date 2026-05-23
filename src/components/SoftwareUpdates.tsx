@@ -10,7 +10,11 @@ import {
   Database, 
   FileCode, 
   ExternalLink,
-  Info
+  Info,
+  GitCommit,
+  GitBranch,
+  Calendar,
+  User
 } from "lucide-react";
 
 interface SoftwareUpdatesProps {
@@ -18,11 +22,24 @@ interface SoftwareUpdatesProps {
   onShowMessage: (text: string, type: "info" | "success" | "error" | "warn") => void;
 }
 
+interface GithubCommit {
+  sha: string;
+  shortSha: string;
+  author: string;
+  authorLogin: string;
+  avatarUrl: string;
+  date: string;
+  message: string;
+  details: string;
+  htmlUrl: string;
+}
+
 interface UpdateStatus {
   latestVersion: string;
   releaseName: string;
   publishedAt: string;
   changelog: string;
+  commits?: GithubCommit[];
   url: string;
   isNew: boolean;
   isFallback?: boolean;
@@ -458,14 +475,138 @@ export default function SoftwareUpdates({ token, onShowMessage }: SoftwareUpdate
                   </a>
                 </div>
 
-                <div className="space-y-2">
-                  <div className="text-[10px] text-zinc-500 uppercase tracking-widest font-black flex items-center justify-between">
-                    <span>Repository Commit History & Feed</span>
-                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-zinc-950 border border-zinc-900 text-emerald-400 font-extrabold capitalize">Real-time API Feed</span>
+                <div className="space-y-3">
+                  <div className="text-[10px] text-zinc-400 uppercase tracking-widest font-black flex items-center justify-between px-1">
+                    <span className="flex items-center gap-1.5">
+                      <GitBranch className="w-3 h-3 text-emerald-400" />
+                      Repository Commit History & Feed
+                    </span>
+                    <span className="text-[9px] px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-extrabold capitalize">
+                      Real-time API Feed
+                    </span>
                   </div>
-                  <div className="bg-zinc-950 border border-zinc-900 text-zinc-200 rounded-xl p-4 text-[11px] max-h-60 overflow-y-auto leading-relaxed whitespace-pre-wrap font-mono select-text">
-                    {updateInfo.changelog || "No update details provided."}
-                  </div>
+
+                  {updateInfo.commits && updateInfo.commits.length > 0 ? (
+                    <div className="space-y-3.5 max-h-[460px] overflow-y-auto pr-1 select-text scrollbar-thin scrollbar-thumb-zinc-800 scrollbar-track-transparent">
+                      {updateInfo.commits.map((commit) => {
+                        // Dynamically analyze commit tag type (e.g. feat: optimize restart)
+                        const msgLower = commit.message.toLowerCase();
+                        let badgeColor = "bg-zinc-500/10 text-zinc-400 border-zinc-500/20";
+                        let badgeLabel = "patch";
+
+                        if (msgLower.startsWith("feat")) {
+                          badgeColor = "bg-emerald-500/10 text-emerald-400 border-emerald-500/20";
+                          badgeLabel = "feature";
+                        } else if (msgLower.startsWith("fix")) {
+                          badgeColor = "bg-rose-500/10 text-rose-400 border-rose-500/20";
+                          badgeLabel = "bugfix";
+                        } else if (msgLower.startsWith("refactor")) {
+                          badgeColor = "bg-purple-500/10 text-purple-400 border-purple-500/20";
+                          badgeLabel = "refactor";
+                        } else if (msgLower.startsWith("build") || msgLower.startsWith("chore")) {
+                          badgeColor = "bg-sky-500/10 text-sky-450 border-sky-500/20";
+                          badgeLabel = "build";
+                        } else if (msgLower.startsWith("docs")) {
+                          badgeColor = "bg-amber-500/10 text-yellow-450 border-amber-500/20";
+                          badgeLabel = "docs";
+                        }
+
+                        // Parse out prefix from main message line
+                        let displayMessage = commit.message;
+                        const prefixMatch = commit.message.match(/^([a-z0-9_-]+)(?:\(([^)]+)\))?:\s*(.*)$/i);
+                        if (prefixMatch) {
+                          displayMessage = prefixMatch[3];
+                        }
+
+                        return (
+                          <div 
+                            key={commit.sha} 
+                            className="group relative bg-[#09090b]/90 hover:bg-[#0c0c0e] border border-zinc-900/80 hover:border-zinc-800 rounded-xl p-3.5 transition-all duration-200"
+                          >
+                            {/* Accent Vertical Color Indicator */}
+                            <div className={`absolute top-0 bottom-0 left-0 w-[3px] rounded-l-xl ${
+                              badgeLabel === "feature" ? "bg-emerald-500/60" :
+                              badgeLabel === "refactor" ? "bg-purple-500/60" :
+                              badgeLabel === "bugfix" ? "bg-rose-500/60" :
+                              "bg-zinc-700"
+                            }`} />
+
+                            {/* Header Section: Author & Date & Commit SHA link */}
+                            <div className="flex items-center justify-between gap-2 text-[11px] border-b border-zinc-900/40 pb-2 mb-2">
+                              <div className="flex items-center gap-2">
+                                <img 
+                                  src={commit.avatarUrl} 
+                                  alt={commit.author}
+                                  referrerPolicy="no-referrer"
+                                  className="w-5 h-5 rounded-full border border-zinc-800 object-cover"
+                                  onError={(e) => {
+                                    // Fallback to letters avatar if it fails to load
+                                    e.currentTarget.style.display = 'none';
+                                  }}
+                                />
+                                <span className="font-bold text-zinc-350">{commit.author}</span>
+                                <span className="text-zinc-600 font-normal">@{commit.authorLogin}</span>
+                              </div>
+                              
+                              <div className="flex items-center gap-2 font-mono">
+                                <span className="text-zinc-500 text-[10px]">
+                                  {new Date(commit.date).toLocaleDateString(undefined, {
+                                    month: 'short',
+                                    day: 'numeric',
+                                    hour: '2-digit',
+                                    minute: '2-digit'
+                                  })}
+                                </span>
+                                <a 
+                                  href={commit.htmlUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="px-1.5 py-0.5 rounded bg-zinc-900/80 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 hover:text-white transition-colors text-[10px] flex items-center gap-1 font-bold select-all"
+                                  title="View code diff on GitHub"
+                                >
+                                  {commit.shortSha}
+                                  <ExternalLink className="w-2.5 h-2.5 text-zinc-500 group-hover:text-zinc-300" />
+                                </a>
+                              </div>
+                            </div>
+
+                            {/* Message & Core Changes */}
+                            <div className="space-y-2.5 pl-1 select-text">
+                              <div className="flex items-start gap-1.5 flex-wrap md:flex-nowrap">
+                                <span className={`px-2 py-0.5 text-[9px] font-black uppercase tracking-wider rounded border shrink-0 ${badgeColor}`}>
+                                  {badgeLabel}
+                                </span>
+                                <span className="text-xs font-semibold text-zinc-100 font-sans leading-snug">
+                                  {displayMessage}
+                                </span>
+                              </div>
+
+                              {/* Multi-line Details Parsing */}
+                              {commit.details ? (
+                                <div className="mt-1.5 pt-1.5 border-t border-zinc-950/20 space-y-1 text-[11px] font-sans text-zinc-400">
+                                  {commit.details.split("\n").map((line, lineIdx) => {
+                                    const cleanedLine = line.replace(/^[•*\-\s\d]+\.?\s*/, "").trim();
+                                    if (!cleanedLine) return null;
+                                    return (
+                                      <div key={lineIdx} className="flex items-start gap-2 leading-relaxed text-zinc-300">
+                                        <span className="text-emerald-500 mt-1 select-none text-[8px]">•</span>
+                                        <span className="flex-1">{cleanedLine}</span>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              ) : null}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    /* Fallback standard terminal style scroll */
+                    <div className="bg-zinc-950 border border-zinc-900 text-zinc-200 rounded-xl p-4 text-[11px] max-h-60 overflow-y-auto leading-relaxed whitespace-pre-wrap font-mono select-text">
+                      {updateInfo.changelog || "No update details provided."}
+                    </div>
+                  )}
                 </div>
 
                 {updateStatus === "idle" && (

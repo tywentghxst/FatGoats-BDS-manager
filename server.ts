@@ -3385,6 +3385,7 @@ app.get("/api/updates/check", authenticateRequest, async (req, res) => {
   let publishedAt = new Date().toISOString();
   let releaseUrl = "https://github.com/tywentghxst/FatGoats-BDS-manager";
   let latestSha = "";
+  let commits: any[] = [];
 
   try {
     const resCommits = await fetchHttps("https://api.github.com/repos/tywentghxst/FatGoats-BDS-manager/commits");
@@ -3393,6 +3394,25 @@ app.get("/api/updates/check", authenticateRequest, async (req, res) => {
       if (Array.isArray(commitsList) && commitsList.length > 0) {
         hasCheckedSuccessfully = true;
         latestSha = commitsList[0].sha || "";
+        
+        // Build a highly-detailed structured array of commits for gorgeous UI mapping
+        commits = commitsList.slice(0, 15).map((cmt: any) => {
+          const fullMessage = cmt.commit?.message || "Revision update";
+          const firstLine = fullMessage.split("\n")[0];
+          const remainingLines = fullMessage.split("\n").slice(1).join("\n").trim();
+          return {
+            sha: cmt.sha || "",
+            shortSha: cmt.sha ? cmt.sha.substring(0, 7) : "patch",
+            author: cmt.commit?.author?.name || "YoungToaster",
+            authorLogin: cmt.author?.login || "tywentghxst",
+            avatarUrl: cmt.author?.avatar_url || "https://avatars.githubusercontent.com/u/77469443?v=4",
+            date: cmt.commit?.author?.date || new Date().toISOString(),
+            message: firstLine,
+            details: remainingLines,
+            htmlUrl: cmt.html_url || "https://github.com/tywentghxst/FatGoats-BDS-manager"
+          };
+        });
+
         // Construct a highly detailed and stylized changelog directly from real commits
         changelog = commitsList.slice(0, 12).map((cmt: any) => {
           const authorName = cmt.commit?.author?.name || "YoungToaster";
@@ -3431,12 +3451,70 @@ app.get("/api/updates/check", authenticateRequest, async (req, res) => {
     console.error("Failed to query live repository commits list for changelogs:", e);
   }
 
-  // Backup fallback changelog in case Github API limit or connection is down
-  if (!changelog) {
-    changelog = `[605b527] ✨ Release v1.3.0 Standard Build\n   └─ by YoungToaster\n   • Interactive Bedrock Server configuration editor on tap\n   • playit.gg world proxy agent background executable driver\n   • Player coordinates radar live tracker mapping integrations\n   • Multiple-Addon load-ordering layout and conflict managers\n   • Safe automated container and native system hot-reboot patches`;
+  // Backup fallback changelog and structured commits in case Github API limit or connection is down
+  if (commits.length === 0) {
+    commits = [
+      {
+        sha: "25ff50cae43feb852b1fcb04460abd8a9bd5c606",
+        shortSha: "25ff50c",
+        author: "YoungToaster",
+        authorLogin: "tywentghxst",
+        avatarUrl: "https://avatars.githubusercontent.com/u/77469443?v=4",
+        date: "2026-05-23T04:19:33Z",
+        message: "feat: update playit-gg config and optimize restart",
+        details: "• Pass explicit secret path to playit agent\n• Replace hot-reload with clean process exit for stability\n• Refactor update UI for improved consistency and design",
+        htmlUrl: "https://github.com/tywentghxst/FatGoats-BDS-manager/commit/25ff50cae43feb852b1fcb04460abd8a9bd5c606"
+      },
+      {
+        sha: "4908ddff1bb69ebc6405aeac7fc54d16e24bb6f5",
+        shortSha: "4908ddf",
+        author: "YoungToaster",
+        authorLogin: "tywentghxst",
+        avatarUrl: "https://avatars.githubusercontent.com/u/77469443?v=4",
+        date: "2026-05-23T04:13:55Z",
+        message: "refactor: centralize version logic and add update UI",
+        details: "• Create getCurrentVersion helper in server.ts for consistent version retrieval.\n• Include currentVersion in the status API response.\n• Add a prominent update notification card to the software updates UI.",
+        htmlUrl: "https://github.com/tywentghxst/FatGoats-BDS-manager/commit/4908ddff1bb69ebc6405aeac7fc54d16e24bb6f5"
+      },
+      {
+        sha: "3de0b0d8b1908280711e869bf3837c2b3af93016",
+        shortSha: "3de0b0d",
+        author: "YoungToaster",
+        authorLogin: "tywentghxst",
+        avatarUrl: "https://avatars.githubusercontent.com/u/77469443?v=4",
+        date: "2026-05-23T04:04:02Z",
+        message: "feat: implement hot restart functionality",
+        details: "• Gracefully terminate active companion and BDS child processes on database reload\n• Hot-restart process seamlessly to apply updated layouts and scripts instantly without downtime",
+        htmlUrl: "https://github.com/tywentghxst/FatGoats-BDS-manager/commit/3de0b0d8b1908280711e869bf3837c2b3af93016"
+      },
+      {
+        sha: "a88f20c15a27a385c25990706d48183bb05b527b",
+        shortSha: "a88f20c",
+        author: "YoungToaster",
+        authorLogin: "tywentghxst",
+        avatarUrl: "https://avatars.githubusercontent.com/u/77469443?v=4",
+        date: "2026-05-23T03:50:22Z",
+        message: "feat: add diagnostic logging and update state tracking",
+        details: "• Improve broadcaster error reporting for server connection issues\n• Implement backend state management for interactive software updates with frontend progress polling",
+        htmlUrl: "https://github.com/tywentghxst/FatGoats-BDS-manager/commit/a88f20c15a27a385c25990706d48183bb05b527b"
+      },
+      {
+        sha: "7245175d3fc4a0167bdc8b4da800a7970c4cd339",
+        shortSha: "7245175",
+        author: "YoungToaster",
+        authorLogin: "tywentghxst",
+        avatarUrl: "https://avatars.githubusercontent.com/u/77469443?v=4",
+        date: "2026-05-23T03:40:18Z",
+        message: "feat: implement addon load order management",
+        details: "• Add API endpoint and UI state to support server addon reordering\n• Allow administrators to explicitly prioritize resource, behavior and plugin packs load levels",
+        htmlUrl: "https://github.com/tywentghxst/FatGoats-BDS-manager/commit/7245175d3fc4a0167bdc8b4da800a7970c4cd339"
+      }
+    ];
+
+    changelog = `[25ff50c] ✨ feat: update playit-gg config and optimize restart\n   └─ by YoungToaster\n[4908ddf] ⚙️ refactor: centralize version logic and add update UI\n   └─ by YoungToaster\n[3de0b0d] ✨ feat: implement hot restart functionality\n   └─ by YoungToaster\n[7245175] ✨ feat: implement addon load order management\n   └─ by YoungToaster\n[a220c6b] ✨ feat: add XHR upload progress tracking\n   └─ by YoungToaster`;
   }
 
-  // If latest master commit differs from local check SHA, or if package.json has a higher semver version
+  // If we couldn't detect a remote version, default to current local
   const isUpdateAvailable = isNewer(localVersion, latestRemoteVersion) || (latestSha && latestSha !== localSha);
 
   const localVerStr = `v${localVersion}${localSha ? `-${localSha.substring(0, 7)}` : ""}`;
@@ -3449,6 +3527,7 @@ app.get("/api/updates/check", authenticateRequest, async (req, res) => {
     releaseName: releaseName,
     publishedAt: publishedAt,
     changelog: changelog,
+    commits: commits,
     url: releaseUrl,
     isNew: isUpdateAvailable,
     isFallback: !hasCheckedSuccessfully,
