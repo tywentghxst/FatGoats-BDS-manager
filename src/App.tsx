@@ -55,7 +55,13 @@ import {
   MapPin,
   ChevronUp,
   ChevronDown,
-  ListOrdered
+  ListOrdered,
+  LayoutDashboard,
+  Blocks,
+  History,
+  Sliders,
+  Link,
+  CloudDownload
 } from "lucide-react";
 
 import {
@@ -566,6 +572,23 @@ export default function App() {
   }, [addons, addonViewMode]);
 
   const isAdmin = currentUser?.role === "admin";
+
+  // Centralized navigation bar configuration with beautifully polished, easy-to-identify icons and colors
+  const navItems = useMemo(() => [
+    { id: "dashboard", label: "Dashboard Space", icon: LayoutDashboard, color: "text-emerald-400" },
+    { id: "addons", label: "Addons & Packs", icon: Blocks, color: "text-indigo-400" },
+    { id: "worlds", label: "Worlds Vault", icon: FolderOpen, color: "text-amber-400" },
+    { id: "players_map", label: "Players & Live Map", icon: Map, color: "text-rose-400" },
+    { id: "console", label: "Live Terminals", icon: Terminal, color: "text-lime-400" },
+    { id: "quick_commands", label: "Quick Commands", icon: Zap, color: "text-yellow-400", pulse: true },
+    { id: "properties", label: "Server Properties", icon: Sliders, color: "text-cyan-400" },
+    { id: "tasks_history", label: "Tasks & History", icon: History, color: "text-pink-400" },
+    ...(isAdmin ? [{ id: "users", label: "Users & Admins", icon: Users, color: "text-blue-400" }] : []),
+    { id: "console_connect", label: "Console Connect", icon: Link, color: "text-violet-400" },
+    { id: "playit", label: "Open to Internet", icon: Globe, color: "text-sky-400" },
+    { id: "selfhost", label: "Hosting & Docker Setup", icon: Server, color: "text-teal-400" },
+    { id: "updates", label: "Software Updates", icon: CloudDownload, color: "text-purple-400" },
+  ], [isAdmin]);
 
   // Polling data loops
   useEffect(() => {
@@ -1677,176 +1700,27 @@ export default function App() {
 
         {/* Menu selections */}
         <div className="flex-1 p-4 space-y-1.5 overflow-y-auto">
-          <button
-            id="nav-dash"
-            onClick={() => setNavTab("dashboard")}
-            className={`w-full px-4 py-2.5 rounded-xl flex items-center gap-3 text-sm font-medium transition-all ${
-              navTab === "dashboard"
-                ? "bg-zinc-800/80 text-white shadow-md border border-zinc-700/50"
-                : "text-zinc-400 hover:bg-zinc-800/20 hover:text-zinc-300"
-            }`}
-          >
-            <Activity className="w-4 h-4 text-emerald-500 opacity-90" />
-            Dashboard Space
-          </button>
-
-          <button
-            id="nav-mods"
-            onClick={() => setNavTab("addons")}
-            className={`w-full px-4 py-2.5 rounded-xl flex items-center gap-3 text-sm font-medium transition-all ${
-              navTab === "addons"
-                ? "bg-zinc-800/80 text-white shadow-md border border-zinc-700/50"
-                : "text-zinc-400 hover:bg-zinc-800/20 hover:text-zinc-300"
-            }`}
-          >
-            <Layers className="w-4 h-4 text-emerald-500 opacity-90" />
-            Addons & Packs
-          </button>
-
-          <button
-            id="nav-worlds"
-            onClick={() => setNavTab("worlds")}
-            className={`w-full px-4 py-2.5 rounded-xl flex items-center gap-3 text-sm font-medium transition-all ${
-              navTab === "worlds"
-                ? "bg-zinc-800/80 text-white shadow-md border border-zinc-700/50"
-                : "text-zinc-400 hover:bg-zinc-800/20 hover:text-zinc-300"
-            }`}
-          >
-            <FolderOpen className="w-4 h-4 text-emerald-500 opacity-90" />
-            Worlds Vault
-          </button>
-
-          <button
-            id="nav-players-map"
-            onClick={() => setNavTab("players_map")}
-            className={`w-full px-4 py-2.5 rounded-xl flex items-center gap-3 text-sm font-medium transition-all ${
-              navTab === "players_map"
-                ? "bg-emerald-950/40 text-emerald-400 shadow-md border border-emerald-800/40 font-bold"
-                : "text-zinc-400 hover:bg-zinc-800/20 hover:text-zinc-300"
-            }`}
-          >
-            <Map className="w-4 h-4 text-emerald-400 opacity-100" />
-            Players & Live Map
-          </button>
-
-          <button
-            id="nav-console"
-            onClick={() => setNavTab("console")}
-            className={`w-full px-4 py-2.5 rounded-xl flex items-center gap-3 text-sm font-medium transition-all ${
-              navTab === "console"
-                ? "bg-zinc-800/80 text-white shadow-md border border-zinc-700/50"
-                : "text-zinc-400 hover:bg-zinc-800/20 hover:text-zinc-300"
-            }`}
-          >
-            <Terminal className="w-4 h-4 text-emerald-500 opacity-90" />
-            Live Terminals
-          </button>
-
-          <button
-            id="nav-quick-commands"
-            onClick={() => setNavTab("quick_commands")}
-            className={`w-full px-4 py-2.5 rounded-xl flex items-center gap-3 text-sm font-medium transition-all ${
-              navTab === "quick_commands"
-                ? "bg-zinc-800/80 text-white shadow-md border border-zinc-700/50"
-                : "text-zinc-400 hover:bg-zinc-800/20 hover:text-zinc-300"
-            }`}
-          >
-            <Grid className="w-4 h-4 text-amber-500 opacity-90 animate-pulse" />
-            Quick Commands
-          </button>
-
-          <button
-            id="nav-properties"
-            onClick={() => setNavTab("properties")}
-            className={`w-full px-4 py-2.5 rounded-xl flex items-center gap-3 text-sm font-medium transition-all ${
-              navTab === "properties"
-                ? "bg-zinc-800/80 text-white shadow-md border border-zinc-700/50"
-                : "text-zinc-400 hover:bg-zinc-800/20 hover:text-zinc-300"
-            }`}
-          >
-            <Settings className="w-4 h-4 text-emerald-500 opacity-90" />
-            Server Properties
-          </button>
-
-          <button
-            id="nav-tasks-history"
-            onClick={() => setNavTab("tasks_history")}
-            className={`w-full px-4 py-2.5 rounded-xl flex items-center gap-3 text-sm font-medium transition-all ${
-              navTab === "tasks_history"
-                ? "bg-zinc-800/80 text-white shadow-md border border-zinc-700/50"
-                : "text-zinc-400 hover:bg-zinc-800/20 hover:text-zinc-300"
-            }`}
-          >
-            <ClipboardList className="w-4 h-4 text-emerald-500 opacity-90" />
-            Tasks & History
-          </button>
-
-          {isAdmin && (
-            <button
-              id="nav-users"
-              onClick={() => setNavTab("users")}
-              className={`w-full px-4 py-2.5 rounded-xl flex items-center gap-3 text-sm font-medium transition-all ${
-                navTab === "users"
-                  ? "bg-zinc-800/80 text-white shadow-md border border-zinc-700/50"
-                  : "text-zinc-400 hover:bg-zinc-800/20 hover:text-zinc-300"
-              }`}
-            >
-              <Users className="w-4 h-4 text-emerald-500 opacity-90" />
-              Users & Admins
-            </button>
-          )}
-
-          <button
-            id="nav-console-connect"
-            onClick={() => setNavTab("console_connect")}
-            className={`w-full px-4 py-2.5 rounded-xl flex items-center gap-3 text-sm font-medium transition-all ${
-              navTab === "console_connect"
-                ? "bg-zinc-800/80 text-white shadow-md border border-zinc-700/50"
-                : "text-zinc-400 hover:bg-zinc-800/20 hover:text-zinc-300"
-            }`}
-          >
-            <ExternalLink className="w-4 h-4 text-emerald-400 opacity-90" />
-            Console Connect
-          </button>
-
-          <button
-            id="nav-playit"
-            onClick={() => setNavTab("playit")}
-            className={`w-full px-4 py-2.5 rounded-xl flex items-center gap-3 text-sm font-medium transition-all ${
-              navTab === "playit"
-                ? "bg-zinc-800/80 text-white shadow-md border border-zinc-700/50"
-                : "text-zinc-400 hover:bg-zinc-800/20 hover:text-zinc-300"
-            }`}
-          >
-            <Globe className="w-4 h-4 text-emerald-400 opacity-90" />
-            Open to Internet
-          </button>
-
-          <button
-            id="nav-selfhost"
-            onClick={() => setNavTab("selfhost")}
-            className={`w-full px-4 py-2.5 rounded-xl flex items-center gap-3 text-sm font-medium transition-all ${
-              navTab === "selfhost"
-                ? "bg-zinc-800/80 text-white shadow-md border border-zinc-700/50"
-                : "text-zinc-400 hover:bg-zinc-800/20 hover:text-zinc-300"
-            }`}
-          >
-            <Layers className="w-4 h-4 text-blue-400 opacity-90" />
-            Hosting & Docker Setup
-          </button>
-
-          <button
-            id="nav-updates"
-            onClick={() => setNavTab("updates")}
-            className={`w-full px-4 py-2.5 rounded-xl flex items-center gap-3 text-sm font-medium transition-all ${
-              navTab === "updates"
-                ? "bg-zinc-800/80 text-white shadow-md border border-zinc-700/50"
-                : "text-zinc-400 hover:bg-zinc-800/20 hover:text-zinc-300"
-            }`}
-          >
-            <RefreshCw className="w-4 h-4 text-purple-400 opacity-90" />
-            Software Updates
-          </button>
+          {navItems.map((item) => {
+            const IconComponent = item.icon;
+            const isSelected = navTab === item.id;
+            return (
+              <button
+                key={item.id}
+                id={`nav-${item.id}`}
+                onClick={() => setNavTab(item.id as any)}
+                className={`w-full px-4 py-2.5 rounded-xl flex items-center gap-3 text-sm font-medium transition-all cursor-pointer ${
+                  isSelected
+                    ? item.id === "players_map"
+                      ? "bg-emerald-950/40 text-emerald-400 shadow-md border border-emerald-800/40 font-bold"
+                      : "bg-zinc-800/80 text-white shadow-md border border-zinc-750/50 font-bold"
+                    : "text-zinc-400 hover:bg-zinc-800/20 hover:text-zinc-305"
+                }`}
+              >
+                <IconComponent className={`w-4 h-4 ${item.color} opacity-90 ${item.pulse ? "animate-pulse" : ""}`} />
+                {item.label}
+              </button>
+            );
+          })}
         </div>
 
         {/* User profile footer controls */}
@@ -2080,21 +1954,7 @@ export default function App() {
 
               {/* Menu selections */}
               <div className="flex-1 space-y-1 overflow-y-auto pr-1">
-                {[
-                  { id: "dashboard", label: "Dashboard Space", icon: Activity, color: "text-emerald-500" },
-                  { id: "addons", label: "Addons & Packs", icon: Layers, color: "text-emerald-500" },
-                  { id: "worlds", label: "Worlds Vault", icon: FolderOpen, color: "text-emerald-400" },
-                  { id: "players_map", label: "Players & Live Map", icon: Map, color: "text-emerald-400" },
-                  { id: "console", label: "Live Terminals", icon: Terminal, color: "text-emerald-400" },
-                  { id: "quick_commands", label: "Quick Commands", icon: Grid, color: "text-amber-500" },
-                  { id: "properties", label: "Server Properties", icon: Settings, color: "text-emerald-500" },
-                  { id: "tasks_history", label: "Tasks & History", icon: ClipboardList, color: "text-emerald-500" },
-                  ...(isAdmin ? [{ id: "users", label: "Users & Admins", icon: Users, color: "text-emerald-500" }] : []),
-                  { id: "console_connect", label: "Console Connect", icon: ExternalLink, color: "text-emerald-400" },
-                  { id: "playit", label: "Open to Internet", icon: Globe, color: "text-emerald-400" },
-                  { id: "selfhost", label: "Hosting & Setup", icon: Layers, color: "text-blue-400" },
-                  { id: "updates", label: "Software Updates", icon: RefreshCw, color: "text-purple-400" },
-                ].map((item) => {
+                {navItems.map((item) => {
                   const IconComponent = item.icon;
                   const isSelected = navTab === item.id;
                   return (
@@ -2111,7 +1971,7 @@ export default function App() {
                           : "text-zinc-400 hover:bg-zinc-900/60 hover:text-zinc-350"
                       }`}
                     >
-                      <IconComponent className={`w-3.5 h-3.5 ${item.color} opacity-90`} />
+                      <IconComponent className={`w-3.5 h-3.5 ${item.color} opacity-90 ${item.pulse ? "animate-pulse" : ""}`} />
                       {item.label}
                     </button>
                   );
