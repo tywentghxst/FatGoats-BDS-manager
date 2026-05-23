@@ -3333,14 +3333,10 @@ function isNewer(current: string, remote: string): boolean {
 }
 
 app.get("/api/updates/check", authenticateRequest, async (req, res) => {
-  // Read local version
-  let localVersion = "1.3.0";
-  try {
-    const localPkg = JSON.parse(fs.readFileSync(path.join(WORK_DIR, "package.json"), "utf-8"));
-    localVersion = localPkg.version || "1.3.0";
-  } catch (e) {}
+  // Read local version from package.json dynamically
+  const localVersion = getCurrentVersion();
 
-  let latestRemoteVersion = "1.3.0";
+  let latestRemoteVersion = localVersion;
   let hasCheckedSuccessfully = false;
 
   // 1. Try raw github payload on master branch
@@ -3456,6 +3452,15 @@ let softwareUpdateProgress = 0;
 let softwareUpdateLogs: Array<{ timestamp: string; message: string; type: "info" | "success" | "error" }> = [];
 let softwareUpdateError: string | null = null;
 
+function getCurrentVersion(): string {
+  try {
+    const localPkg = JSON.parse(fs.readFileSync(path.join(WORK_DIR, "package.json"), "utf-8"));
+    return localPkg.version || "1.3.0";
+  } catch (e) {
+    return "1.3.0";
+  }
+}
+
 function logSoftwareUpdate(message: string, type: "info" | "success" | "error" = "info") {
   const timestamp = new Date().toLocaleTimeString();
   softwareUpdateLogs.push({ timestamp, message, type });
@@ -3469,7 +3474,8 @@ app.get("/api/updates/status", authenticateRequest, (req, res) => {
     status: softwareUpdateStatus,
     progress: softwareUpdateProgress,
     logs: softwareUpdateLogs,
-    error: softwareUpdateError
+    error: softwareUpdateError,
+    currentVersion: `v${getCurrentVersion()}`
   });
 });
 

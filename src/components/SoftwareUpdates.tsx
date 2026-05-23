@@ -56,6 +56,9 @@ export default function SoftwareUpdates({ token, onShowMessage }: SoftwareUpdate
         });
         if (res.ok) {
           const s = await res.json();
+          if (s.currentVersion) {
+            setCurrentVersion(s.currentVersion);
+          }
           if (s.status !== "idle") {
             setUpdateStatus(s.status);
             setUpdateProgress(s.progress);
@@ -243,6 +246,45 @@ export default function SoftwareUpdates({ token, onShowMessage }: SoftwareUpdate
           </div>
         </div>
       </div>
+
+      {/* ULTRA PROMINENT UPDATE CARD FOR NEW RELEASES */}
+      {hasNewerVersion && updateInfo && updateStatus === "idle" && (
+        <div className="bg-gradient-to-r from-emerald-950/45 via-emerald-900/10 to-zinc-950 border-2 border-emerald-500/50 rounded-2xl p-6 shadow-xl space-y-4 md:space-y-0 md:flex md:items-center md:justify-between md:gap-6 hover:border-emerald-400 transition-all duration-300">
+          <div className="space-y-2 max-w-2xl select-text">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-[10px] font-black uppercase text-emerald-400 tracking-wider">
+              ⚠️ PENDING SYSTEM UPGRADE AVAILABLE
+            </div>
+            <h3 className="text-xl font-black text-white tracking-tight">
+              Upgrade to <span className="text-emerald-400 font-mono font-black">{updateInfo.latestVersion}</span> is ready
+            </h3>
+            <p className="text-xs text-zinc-300 leading-relaxed">
+              Your active installation (<span className="text-zinc-100 font-mono font-bold">{currentVersion}</span>) is outdated. Our intelligent automated compiler will run an instant local backup, update the manifests, patch system endpoints, and hot-restart BDS Manager instantly!
+            </p>
+            <div className="flex flex-wrap gap-2 text-[10px] text-zinc-400 font-bold font-mono uppercase bg-zinc-950/60 p-2 rounded-xl border border-zinc-900 leading-none">
+              <span className="text-zinc-455">Release Name:</span>
+              <span className="text-emerald-400 font-black">{updateInfo.releaseName}</span>
+            </div>
+          </div>
+
+          <button
+            onClick={handleApplyUpdate}
+            disabled={applying}
+            className="w-full md:w-auto px-8 py-5 bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 disabled:from-zinc-800 disabled:to-zinc-850 text-white font-extrabold text-sm rounded-2xl shadow-lg hover:shadow-emerald-500/20 hover:scale-[1.02] active:scale-[0.98] transition-all inline-flex items-center justify-center gap-3 cursor-pointer shrink-0 duration-300"
+          >
+            {applying ? (
+              <>
+                <RefreshCw className="w-5 h-5 animate-spin text-white" />
+                INITIATING SYSTEM UPGRADE...
+              </>
+            ) : (
+              <>
+                <Download className="w-5 h-5 text-zinc-950 fill-zinc-950 stroke-[2.5px]" />
+                ⚡ UPDATE SYSTEM NOW
+              </>
+            )}
+          </button>
+        </div>
+      )}
 
       {/* Grid Content */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
