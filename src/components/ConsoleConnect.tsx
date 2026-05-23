@@ -580,6 +580,7 @@ export default function ConsoleConnect({
               <div className="flex flex-col gap-2">
                 <label className="text-xs font-semibold text-zinc-300">Custom Java Runtime (java / java.exe) Path</label>
                 <input
+                  id="custom-java-path-input"
                   type="text"
                   value={customJavaPath}
                   onChange={(e) => setCustomJavaPath(e.target.value)}
@@ -637,18 +638,36 @@ export default function ConsoleConnect({
                 <div className="space-y-0.5">
                   <h4 className="text-xs font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
                     <AlertTriangle className="w-4 h-4" />
-                    Java Runtime (JRE) Not Installed or Not in PATH
+                    {data?.customJavaPath ? "Custom Java Path Failed to Run JVM" : "Java Runtime (JRE) Not Installed or Not in PATH"}
                   </h4>
                   <p className="text-[10px] text-zinc-300 leading-normal">
-                    The standard <strong>"java"</strong> command is not recognized on your Windows host. 
-                    Please define your custom Java executable path under <strong>Visual Settings &rarr; Host Runtime Compatibility Settings</strong> to run your companion bot!
+                    {data?.customJavaPath ? (
+                      <>
+                        The configured custom JRE path <strong>"{data.customJavaPath}"</strong> did not execute correctly. 
+                        Please make sure this is the absolute direct path to the <strong>java.exe</strong> executable file (JRE or JDK 17+).
+                      </>
+                    ) : (
+                      <>
+                        The standard <strong>"java"</strong> command is not recognized on your Windows host. 
+                        Please define your custom Java executable path under <strong>Visual Settings &rarr; Host Runtime Compatibility Settings</strong> to run your companion bot!
+                      </>
+                    )}
                   </p>
                 </div>
                 <button
-                  onClick={() => setActiveSubTab("visual")}
+                  onClick={() => {
+                    setActiveSubTab("visual");
+                    setTimeout(() => {
+                      const el = document.getElementById("custom-java-path-input");
+                      if (el) {
+                        el.scrollIntoView({ behavior: "smooth", block: "center" });
+                        el.focus();
+                      }
+                    }, 100);
+                  }}
                   className="px-3.5 py-1.5 bg-amber-500 hover:bg-amber-400 text-black font-extrabold text-[10px] uppercase tracking-wider rounded-lg transition-all shrink-0 cursor-pointer"
                 >
-                  Configure Java Path
+                  {data?.customJavaPath ? "Reconfigure Java Path" : "Configure Java Path"}
                 </button>
               </div>
             )}

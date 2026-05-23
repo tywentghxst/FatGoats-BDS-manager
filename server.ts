@@ -3122,6 +3122,30 @@ function stopPlayitProcess() {
 // Endpoints
 app.get("/api/playit/status", authenticateRequest, (req, res) => {
   const isDownloaded = dbCache.appConfig.customPlayitPath ? true : fs.existsSync(PLAYIT_BIN);
+  
+  // Dynamically check if the playit.toml config has been written with a key by playit agent or after user claimed
+  const secretPath = path.join(PLAYIT_DIR, "playit.toml");
+  if (fs.existsSync(secretPath)) {
+    try {
+      const content = fs.readFileSync(secretPath, "utf-8");
+      const match = content.match(/secret_key\s*=\s*['"]?([^"'\s]+)['"]?/i);
+      if (match && match[1]) {
+        const foundKey = match[1].trim();
+        if (foundKey && dbCache.appConfig.playitSecretKey !== foundKey) {
+          dbCache.appConfig.playitSecretKey = foundKey;
+          saveDB();
+          logPlayitMessage("SYS", "Successfully auto-detected and linked Playit Secret Key from playit.toml file.");
+          
+          // Clear active claims since it is now successfully linked and claimed
+          playitClaimCode = "";
+          playitClaimUrl = "";
+        }
+      }
+    } catch (e: any) {
+      console.error("Failed to read playit.toml for auto-secret discovery:", e);
+    }
+  }
+
   res.json({
     status: playitStatus,
     isDownloaded,

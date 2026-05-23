@@ -20,7 +20,8 @@ import {
   Globe,
   Wifi,
   ShieldAlert,
-  Server
+  Server,
+  Zap
 } from "lucide-react";
 
 interface PlayitStatus {
@@ -73,6 +74,11 @@ export default function PlayitConnect({
           setCustomPlayitPath(result.customPlayitPath);
         }
         if (result.playitSecretKey !== undefined) {
+          setPlayitSecretKey(result.playitSecretKey);
+        }
+      } else {
+        // Quiet mode sync of newly detected/generated secret key
+        if (result.playitSecretKey !== undefined && result.playitSecretKey !== playitSecretKey) {
           setPlayitSecretKey(result.playitSecretKey);
         }
       }
@@ -299,7 +305,119 @@ export default function PlayitConnect({
               </div>
             ) : (
               <div className="space-y-5">
-                {/* Control Action Buttons */}
+                {/* Dynamic Easy Setup Wizard shown when NO Secret Key is persistent */}
+                {data && !data.playitSecretKey ? (
+                  <div className="p-4 rounded-2xl bg-indigo-500/5 border border-indigo-500/10 space-y-4 shadow-xl">
+                    <div className="flex items-center gap-2 text-indigo-400 text-xs font-bold uppercase tracking-wider">
+                      <Zap className="w-4 h-4 text-indigo-400 animate-pulse" />
+                      Automatic Setup Wizard
+                    </div>
+                    
+                    <p className="text-[11px] text-zinc-300 leading-normal">
+                      Your tunnel agent can be configured and linked to playit.gg automatically. Let's get your server online in seconds:
+                    </p>
+
+                    <div className="space-y-3.5 pt-1">
+                      {/* Step 1: Execute agent */}
+                      <div className="flex items-start gap-2.5">
+                        <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black shrink-0 ${
+                          data.status === "running" || data.status === "starting"
+                            ? "bg-emerald-500/10 border border-emerald-500 text-emerald-400"
+                            : "bg-indigo-500/20 border border-indigo-750 text-indigo-300"
+                        }`}>
+                          {data.status === "running" || data.status === "starting" ? "✓" : "1"}
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-[11px] font-bold text-zinc-200">Start Tunnel Process</p>
+                          <p className="text-[10px] text-zinc-400 leading-snug">
+                            Runs the client binary in background mode to negotiate your server tunnels.
+                          </p>
+                          {data.status !== "running" && data.status !== "starting" && (
+                            <button
+                              id="btn-auto-start-agent"
+                              onClick={() => handleControlAction("start")}
+                              disabled={actionLoading}
+                              className="mt-1.5 py-1.5 px-3 rounded-lg font-extrabold text-[10px] bg-indigo-600 hover:bg-indigo-500 text-white transition-all cursor-pointer inline-flex items-center gap-1.5 uppercase tracking-wider"
+                            >
+                              <Play className="w-3 h-3" /> Boot Tunnel Client
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Step 2: Web Claiming */}
+                      {(data.status === "running" || data.status === "starting") && (
+                        <div className="flex items-start gap-2.5 border-t border-zinc-900/60 pt-3.5">
+                          <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black shrink-0 ${
+                            data.claimCode 
+                              ? "bg-sky-500/20 border border-sky-500 animate-pulse text-sky-400 font-extrabold"
+                              : "bg-zinc-800/60 border border-zinc-800 text-zinc-500"
+                          }`}>
+                            {data.claimCode ? "•" : "2"}
+                          </div>
+                          <div className="space-y-1.5 w-full min-w-0">
+                            <p className="text-[11px] font-bold text-zinc-200">Link Agent & Claim Account</p>
+                            
+                            {data.claimCode ? (
+                              <div className="space-y-2">
+                                <p className="text-[10px] text-zinc-400 leading-relaxed font-medium">
+                                  Your link is generated! Click below to claim and authorize the agent:
+                                </p>
+                                
+                                <div className="flex items-center gap-2 bg-zinc-950 border border-zinc-900 px-3 py-2 rounded-xl justify-between">
+                                  <span className="text-[9px] text-zinc-500 font-bold uppercase tracking-wider">Linking Code:</span>
+                                  <span className="font-mono font-bold text-xs text-sky-300 select-all tracking-wider">{data.claimCode}</span>
+                                  <button
+                                    onClick={() => handleCopy(data.claimCode, "code")}
+                                    className="text-zinc-500 hover:text-zinc-300 p-1"
+                                  >
+                                    {copiedType === "code" ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                                  </button>
+                                </div>
+
+                                <a
+                                  href={data.claimUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="w-full text-center py-2 px-3 rounded-lg font-bold text-[10px] uppercase tracking-wider bg-sky-600 hover:bg-sky-500 text-white transition-all flex items-center justify-center gap-1.5 cursor-pointer leading-relaxed text-center"
+                                >
+                                  <ExternalLink className="w-3.5 h-3.5" /> Claim Agent on Website
+                                </a>
+                              </div>
+                            ) : (
+                              <p className="text-[10px] text-zinc-500 leading-relaxed">
+                                Waiting for client logs to generate registration endpoints...
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Step 3: Automatic Interception */}
+                      {(data.status === "running" || data.status === "starting") && (
+                        <div className="flex items-start gap-2.5 border-t border-zinc-900/60 pt-3.5">
+                          <div className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black shrink-0 bg-zinc-800/60 border border-zinc-800 text-zinc-500">
+                            3
+                          </div>
+                          <div className="space-y-1">
+                            <p className="text-[11px] font-bold text-zinc-400">Automatic Storage Negotiation</p>
+                            <p className="text-[10px] text-zinc-500 leading-relaxed">
+                              Once claimed, the remote system transmits your secret-key. We intercept, store & secure it for you.
+                            </p>
+                            {data.claimCode && (
+                              <div className="flex items-center gap-1.5 text-[10px] text-purple-400 font-bold mt-1 bg-purple-500/5 py-1 px-2 rounded border border-purple-500/10 animate-pulse">
+                                <span className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-ping shrink-0" />
+                                Listening for playit.toml secret write... (Automatic sync)
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ) : null}
+
+                {/* Control Action Buttons (Always available if downloaded) */}
                 <div className="grid grid-cols-2 gap-3.5">
                   {data?.status !== "running" && data?.status !== "starting" ? (
                     <button
@@ -359,49 +477,17 @@ export default function PlayitConnect({
                   </div>
                 )}
 
-                {/* Claim agent prompt if claimCode found */}
-                {data?.claimCode && (
-                  <div className="p-4 bg-sky-950/20 border border-sky-900/40 rounded-2xl space-y-4 shadow-xl">
-                    <div className="flex items-center gap-2 text-sky-400 text-xs font-bold leading-relaxed">
-                      <AlertTriangle className="w-4 h-4 shrink-0" />
-                      Action Required: Claim Agent
-                    </div>
-                    
-                    <p className="text-[11px] text-zinc-300 leading-normal">
-                      This agent is not registered yet. Open the link below and complete the setup to link playit to your server:
-                    </p>
-
-                    <div className="flex items-center gap-2 bg-zinc-950 border border-sky-900/30 px-3 py-2 rounded-xl">
-                      <span className="text-[10px] text-zinc-500 font-bold">CODE:</span>
-                      <span className="flex-1 font-mono font-bold text-xs text-sky-300 select-all tracking-wider">{data.claimCode}</span>
-                      <button
-                        id="btn-copy-code"
-                        onClick={() => handleCopy(data.claimCode, "code")}
-                        className="text-zinc-500 hover:text-zinc-300 p-1"
-                      >
-                        {copiedType === "code" ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                      </button>
-                    </div>
-
-                    <div className="flex flex-col gap-2">
-                      <a
-                        href={data.claimUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="w-full leading-none text-center py-2.5 px-3 rounded-xl font-bold text-xs bg-sky-600 hover:bg-sky-500 text-white transition-all flex items-center justify-center gap-2 shadow-lg shadow-sky-950/20 cursor-pointer text-center"
-                      >
-                        <ExternalLink className="w-3.5 h-3.5" /> Claim Agent On Website
-                      </a>
-
-                      <button
-                        id="btn-confirm-link"
-                        onClick={() => handleControlAction("confirm_claim")}
-                        disabled={actionLoading}
-                        className="w-full py-2.5 px-3 rounded-xl font-bold text-xs bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 hover:bg-emerald-600 hover:text-white transition-all flex items-center justify-center gap-2 cursor-pointer"
-                      >
-                        <CheckCircle className="w-3.5 h-3.5" /> Confirm Agent Association
-                      </button>
-                    </div>
+                {/* Manual claiming backup button block (ONLY shown as fallback if they really want to confirm manual step) */}
+                {data?.claimCode && !data?.playitSecretKey && (
+                  <div className="p-3 bg-zinc-900/20 border border-zinc-900/10 rounded-xl text-center">
+                    <button
+                      id="btn-confirm-link"
+                      onClick={() => handleControlAction("confirm_claim")}
+                      disabled={actionLoading}
+                      className="py-1.5 px-3 rounded-lg font-semibold text-[10px] bg-zinc-800 hover:bg-zinc-750 text-zinc-500 hover:text-emerald-400 transition-all inline-flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <CheckCircle className="w-3 h-3" /> Manual Setup Confirmed
+                    </button>
                   </div>
                 )}
               </div>
