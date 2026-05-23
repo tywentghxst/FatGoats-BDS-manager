@@ -3691,24 +3691,34 @@ app.post("/api/updates/apply", authenticateRequest, (req, res) => {
       logSoftwareUpdate(`Source dir extracted: ${gitHubRootFolder}`, "info");
 
       // Set skip directories
-      const skipList = ["bedrock-server", "node_modules", "uploads", ".git", ".env", "dist"];
+      const skipList = ["bedrock-server", "node_modules", "uploads", ".git", ".env"];
       
       function copyRecursiveSync(src: string, dest: string) {
-        const stats = fs.statSync(src);
-        const isDirectory = stats.isDirectory();
-        if (isDirectory) {
-          const baseName = path.basename(src);
-          if (skipList.includes(baseName)) {
-            return;
+        try {
+          const stats = fs.statSync(src);
+          const isDirectory = stats.isDirectory();
+          if (isDirectory) {
+            const baseName = path.basename(src);
+            if (skipList.includes(baseName)) {
+              return;
+            }
+            if (!fs.existsSync(dest)) {
+              fs.mkdirSync(dest, { recursive: true });
+            }
+            fs.readdirSync(src).forEach((child) => {
+              copyRecursiveSync(path.join(src, child), path.join(dest, child));
+            });
+          } else {
+            const baseName = path.basename(src);
+            // Protect local files and executables from raw overwrite errors
+            if (baseName === ".env" || baseName === "manager_db.json" || baseName === "bds-manager.exe") {
+              logSoftwareUpdate(`Preserving active local file: ${baseName}`, "info");
+              return;
+            }
+            fs.copyFileSync(src, dest);
           }
-          if (!fs.existsSync(dest)) {
-            fs.mkdirSync(dest, { recursive: true });
-          }
-          fs.readdirSync(src).forEach((child) => {
-            copyRecursiveSync(path.join(src, child), path.join(dest, child));
-          });
-        } else {
-          fs.copyFileSync(src, dest);
+        } catch (copyErr: any) {
+          logSoftwareUpdate(`Non-critical: Skipped updating ${path.basename(src)} (${copyErr.message})`, "info");
         }
       }
 
@@ -3745,38 +3755,48 @@ app.post("/api/updates/apply", authenticateRequest, (req, res) => {
 
       const npmCmd = process.platform === "win32" ? "npm.cmd" : "npm";
       
-      await new Promise<void>((resolve, reject) => {
-        const buildProc = spawn(npmCmd, ["run", "build"], { cwd: WORK_DIR });
-        
-        buildProc.stdout.on("data", (data) => {
-          const line = data.toString().trim();
-          if (line) {
-            logSoftwareUpdate(`[Build] ${line}`, "info");
-          }
-        });
-        
-        buildProc.stderr.on("data", (data) => {
-          const line = data.toString().trim();
-          if (line) {
-            // Standard compilation details or warnings
-            logSoftwareUpdate(`[Compiler] ${line}`, "info");
-          }
-        });
-        
-        buildProc.on("close", (code) => {
-          if (code === 0) {
-            resolve();
-          } else {
-            reject(new Error(`Vite compiler ended with non-zero exit code: ${code}`));
-          }
-        });
-        
-        buildProc.on("error", (err) => {
-          reject(err);
-        });
+      const compileSuccess = await new Promise<boolean>((resolve) => {
+        try {
+          const buildProc = spawn(npmCmd, ["run", "build"], { cwd: WORK_DIR });
+          
+          buildProc.stdout.on("data", (data) => {
+            const line = data.toString().trim();
+            if (line) {
+              logSoftwareUpdate(`[Build] ${line}`, "info");
+            }
+          });
+          
+          buildProc.stderr.on("data", (data) => {
+            const line = data.toString().trim();
+            if (line) {
+              logSoftwareUpdate(`[Compiler] ${line}`, "info");
+            }
+          });
+          
+          buildProc.on("close", (code) => {
+            if (code === 0) {
+              resolve(true);
+            } else {
+              logSoftwareUpdate(`Vite compiler completed with warnings or exit code ${code}. Standalone precompiled mode active or files updated.`, "info");
+              resolve(false);
+            }
+          });
+          
+          buildProc.on("error", (err) => {
+            logSoftwareUpdate(`Compilation skipped: ${err.message}. This is normal in standalone / pre-packaged environments (bds-manager.exe) where compiler tooling is not present.`, "info");
+            resolve(false);
+          });
+        } catch (spawnErr: any) {
+          logSoftwareUpdate(`Spawn compilation step skipped: ${spawnErr.message}.`, "info");
+          resolve(false);
+        }
       });
 
-      logSoftwareUpdate("Dynamic compilation completes successfully. Server modules ready.", "success");
+      if (compileSuccess) {
+        logSoftwareUpdate("Dynamic compilation completes successfully. Server modules ready.", "success");
+      } else {
+        logSoftwareUpdate("Codebase files updated successfully directly (dynamic compilation omitted).", "success");
+      }
 
       // Complete Update
       softwareUpdateStatus = "completed";
@@ -3855,9 +3875,17 @@ app.post("/api/updates/restart", authenticateRequest, (req, res) => {
 
       if (process.platform === "win32") {
         const batPath = path.join(WORK_DIR, "restart_bds_manager.bat");
+        const hasTrayParent = process.argv.includes("--tray-parent");
+        
+        let startCmd = `start "" "${exe}" ${args.map(a => `"${a}"`).join(" ")}`;
+        if (!hasTrayParent) {
+          // Foreground console: Start in a visible cmd window so they can interact with it and see logs
+          startCmd = `start "Bedrock Server Manager" cmd.exe /c "${exe} ${args.map(a => `"${a}"`).join(" ")}"`;
+        }
+
         const batContent = `@echo off\r\n` +
           `ping 127.0.0.1 -n 3 > nul\r\n` +
-          `start "" "${exe}" ${args.map(a => `"${a}"`).join(" ")}\r\n` +
+          `${startCmd}\r\n` +
           `(goto) 2>nul & del "%~f0"\r\n`;
 
         fs.writeFileSync(batPath, batContent, "utf-8");

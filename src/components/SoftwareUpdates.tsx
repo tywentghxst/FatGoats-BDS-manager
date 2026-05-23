@@ -521,7 +521,7 @@ export default function SoftwareUpdates({ token, onShowMessage }: SoftwareUpdate
                         return (
                           <div 
                             key={commit.sha} 
-                            className="group relative bg-[#09090b]/90 hover:bg-[#0c0c0e] border border-zinc-900/80 hover:border-zinc-800 rounded-xl p-3.5 transition-all duration-200"
+                            className="group relative bg-[#09090b]/90 hover:bg-[#0c0c0e] border border-zinc-900/85 hover:border-zinc-800 rounded-xl p-4 transition-all duration-200 space-y-3"
                           >
                             {/* Accent Vertical Color Indicator */}
                             <div className={`absolute top-0 bottom-0 left-0 w-[3px] rounded-l-xl ${
@@ -531,25 +531,26 @@ export default function SoftwareUpdates({ token, onShowMessage }: SoftwareUpdate
                               "bg-zinc-700"
                             }`} />
 
-                            {/* Header Section: Author & Date & Commit SHA link */}
-                            <div className="flex items-center justify-between gap-2 text-[11px] border-b border-zinc-900/40 pb-2 mb-2">
-                              <div className="flex items-center gap-2">
+                            {/* Header Section: Author, Date, Revision SHA */}
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-zinc-900/40">
+                              <div className="flex items-center gap-2.5">
                                 <img 
                                   src={commit.avatarUrl} 
                                   alt={commit.author}
                                   referrerPolicy="no-referrer"
-                                  className="w-5 h-5 rounded-full border border-zinc-800 object-cover"
+                                  className="w-7 h-7 rounded-lg border border-zinc-800 object-cover"
                                   onError={(e) => {
-                                    // Fallback to letters avatar if it fails to load
                                     e.currentTarget.style.display = 'none';
                                   }}
                                 />
-                                <span className="font-bold text-zinc-350">{commit.author}</span>
-                                <span className="text-zinc-600 font-normal">@{commit.authorLogin}</span>
+                                <div className="flex flex-col">
+                                  <span className="text-xs font-bold text-zinc-250 leading-none">{commit.author}</span>
+                                  <span className="text-[10px] text-zinc-500 font-mono mt-0.5">@{commit.authorLogin}</span>
+                                </div>
                               </div>
                               
-                              <div className="flex items-center gap-2 font-mono">
-                                <span className="text-zinc-500 text-[10px]">
+                              <div className="flex items-center gap-2.5 font-mono text-[10px]">
+                                <span className="text-zinc-450 bg-zinc-900/60 px-2 py-0.5 rounded border border-zinc-900/85">
                                   {new Date(commit.date).toLocaleDateString(undefined, {
                                     month: 'short',
                                     day: 'numeric',
@@ -561,7 +562,7 @@ export default function SoftwareUpdates({ token, onShowMessage }: SoftwareUpdate
                                   href={commit.htmlUrl}
                                   target="_blank"
                                   rel="noopener noreferrer"
-                                  className="px-1.5 py-0.5 rounded bg-zinc-900/80 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 hover:text-white transition-colors text-[10px] flex items-center gap-1 font-bold select-all"
+                                  className="px-2 py-0.5 rounded bg-zinc-900/80 hover:bg-zinc-850 border border-zinc-800 text-zinc-400 hover:text-white transition-colors flex items-center gap-1 font-bold select-all"
                                   title="View code diff on GitHub"
                                 >
                                   {commit.shortSha}
@@ -571,19 +572,19 @@ export default function SoftwareUpdates({ token, onShowMessage }: SoftwareUpdate
                             </div>
 
                             {/* Message & Core Changes */}
-                            <div className="space-y-2.5 pl-1 select-text">
-                              <div className="flex items-start gap-1.5 flex-wrap md:flex-nowrap">
-                                <span className={`px-2 py-0.5 text-[9px] font-black uppercase tracking-wider rounded border shrink-0 ${badgeColor}`}>
+                            <div className="space-y-2 pl-1 select-text">
+                              <div className="flex items-start gap-2 flex-wrap sm:flex-nowrap">
+                                <span className={`px-2 py-0.5 text-[8.5px] font-black uppercase tracking-wider rounded border shrink-0 ${badgeColor}`}>
                                   {badgeLabel}
                                 </span>
-                                <span className="text-xs font-semibold text-zinc-100 font-sans leading-snug">
+                                <span className="text-xs font-bold text-zinc-100 font-sans leading-snug">
                                   {displayMessage}
                                 </span>
                               </div>
 
                               {/* Multi-line Details Parsing */}
                               {commit.details ? (
-                                <div className="mt-1.5 pt-1.5 border-t border-zinc-950/20 space-y-1 text-[11px] font-sans text-zinc-400">
+                                <div className="mt-2 pt-2 border-t border-zinc-950/20 space-y-1.5 text-[11px] font-sans text-zinc-450">
                                   {commit.details.split("\n").map((line, lineIdx) => {
                                     const cleanedLine = line.replace(/^[•*\-\s\d]+\.?\s*/, "").trim();
                                     if (!cleanedLine) return null;

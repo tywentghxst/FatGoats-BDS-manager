@@ -425,7 +425,7 @@ export default function App() {
   const [tasksWidgetExpanded, setTasksWidgetExpanded] = useState(true);
 
   // File editor states
-  const [propertiesTab, setPropertiesTab] = useState<"gui" | "files">("gui");
+  const [propertiesTab, setPropertiesTab] = useState<"gui" | "files" | "updater">("gui");
   const [selectedFileId, setSelectedFileId] = useState<string>("permissions");
   const [fileEditorContent, setFileEditorContent] = useState<string>("");
   const [fileEditorLoading, setFileEditorLoading] = useState<boolean>(false);
@@ -579,7 +579,6 @@ export default function App() {
     { id: "addons", label: "Addons & Packs", icon: Blocks, color: "text-indigo-400" },
     { id: "worlds", label: "Worlds Vault", icon: FolderOpen, color: "text-amber-400" },
     { id: "players_map", label: "Players & Live Map", icon: Map, color: "text-rose-400" },
-    { id: "console", label: "Live Terminals", icon: Terminal, color: "text-lime-400" },
     { id: "quick_commands", label: "Quick Commands", icon: Zap, color: "text-yellow-400", pulse: true },
     { id: "properties", label: "Server Properties", icon: Sliders, color: "text-cyan-400" },
     { id: "tasks_history", label: "Tasks & History", icon: History, color: "text-pink-400" },
@@ -1708,16 +1707,24 @@ export default function App() {
                 key={item.id}
                 id={`nav-${item.id}`}
                 onClick={() => setNavTab(item.id as any)}
-                className={`w-full px-4 py-2.5 rounded-xl flex items-center gap-3 text-sm font-medium transition-all cursor-pointer ${
+                className={`group w-full px-3 py-2 rounded-xl flex items-center gap-3 text-[13px] font-medium transition-all cursor-pointer ${
                   isSelected
                     ? item.id === "players_map"
-                      ? "bg-emerald-950/40 text-emerald-400 shadow-md border border-emerald-800/40 font-bold"
-                      : "bg-zinc-800/80 text-white shadow-md border border-zinc-750/50 font-bold"
-                    : "text-zinc-400 hover:bg-zinc-800/20 hover:text-zinc-305"
+                      ? "bg-emerald-950/45 text-emerald-400 shadow-lg border border-emerald-500/30 font-bold"
+                      : "bg-zinc-900 border border-zinc-800 text-white shadow-lg font-bold"
+                    : "text-zinc-400 hover:bg-zinc-900/30 hover:text-zinc-200"
                 }`}
               >
-                <IconComponent className={`w-4 h-4 ${item.color} opacity-90 ${item.pulse ? "animate-pulse" : ""}`} />
-                {item.label}
+                <div className={`p-1.5 rounded-lg flex items-center justify-center transition-all ${
+                  isSelected 
+                    ? item.id === "players_map"
+                      ? "bg-emerald-500/10 border border-emerald-400/20"
+                      : "bg-zinc-950 border border-zinc-850"
+                    : "bg-zinc-950/40 border border-zinc-900 group-hover:bg-zinc-950 group-hover:border-zinc-800"
+                }`}>
+                  <IconComponent className={`w-3.5 h-3.5 ${item.color} ${item.pulse ? "animate-pulse" : ""}`} />
+                </div>
+                <span>{item.label}</span>
               </button>
             );
           })}
@@ -3152,15 +3159,14 @@ export default function App() {
                     </div>
                   ))
                 )}
-              </div>
             </div>
-          )}
-
+          </div>
+        )}
           {/* ==================== D. FULL EXPANDED MOBILE/DESKTOP CONSOLE VIEW ==================== */}
           {navTab === "console" && (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-5 h-full min-h-[500px]">
+            <div className="w-full h-full min-h-[500px] flex flex-col gap-5">
               {/* Console logs card output terminal */}
-              <div className="col-span-1 md:col-span-2 bg-zinc-900/40 border border-zinc-900 rounded-2xl flex flex-col h-full overflow-hidden shadow-2xl">
+              <div className="bg-zinc-900/40 border border-zinc-900 rounded-2xl flex flex-col h-full overflow-hidden shadow-2xl flex-1">
                 <div className="p-4 border-b border-zinc-900 bg-zinc-950/40 flex justify-between items-center h-14">
                   <span className="text-[10px] text-zinc-500 font-black uppercase tracking-widest">Active Server Console Output</span>
                   <span className="text-[9px] text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded font-bold uppercase animate-pulse">Running</span>
@@ -3235,164 +3241,6 @@ export default function App() {
                       Execute
                     </button>
                   </form>
-                </div>
-              </div>
-
-              {/* Version update panel and config widgets */}
-              <div className="bg-zinc-900/40 border border-zinc-900 rounded-2xl p-5 space-y-6 overflow-y-auto shadow h-full">
-
-
-                {/* Configurations Property Modifiers (Admin only) */}
-                <div className="space-y-4 border-b border-zinc-900 pb-5">
-                  <h3 className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Server Port Properties</h3>
-
-                  <div className="grid grid-cols-2 gap-3 pb-2">
-                    <div className="space-y-1">
-                      <label className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider">Ports</label>
-                      <input
-                        type="number"
-                        disabled={!isAdmin}
-                        value={appConfig.serverPort}
-                        onChange={e => updateSettingsField({ serverPort: parseInt(e.target.value) || 19132 })}
-                        className="w-full bg-zinc-950 border border-zinc-850 p-2 text-xs font-semibold rounded text-white outline-none focus:border-emerald-500 disabled:opacity-40"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider">Max Player Limits</label>
-                      <input
-                        type="number"
-                        disabled={!isAdmin}
-                        value={appConfig.maxPlayers}
-                        onChange={e => updateSettingsField({ maxPlayers: parseInt(e.target.value) || 20 })}
-                        className="w-full bg-zinc-950 border border-zinc-850 p-2 text-xs font-semibold rounded text-white outline-none focus:border-emerald-500 disabled:opacity-40"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-1 pb-1">
-                    <label className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider">Difficulties level</label>
-                    <select
-                      disabled={!isAdmin}
-                      value={appConfig.difficulty}
-                      onChange={e => updateSettingsField({ difficulty: e.target.value })}
-                      className="w-full bg-zinc-950 border border-zinc-850 p-2 text-xs font-semibold rounded text-white outline-none focus:border-emerald-500 disabled:opacity-40"
-                    >
-                      <option value="peaceful">Peaceful</option>
-                      <option value="easy">Easy</option>
-                      <option value="normal">Normal</option>
-                      <option value="hard">Hard</option>
-                    </select>
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider">Game mode rules</label>
-                    <select
-                      disabled={!isAdmin}
-                      value={appConfig.gamemode}
-                      onChange={e => updateSettingsField({ gamemode: e.target.value })}
-                      className="w-full bg-zinc-950 border border-zinc-850 p-2 text-xs font-semibold rounded text-white outline-none focus:border-emerald-500 disabled:opacity-40"
-                    >
-                      <option value="survival">Survival</option>
-                      <option value="creative">Creative</option>
-                      <option value="adventure">Adventure</option>
-                    </select>
-                  </div>
-                </div>
-
-                {/* Updating core binaries console download section */}
-                <div className="space-y-4">
-                  <h3 className="text-[10px] font-black text-zinc-500 uppercase tracking-widest animate-pulse">Minecraft Updater Console</h3>
-                  <p className="text-[10px] text-zinc-500 leading-relaxed">
-                    Choose Bedrock version releases. Triggering automated installations downloads correct binary zips from Mojang server nets, extracts, chmod executables dynamically.
-                  </p>
-
-                  {/* Deploy Custom Dedicated Server ZIP */}
-                  {isAdmin && (
-                    <div className="bg-zinc-950/40 border border-zinc-900 border-dashed rounded-2xl p-4.5 space-y-3">
-                      <div className="flex items-center gap-2">
-                        <UploadCloud className="w-4 h-4 text-emerald-450" />
-                        <h4 className="text-xs font-black text-white uppercase tracking-wider">Upload Dedicated Server File</h4>
-                      </div>
-                      <p className="text-[10px] text-zinc-500 leading-relaxed">
-                        Alternatively, upload a custom or pre-downloaded Bedrock Dedicated Server <code className="text-zinc-300 font-mono">.zip</code> package to extract and deploy automatically on this host.
-                      </p>
-                      
-                      <div className="flex items-center gap-2">
-                        <label className="bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 hover:border-zinc-750 px-3.5 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest text-zinc-300 transition-all cursor-pointer select-none inline-flex items-center gap-2">
-                          <UploadCloud className="w-3.5 h-3.5 text-emerald-400" />
-                          <span>Select Server ZIP</span>
-                          <input
-                            type="file"
-                            accept=".zip"
-                            className="hidden"
-                            onChange={async (e) => {
-                              const file = e.target.files?.[0];
-                              if (!file) return;
-                              
-                              if (stats?.status !== "stopped") {
-                                showBanner("Please STOP the Bedrock Server completely before uploading custom files.", "error");
-                                return;
-                              }
-                              
-                              const formData = new FormData();
-                              formData.append("file", file);
-                              
-                              try {
-                                showBanner("Starting custom dedicated server ZIP upload...", "info");
-                                const res = await fetch("/api/versions/upload", {
-                                  method: "POST",
-                                  headers: {
-                                    Authorization: `Bearer ${token}`
-                                  },
-                                  body: formData
-                                });
-                                
-                                if (res.ok) {
-                                  const data = await res.json();
-                                  showBanner(`Custom upload deploy started (Task: ${data.taskId})!`, "success");
-                                  fetchDataFeed();
-                                } else {
-                                  const d = await res.json();
-                                  showBanner(d.error || "Custom server ZIP upload failed.", "error");
-                                }
-                              } catch (err) {
-                                showBanner("Connection loss during custom server ZIP upload.", "error");
-                              }
-                            }}
-                          />
-                        </label>
-                        <span className="text-[9px] text-zinc-600 font-mono italic">Accepts Bedrock Dedicated Server ZIP package</span>
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="space-y-3">
-                    {versions.map((ver, idx) => (
-                      <div key={idx} className="bg-zinc-950/40 border border-zinc-900 p-3 rounded-xl flex items-center justify-between hover:border-zinc-800 transition-colors">
-                        <div>
-                          <div className="flex items-center gap-1.5">
-                            <h4 className="text-xs font-black text-white tracking-wide">{ver.version}</h4>
-                            {ver.isLatest && (
-                              <span className="text-[8px] bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-black tracking-widest px-1 py-px rounded uppercase">
-                                Latest
-                              </span>
-                            )}
-                          </div>
-                          <span className="text-[9px] text-zinc-600 block mt-0.5">{ver.releaseDate}</span>
-                        </div>
-                        {isAdmin ? (
-                          <button
-                            onClick={() => installBedrockVersion(ver.version, ver.downloadUrl)}
-                            className="bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest text-zinc-300 transition-colors cursor-pointer select-none"
-                          >
-                            Deploy Build
-                          </button>
-                        ) : (
-                          <Lock className="w-3.5 h-3.5 text-zinc-700" />
-                        )}
-                      </div>
-                    ))}
-                  </div>
                 </div>
               </div>
             </div>
@@ -4087,7 +3935,7 @@ export default function App() {
               </div>
 
               {/* Sub-tab Switcher */}
-              <div className="flex gap-2 bg-zinc-900/50 p-1 rounded-xl max-w-xs border border-zinc-900/60">
+              <div className="flex gap-2 bg-zinc-900/50 p-1 rounded-xl max-w-md border border-zinc-900/60">
                 <button
                   type="button"
                   onClick={() => setPropertiesTab("gui")}
@@ -4098,6 +3946,17 @@ export default function App() {
                   }`}
                 >
                   Graphical Settings
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPropertiesTab("updater")}
+                  className={`flex-1 py-1.5 px-3 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all cursor-pointer select-none ${
+                    propertiesTab === "updater"
+                      ? "bg-zinc-850 text-white shadow"
+                      : "text-zinc-500 hover:text-zinc-300"
+                  }`}
+                >
+                  Core & Updater
                 </button>
                 <button
                   type="button"
@@ -4112,7 +3971,7 @@ export default function App() {
                 </button>
               </div>
 
-              {propertiesTab === "gui" ? (
+              {propertiesTab === "gui" && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                 {/* Visual Identity & Game Rules Card */}
                 <div className="bg-zinc-900/30 border border-zinc-900 rounded-2xl p-6 space-y-6">
@@ -4360,7 +4219,183 @@ export default function App() {
                   </div>
                 </div>
               </div>
-              ) : (
+            )}
+
+              {propertiesTab === "updater" && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 animate-fade-in text-zinc-350">
+                  {/* Left: Port & Core Server configurations */}
+                  <div className="bg-zinc-900/30 border border-zinc-900 rounded-2xl p-6 space-y-6">
+                    <div className="flex items-center gap-2 pb-3 border-b border-zinc-900/60">
+                      <div className="w-8 h-8 rounded-lg bg-emerald-600/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
+                        <Sliders className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h2 className="text-sm font-bold text-white">Server Port Properties</h2>
+                        <p className="text-[10px] text-zinc-500">Configure core ports, limits, difficulty and gamemode</p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3 pb-2">
+                      <div className="space-y-1">
+                        <label className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider">Ports</label>
+                        <input
+                          type="number"
+                          disabled={!isAdmin}
+                          value={appConfig.serverPort}
+                          onChange={e => updateSettingsField({ serverPort: parseInt(e.target.value) || 19132 })}
+                          className="w-full bg-zinc-950 border border-zinc-850 p-2.5 text-xs font-semibold rounded-xl text-white outline-none focus:border-emerald-500 disabled:opacity-40"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider">Max Player Limits</label>
+                        <input
+                          type="number"
+                          disabled={!isAdmin}
+                          value={appConfig.maxPlayers}
+                          onChange={e => updateSettingsField({ maxPlayers: parseInt(e.target.value) || 20 })}
+                          className="w-full bg-zinc-950 border border-zinc-850 p-2.5 text-xs font-semibold rounded-xl text-white outline-none focus:border-emerald-500 disabled:opacity-40"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5 pb-1">
+                      <label className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider">Difficulties level</label>
+                      <select
+                        disabled={!isAdmin}
+                        value={appConfig.difficulty}
+                        onChange={e => updateSettingsField({ difficulty: e.target.value })}
+                        className="w-full bg-zinc-950 border border-zinc-850 p-2.5 text-xs font-semibold rounded-xl text-white outline-none focus:border-emerald-500 disabled:opacity-40 h-10"
+                      >
+                        <option value="peaceful">Peaceful</option>
+                        <option value="easy">Easy</option>
+                        <option value="normal">Normal</option>
+                        <option value="hard">Hard</option>
+                      </select>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider">Game mode rules</label>
+                      <select
+                        disabled={!isAdmin}
+                        value={appConfig.gamemode}
+                        onChange={e => updateSettingsField({ gamemode: e.target.value })}
+                        className="w-full bg-zinc-950 border border-zinc-850 p-2.5 text-xs font-semibold rounded-xl text-white outline-none focus:border-emerald-500 disabled:opacity-40 h-10"
+                      >
+                        <option value="survival">Survival</option>
+                        <option value="creative">Creative</option>
+                        <option value="adventure">Adventure</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Right: Version update panel and config widgets */}
+                  <div className="bg-zinc-900/30 border border-zinc-900 rounded-2xl p-6 space-y-6">
+                    <div className="flex items-center gap-2 pb-3 border-b border-zinc-900/60">
+                      <div className="w-8 h-8 rounded-lg bg-indigo-600/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400">
+                        <CloudDownload className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h2 className="text-sm font-bold text-white">Minecraft Updater Console</h2>
+                        <p className="text-[10px] text-zinc-500">Target server binaries, auto-installations and custom ZIPs</p>
+                      </div>
+                    </div>
+
+                    <p className="text-[10px] text-zinc-500 leading-relaxed">
+                      Choose Bedrock version releases. Triggering automated installations downloads correct binary zips from Mojang server nets, extracts, chmod executables dynamically.
+                    </p>
+
+                    {/* Deploy Custom Dedicated Server ZIP */}
+                    {isAdmin && (
+                      <div className="bg-zinc-950/40 border border-zinc-900 border-dashed rounded-2xl p-4.5 space-y-3">
+                        <div className="flex items-center gap-2">
+                          <UploadCloud className="w-4 h-4 text-emerald-450" />
+                          <h4 className="text-xs font-black text-white uppercase tracking-wider">Upload Dedicated Server File</h4>
+                        </div>
+                        <p className="text-[10px] text-zinc-500 leading-relaxed">
+                          Alternatively, upload a custom or pre-downloaded Bedrock Dedicated Server <code className="text-zinc-300 font-mono">.zip</code> package to extract and deploy automatically on this host.
+                        </p>
+                        
+                        <div className="flex items-center gap-2">
+                          <label className="bg-zinc-900 hover:bg-zinc-850 border border-zinc-805 px-3.5 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest text-zinc-305 transition-all cursor-pointer select-none inline-flex items-center gap-2">
+                            <UploadCloud className="w-3.5 h-3.5 text-emerald-400" />
+                            <span>Select Server ZIP</span>
+                            <input
+                              type="file"
+                              accept=".zip"
+                              className="hidden"
+                              onChange={async (e) => {
+                                const file = e.target.files?.[0];
+                                if (!file) return;
+                                
+                                if (stats?.status !== "stopped") {
+                                  showBanner("Please STOP the Bedrock Server completely before uploading custom files.", "error");
+                                  return;
+                                }
+                                
+                                const formData = new FormData();
+                                formData.append("file", file);
+                                
+                                try {
+                                  showBanner("Starting custom dedicated server ZIP upload...", "info");
+                                  const res = await fetch("/api/versions/upload", {
+                                    method: "POST",
+                                    headers: {
+                                      Authorization: `Bearer ${token}`
+                                    },
+                                    body: formData
+                                  });
+                                  
+                                  if (res.ok) {
+                                    const data = await res.json();
+                                    showBanner(`Custom upload deploy started (Task: ${data.taskId})!`, "success");
+                                    fetchDataFeed();
+                                  } else {
+                                    const d = await res.json();
+                                    showBanner(d.error || "Custom server ZIP upload failed.", "error");
+                                  }
+                                } catch (err) {
+                                  showBanner("Connection loss during custom server ZIP upload.", "error");
+                                }
+                              }}
+                            />
+                          </label>
+                          <span className="text-[9px] text-zinc-600 font-mono italic">Accepts Bedrock Dedicated Server ZIP package</span>
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="space-y-3">
+                      {versions.map((ver, idx) => (
+                        <div key={idx} className="bg-zinc-950/40 border border-zinc-900 p-3 rounded-xl flex items-center justify-between hover:border-zinc-805 transition-colors">
+                          <div>
+                            <div className="flex items-center gap-1.5">
+                              <h4 className="text-xs font-black text-white tracking-wide">{ver.version}</h4>
+                              {ver.isLatest && (
+                                <span className="text-[8px] bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-black tracking-widest px-1 py-px rounded uppercase">
+                                  Latest
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-[9px] text-zinc-600 block mt-0.5">{ver.releaseDate}</span>
+                          </div>
+                          {isAdmin ? (
+                            <button
+                              onClick={() => installBedrockVersion(ver.version, ver.downloadUrl)}
+                              className="bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest text-zinc-300 transition-colors cursor-pointer select-none"
+                            >
+                              Deploy Build
+                            </button>
+                          ) : (
+                            <Lock className="w-3.5 h-3.5 text-zinc-700" />
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {propertiesTab === "files" && (
                 /* RAW INTEGRATED DIRECT CONFIGS FILE EDITOR */
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                   {/* Left panel: File navigation */}
