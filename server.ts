@@ -1666,6 +1666,14 @@ app.post("/api/server/control", authenticateRequest, (req, res) => {
 
         serverStatus = "running";
 
+        // Listen for process errors (prevent unhandled crashes)
+        serverProcess.on("error", (err: any) => {
+          logServerMessage("ERROR", `Server execution error: ${err.message}`);
+          serverStatus = "stopped";
+          serverProcess = null;
+          serverUptimeStart = null;
+        });
+
         // Listen to console
         serverProcess.stdout.on("data", (data) => {
           const str = data.toString().trim();
@@ -1682,7 +1690,7 @@ app.post("/api/server/control", authenticateRequest, (req, res) => {
         });
 
         serverProcess.on("close", (code) => {
-          logServerMessage("SYS", `Bedrock server process excited with code ${code}`);
+          logServerMessage("SYS", `Bedrock server process exited with code ${code}`);
           serverStatus = "stopped";
           serverProcess = null;
           serverUptimeStart = null;
@@ -1776,6 +1784,15 @@ app.post("/api/server/control", authenticateRequest, (req, res) => {
               cwd: SERVER_DIR
             });
             serverStatus = "running";
+            
+            // Listen for process errors (prevent unhandled crashes)
+            serverProcess.on("error", (err: any) => {
+              logServerMessage("ERROR", `Server execution error during restart: ${err.message}`);
+              serverStatus = "stopped";
+              serverProcess = null;
+              serverUptimeStart = null;
+            });
+
             serverProcess.stdout.on("data", (data) => logServerMessage("INFO", data.toString().trim()));
             serverProcess.stderr.on("data", (data) => logServerMessage("ERROR", data.toString().trim()));
             serverProcess.on("close", () => {
@@ -2734,31 +2751,17 @@ function startBroadcasterProcess() {
   
   try {
     broadcasterStatus = "starting";
-    logBroadcasterMessage("SYS", "Launching Console Connect companion process...");
-    
-    if (process.platform === "win32") {
-      logBroadcasterMessage("SYS", "Running on Windows. Launching companion bridge in its own separate command prompt window...");
-      logBroadcasterMessage("SYS", "==========================================================");
-      logBroadcasterMessage("SYS", "  WINDOWS RUNTIME DETECTED!");
-      logBroadcasterMessage("SYS", "  The Companion Bridge is launching in a new Command Prompt window.");
-      logBroadcasterMessage("SYS", "  - Locate the newly opened CMD window on your taskbar/desktop.");
-      logBroadcasterMessage("SYS", "  - It contains the Microsoft Link & Xbox Live Pairing Code.");
-      logBroadcasterMessage("SYS", "  - Keep that window open; closing it stops the bridge.");
-      logBroadcasterMessage("SYS", "==========================================================");
+    logBroadcasterMessage("SYS", "Launching Console Connect companion process in the background...");
 
-      broadcasterProcess = spawn("cmd.exe", [
-        "/c",
-        "start",
-        "Console Connect Bridge",
-        "/wait",
-        "java",
-        "-jar",
-        "Broadcaster.jar"
-      ], {
+    if (process.platform === "win32") {
+      logBroadcasterMessage("SYS", "Running on Windows. Spawning background JVM instance...");
+      broadcasterProcess = spawn("java", ["-jar", BROADCASTER_JAR], {
         cwd: BROADCASTER_DIR,
+        shell: true,
         env: { ...process.env }
       });
     } else {
+      logBroadcasterMessage("SYS", "Running on Linux. Spawning background JVM instance...");
       broadcasterProcess = spawn("java", ["-jar", BROADCASTER_JAR], {
         cwd: BROADCASTER_DIR,
         env: { ...process.env }
@@ -2767,28 +2770,53 @@ function startBroadcasterProcess() {
 
     logBroadcasterMessage("SYS", "Spawned Broadcaster JVM instance.");
 
+    // Handle process spawn errors (e.g. Java not installed) to prevent server crash
+    broadcasterProcess.on("error", (err: any) => {
+      console.error("Broadcaster process exception:", err);
+      logBroadcasterMessage("ERROR", `Broadcaster process failed to start: ${err.message}`);
+      if (err.code === "ENOENT") {
+        logBroadcasterMessage("ERROR", "CRITICAL: The 'java' executable could not be found.");
+        logBroadcasterMessage("ERROR", "Please make sure Java (JDK or JRE version 17+) is installed on the host and added to your system environment variables (PATH).");
+        logBroadcasterMessage("ERROR", "Alternatively, go to Settings -> App Settings and switch the application to 'Simulation Mode' to test the panel UI.");
+      }
+      broadcasterStatus = "stopped";
+      broadcasterProcess = null;
+    });
+
     broadcasterProcess.stdout.on("data", (data: any) => {
       const line = data.toString().trim();
       if (!line) return;
       
-      let type = "INFO";
-      if (line.includes("https://microsoft.com/link") || line.includes("code")) {
-        type = "SIGNIN";
-      } else if (line.toLowerCase().includes("error") || line.toLowerCase().includes("failed")) {
-        type = "ERROR";
-      } else if (line.toLowerCase().includes("success") || line.toLowerCase().includes("authenticated")) {
-        type = "SUCCESS";
-      } else if (line.toLowerCase().includes("warning")) {
-        type = "WARN";
+      const lines = line.split("\n");
+      for (const singleLine of lines) {
+        const trimmed = singleLine.trim();
+        if (!trimmed) continue;
+
+        let type = "INFO";
+        if (trimmed.includes("https://microsoft.com/link") || trimmed.includes("code")) {
+          type = "SIGNIN";
+        } else if (trimmed.toLowerCase().includes("error") || trimmed.toLowerCase().includes("failed")) {
+          type = "ERROR";
+        } else if (trimmed.toLowerCase().includes("success") || trimmed.toLowerCase().includes("authenticated")) {
+          type = "SUCCESS";
+        } else if (trimmed.toLowerCase().includes("warning")) {
+          type = "WARN";
+        }
+        
+        logBroadcasterMessage(type, trimmed);
       }
-      
-      logBroadcasterMessage(type, line);
     });
 
     broadcasterProcess.stderr.on("data", (data: any) => {
       const line = data.toString().trim();
       if (line) {
-        logBroadcasterMessage("ERROR", line);
+        const lines = line.split("\n");
+        for (const singleLine of lines) {
+          const trimmed = singleLine.trim();
+          if (trimmed) {
+            logBroadcasterMessage("ERROR", trimmed);
+          }
+        }
       }
     });
 
@@ -2805,7 +2833,7 @@ function startBroadcasterProcess() {
     }, 5000);
 
   } catch (err: any) {
-    logBroadcasterMessage("ERROR", `Failed process spawn: ${err.message}`);
+    logBroadcasterMessage("ERROR", `Failed process spawn catch: ${err.message}`);
     broadcasterStatus = "stopped";
     broadcasterProcess = null;
   }
@@ -3029,6 +3057,14 @@ function startPlayitProcess() {
     });
 
     logPlayitMessage("SYS", "Spawned playit agent process.");
+
+    // Handle process spawn errors to prevent server crash
+    playitProcess.on("error", (err: any) => {
+      console.error("Playit process exception:", err);
+      logPlayitMessage("ERROR", `Playit agent process failed: ${err.message}`);
+      playitStatus = "stopped";
+      playitProcess = null;
+    });
 
     playitProcess.stdout.on("data", (data: any) => {
       const line = data.toString().trim();
