@@ -3840,13 +3840,42 @@ app.post("/api/updates/restart", authenticateRequest, (req, res) => {
 
   logSoftwareUpdate("Gracefully terminated active companion and BDS child processes.", "info");
 
-  logSoftwareUpdate("Initiating true hardware/container level restart to apply updated server modules and scripts...", "info");
+  logSoftwareUpdate("Initiating a clean full process restart to apply updated server modules and scripts...", "info");
 
   res.json({ success: true, message: "Server shutting down for a clean full process restart." });
 
-  // Physically exit process so container/host wrapper reboots the program cleanly
+  // Detached self-spawning restart to support Windows cmd/exe launchers as well as Docker
   setTimeout(() => {
-    console.log("BDS MANAGER RESTARTING NOW (PROCESS EXIT)...");
+    console.log("BDS MANAGER SHUTTING DOWN TO SELF-RESTART...");
+    try {
+      const isPkg = !!(process as any).pkg;
+      const exe = isPkg ? process.execPath : process.argv[0];
+      const args = process.argv.slice(1);
+      const argsStr = args.map(a => `"${a}"`).join(" ");
+
+      if (process.platform === "win32") {
+        // Use ping for a reliable 2-second delay to free ports, then launch a new visible command window via start
+        const batchCommand = `ping 127.0.0.1 -n 3 > nul & start "" "${exe}" ${argsStr}`;
+        console.log(`[Self-Restart] Windows spawning detached cmd prompt: ${batchCommand}`);
+        spawn("cmd.exe", ["/c", batchCommand], {
+          detached: true,
+          stdio: "ignore",
+          cwd: WORK_DIR
+        }).unref();
+      } else {
+        // Unix (macOS/Linux) - wait 2 seconds, then launch a detached process
+        const shellCmd = `sleep 2 && "${exe}" ${argsStr}`;
+        console.log(`[Self-Restart] Unix spawning background restart: ${shellCmd}`);
+        spawn("sh", ["-c", shellCmd], {
+          detached: true,
+          stdio: "ignore",
+          cwd: WORK_DIR
+        }).unref();
+      }
+    } catch (e: any) {
+      console.error("Critical error attempting self-restart:", e);
+    }
+
     process.exit(0);
   }, 1200);
 });
