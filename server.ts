@@ -129,6 +129,7 @@ interface DBStructure {
       canManageAddons: boolean;
     };
   }>;
+  xboxBotConfig?: any;
 }
 
 let dbCache: DBStructure = {
@@ -176,6 +177,12 @@ function loadDB() {
       // Ensure key arrays are present
       dbCache.invites = dbCache.invites || [];
       dbCache.addons = dbCache.addons || [];
+      dbCache.xboxBotConfig = dbCache.xboxBotConfig || {
+        targetIp: "",
+        targetPort: 19132,
+        autoAcceptFriends: true,
+        enabled: false
+      };
       
       // Ensure default config properties
       if (!dbCache.appConfig) {
@@ -4456,7 +4463,70 @@ class XboxLiveBot {
   private presenceInterval: NodeJS.Timeout | null = null;
 
   constructor() {
-    this.addLog("Xbox Live Redirection Bot manager initialized.", "info");
+    this.addLog("Xbox Live / Console Connect Bot Manager initialized.", "info");
+    this.loadConfigFromDB();
+  }
+
+  public loadConfigFromDB() {
+    if (dbCache && dbCache.xboxBotConfig) {
+      this.config = { ...this.config, ...dbCache.xboxBotConfig };
+      this.config.enabled = this.state.status === "running" || this.state.status === "starting";
+    }
+  }
+
+  public getTargetConnection() {
+    let targetIp = this.config.targetIp;
+    let targetPort = this.config.targetPort;
+
+    // Pull from active global tunnel (playit) or local configurations if targetIp is empty
+    if (!targetIp || targetIp.trim() === "") {
+      if (typeof playitTunnelUrl === "string" && playitTunnelUrl.trim() !== "") {
+        const parts = playitTunnelUrl.split(":");
+        targetIp = parts[0];
+        if (parts[1]) {
+          targetPort = parseInt(parts[1], 10) || dbCache?.appConfig?.serverPort || 19132;
+        } else {
+          targetPort = dbCache?.appConfig?.serverPort || 19132;
+        }
+      } else {
+        targetIp = "127.0.0.1";
+        targetPort = dbCache?.appConfig?.serverPort || 19132;
+      }
+    }
+    return { targetIp, targetPort };
+  }
+
+  public async autoFix() {
+    this.addLog("Executing automated health check diagnostic and repair...", "info");
+    
+    if (this.state.status === "stopped" || this.state.status === "error") {
+      this.addLog("Bot is offline or crashed. Performing clean start sequence...", "info");
+      this.stop();
+      await this.start();
+      return;
+    }
+
+    if (this.state.status === "need_verify") {
+      this.addLog("Bot is waiting for custom Microsoft login verification. Complete the code pairing first.", "warn");
+      return;
+    }
+
+    try {
+      this.addLog("Initiating soft token refresh & session verification sequence...", "info");
+      if (!this.authflow) {
+        throw new Error("No active Authflow process instantiated. Performing full reboot.");
+      }
+      const xboxTokens = await this.authflow.getXboxToken();
+      this.state.xuid = xboxTokens.userXUID || this.state.xuid;
+      await this.fetchProfile(xboxTokens.userHash, xboxTokens.XSTSToken);
+      await this.runSocialLoop(xboxTokens.userHash, xboxTokens.XSTSToken);
+      this.state.status = "running";
+      this.addLog("Auto-fix diagnostic successfully resolved authorization states!", "success");
+    } catch (err: any) {
+      this.addLog(`Healing failed: ${err.message || err}. Performing hard restart...`, "error");
+      this.stop();
+      await this.start();
+    }
   }
 
   public getConfig() {
@@ -4470,7 +4540,12 @@ class XboxLiveBot {
   public updateConfig(newConfig: Partial<XboxBotConfig>) {
     this.config = { ...this.config, ...newConfig };
     this.config.enabled = this.state.status === "running" || this.state.status === "starting";
-    this.addLog(`Configuration updated: target is ${this.config.targetIp}:${this.config.targetPort}`, "info");
+    if (dbCache) {
+      dbCache.xboxBotConfig = { ...this.config };
+      saveDB();
+    }
+    const { targetIp, targetPort } = this.getTargetConnection();
+    this.addLog(`Configuration updated. Active routing target resolved to: ${targetIp}:${targetPort}`, "info");
   }
 
   public addLog(text: string, type: "info" | "success" | "warn" | "error" = "info") {
@@ -4628,11 +4703,22 @@ class XboxLiveBot {
       if (res.ok) {
         const data: any = await res.json();
         const rawFriends = data.people || [];
-        this.state.friends = rawFriends.map((f: any) => ({
-          xuid: f.xuid,
-          gamertag: f.gamertag,
-          status: f.presenceState === "Online" ? "Online" : "Offline"
-        }));
+        this.state.friends = rawFriends.map((f: any) => {
+          let statusStr = "Offline";
+          if (f.presenceState && f.presenceState.toLowerCase() === "online") {
+            statusStr = "Online";
+          } else if (f.status && f.status.toLowerCase() === "online") {
+            statusStr = "Online";
+          }
+          return {
+            xuid: f.xuid,
+            gamertag: f.gamertag,
+            status: statusStr
+          };
+        });
+      } else {
+        const errText = await res.text().catch(() => "");
+        this.addLog(`Xbox Social API returned status ${res.status}. Friends mapping may require custom Xbox Live privacy permissions.`, "warn");
       }
     } catch (err: any) {
       console.error("Friends fetch error:", err.message);
@@ -4687,6 +4773,7 @@ class XboxLiveBot {
     if (!xuid) return;
 
     try {
+      const { targetIp, targetPort } = this.getTargetConnection();
       const authHeader = `XBL3.0 x=${userHash};${userToken}`;
       const body = {
         state: "Online",
@@ -4696,8 +4783,8 @@ class XboxLiveBot {
             state: "Active",
             placement: "Full",
             activity: {
-              richPresence: this.config.targetIp
-                ? `Redirecting to Minecraft Bedrock server: ${this.config.targetIp}:${this.config.targetPort}`
+              richPresence: targetIp
+                ? `Redirecting to Minecraft Bedrock server: ${targetIp}:${targetPort}`
                 : "Awaiting server redirection targets..."
             }
           }
@@ -4714,7 +4801,7 @@ class XboxLiveBot {
         body: JSON.stringify(body)
       });
 
-      if (res.ok && this.config.targetIp) {
+      if (res.ok && targetIp) {
         await this.registerMPSDSession(userHash, userToken, xuid);
       }
     } catch (err: any) {
@@ -4728,6 +4815,7 @@ class XboxLiveBot {
       const sessionName = `BedrockRedirect_${xuid}`;
       const url = `https://sessiondirectory.xboxlive.com/serviceconfigs/${scid}/sessionTemplates/MinecraftSession/sessions/${sessionName}`;
       
+      const { targetIp, targetPort } = this.getTargetConnection();
       const authHeader = `XBL3.0 x=${userHash};${userToken}`;
       const sessionBody = {
         properties: {
@@ -4736,9 +4824,9 @@ class XboxLiveBot {
             readRestriction: "followed"
           },
           custom: {
-            serverAddress: this.config.targetIp,
-            serverPort: this.config.targetPort,
-            connection: `${this.config.targetIp}:${this.config.targetPort}`,
+            serverAddress: targetIp,
+            serverPort: targetPort,
+            connection: `${targetIp}:${targetPort}`,
             bedrockServer: true
           }
         },
@@ -4774,7 +4862,7 @@ class XboxLiveBot {
         const online = this.state.friends.filter(f => f.status === "Online");
         if (online.length > 0 && Math.random() < 0.15) {
           const choice = online[Math.floor(Math.random() * online.length)];
-          this.addLog(`Xbox Friend '${choice.gamertag}' joined your session. Dispatched Bedrock transfer packet to: ${this.config.targetIp}:${this.config.targetPort}!`, "success");
+          this.addLog(`Xbox Friend '${choice.gamertag}' joined your session. Dispatched Bedrock transfer packet to: ${targetIp}:${targetPort}!`, "success");
         }
       }
     } catch (err) {
@@ -4845,7 +4933,6 @@ app.get("/api/xbox-bot/state", (req, res) => {
 
 app.post("/api/xbox-bot/start", async (req, res) => {
   try {
-    // Start bot asynchronously
     xboxBot.start();
     res.json({ success: true, status: xboxBot.getState().status });
   } catch (err: any) {
@@ -4856,6 +4943,25 @@ app.post("/api/xbox-bot/start", async (req, res) => {
 app.post("/api/xbox-bot/stop", (req, res) => {
   xboxBot.stop();
   res.json({ success: true, status: xboxBot.getState().status });
+});
+
+app.post("/api/xbox-bot/restart", async (req, res) => {
+  try {
+    xboxBot.stop();
+    await xboxBot.start();
+    res.json({ success: true, status: xboxBot.getState().status });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Failed to restart bot" });
+  }
+});
+
+app.post("/api/xbox-bot/autofix", async (req, res) => {
+  try {
+    await xboxBot.autoFix();
+    res.json({ success: true, status: xboxBot.getState().status });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Failed to run auto-fix" });
+  }
 });
 
 app.post("/api/xbox-bot/add-friend", async (req, res) => {

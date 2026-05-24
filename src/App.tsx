@@ -84,7 +84,6 @@ import {
   InvitePermissions
 } from "./types";
 
-import ConsoleConnect from "./components/ConsoleConnect";
 import SoftwareUpdates from "./components/SoftwareUpdates";
 import PlayitConnect from "./components/PlayitConnect";
 import PlayersMap from "./components/PlayersMap";
@@ -238,7 +237,11 @@ export default function App() {
   // Menu Navigation Tab (Dashboard, Players, Settings, Console, Users, Selfhost Guides)
   const [navTab, setNavTab] = useState<"dashboard" | "addons" | "worlds" | "console" | "users" | "selfhost" | "console_connect" | "updates" | "tasks_history" | "quick_commands" | "properties" | "players_map" | "settings" | "experimental">("dashboard");
   const [settingsSubTab, setSettingsSubTab] = useState<"properties" | "users" | "tasks_history" | "selfhost" | "updates">("properties");
-  const [experimentalSubTab, setExperimentalSubTab] = useState<"players_map" | "console_connect" | "playit">("players_map");
+  const [experimentalSubTab, setExperimentalSubTab] = useState<"players_map" | "playit">("players_map");
+  const [xboxBotState, setXboxBotState] = useState<{
+    status: string;
+    gamertag: string | null;
+  } | null>(null);
   const [guideMode, setGuideMode] = useState<"windows" | "docker">("windows");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -653,7 +656,7 @@ export default function App() {
   // Centralized navigation bar configuration with beautifully polished, easy-to-identify icons and colors
   const navItems = useMemo(() => [
     { id: "dashboard", label: "Dashboard Space", icon: LayoutDashboard, color: "text-emerald-400" },
-    { id: "xbox_bot", label: "Xbox Join Bot", icon: Bot, color: "text-indigo-400" },
+    { id: "xbox_bot", label: "Console Connect", icon: Gamepad2, color: "text-indigo-400" },
     { id: "addons", label: "Addons & Packs", icon: Blocks, color: "text-indigo-400" },
     { id: "worlds", label: "Worlds Vault", icon: FolderOpen, color: "text-amber-400" },
     { id: "quick_commands", label: "Quick Commands", icon: Zap, color: "text-yellow-400", pulse: true },
@@ -725,6 +728,14 @@ export default function App() {
       // 3. Active configuration properties
       const configData = await fetchJson("/api/server/config");
       setAppConfig(configData);
+
+      // Xbox Console Connect (Redirection Bot) State Poller for Global Notifier Indicators
+      try {
+        const xboxData = await fetchJson("/api/xbox-bot/state");
+        setXboxBotState(xboxData);
+      } catch (e) {
+        console.error("Xbox bot state global query skipped/failed:", e);
+      }
 
       // Fetch according to visible route
       if (navTab === "dashboard" || consoleTab === "logs") {
@@ -2136,6 +2147,22 @@ export default function App() {
 
           {/* Quick status dot or icon based on server status */}
           <div className="flex items-center gap-2">
+            {xboxBotState && (
+              <div 
+                onClick={() => { setNavTab("xbox_bot"); setMobileMenuOpen(false); }}
+                className="flex items-center gap-1.5 px-2 py-1 bg-[#121c33]/40 border border-[#1d2d4c]/65 rounded-lg cursor-pointer max-w-[90px] transition-all"
+                title="Console Connect bot status"
+              >
+                <Gamepad2 className="w-3 h-3 text-indigo-400 shrink-0" />
+                <span className="text-[8px] font-mono font-black text-zinc-350 truncate">
+                  {xboxBotState.status === "running" ? `${xboxBotState.gamertag || "linked"}` : "link off"}
+                </span>
+                <span className={`w-1 h-1 rounded-full shrink-0 ${
+                  xboxBotState.status === "running" ? "bg-emerald-400 animate-pulse" : "bg-zinc-600"
+                }`} />
+              </div>
+            )}
+
             <div className="flex items-center gap-1.5 px-2 py-1 bg-zinc-950/60 border border-zinc-900 rounded-lg">
               <span className={`w-2 h-2 rounded-full ${
                 stats?.status === "running" ? "bg-emerald-400 animate-ping" :
@@ -2375,7 +2402,34 @@ export default function App() {
             </p>
           </div>
 
-          <div className="flex gap-3 bg-[#0a0f18]/90 border border-[#152033]/60 p-1.5 rounded-xl shadow-lg">
+          <div className="flex items-center gap-4">
+            {/* Console Connect Global Status Notifier */}
+            {xboxBotState && (
+              <div
+                onClick={() => setNavTab("xbox_bot")}
+                className="flex items-center gap-3 px-4 py-2 border border-[#152033]/50 bg-[#0d1627]/40 hover:bg-[#0d1627]/60 rounded-xl cursor-pointer transition-all duration-300 group shadow-md"
+                title="Click to manage Console Connect proxy settings"
+              >
+                <Gamepad2 className="w-5 h-5 text-indigo-400 group-hover:scale-110 transition-transform duration-300 font-black shrink-0" />
+                <div className="flex flex-col text-left">
+                  <span className="text-[9px] text-zinc-500 font-extrabold uppercase tracking-widest leading-none">Console Link</span>
+                  <span className="text-[11px] font-black text-white leading-tight mt-0.5 max-w-[125px] truncate">
+                    {xboxBotState.status === "running" ? `${xboxBotState.gamertag || "Connected"}` :
+                     xboxBotState.status === "need_verify" ? "Verify Pending" :
+                     xboxBotState.status === "starting" ? "Connecting..." :
+                     "Disconnected"}
+                  </span>
+                </div>
+                <span className={`w-2 h-2 rounded-full shrink-0 ${
+                  xboxBotState.status === "running" ? "bg-emerald-400 animate-pulse shadow-[0_0_8px_#10b981]" :
+                  xboxBotState.status === "need_verify" ? "bg-amber-400 animate-ping" :
+                  xboxBotState.status === "starting" ? "bg-indigo-400 animate-pulse" :
+                  "bg-zinc-600"
+                }`} />
+              </div>
+            )}
+
+            <div className="flex gap-3 bg-[#0a0f18]/90 border border-[#152033]/60 p-1.5 rounded-xl shadow-lg">
             <button
               id="server-control-start"
               onClick={() => executeServerControl("start")}
@@ -2418,7 +2472,8 @@ export default function App() {
               <span>Restart</span>
             </button>
           </div>
-        </header>
+        </div>
+      </header>
 
         {/* 4.4 Dynamic routing container depending on visible Nav Tab */}
         <div className="flex-1 p-4 md:p-6 pb-28 md:pb-6 overflow-y-auto min-h-0 select-none">
@@ -4637,19 +4692,6 @@ export default function App() {
 
                   <button
                     type="button"
-                    onClick={() => setExperimentalSubTab("console_connect")}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                      experimentalSubTab === "console_connect"
-                        ? "bg-zinc-900 border border-zinc-805 text-white shadow-md font-extrabold"
-                        : "text-zinc-550 hover:text-zinc-300"
-                    }`}
-                  >
-                    <Link className={`w-3.5 h-3.5 ${experimentalSubTab === "console_connect" ? "text-violet-400" : "text-zinc-500"}`} />
-                    Console Connect
-                  </button>
-
-                  <button
-                    type="button"
                     onClick={() => setExperimentalSubTab("playit")}
                     className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                       experimentalSubTab === "playit"
@@ -4667,15 +4709,6 @@ export default function App() {
               <div className="animate-fadeIn">
                 {experimentalSubTab === "players_map" && (
                   <PlayersMap token={token} onShowMessage={showBanner} />
-                )}
-
-                {experimentalSubTab === "console_connect" && (
-                  <ConsoleConnect
-                    token={token}
-                    serverPort={appConfig.serverPort}
-                    serverLevelName={appConfig.levelName}
-                    onShowMessage={(text, type) => showBanner(text, type)}
-                  />
                 )}
 
                 {experimentalSubTab === "playit" && (

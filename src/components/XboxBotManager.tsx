@@ -53,6 +53,8 @@ export default function XboxBotManager({ token }: XboxBotManagerProps) {
   const [inputPort, setInputPort] = useState("19132");
   const [friendGamertag, setFriendGamertag] = useState("");
   const [isActivelyStarting, setIsActivelyStarting] = useState(false);
+  const [restarting, setRestarting] = useState(false);
+  const [fixing, setFixing] = useState(false);
   const [friendError, setFriendError] = useState("");
   const [friendSuccess, setFriendSuccess] = useState("");
   const [configSaving, setConfigSaving] = useState(false);
@@ -180,6 +182,36 @@ export default function XboxBotManager({ token }: XboxBotManagerProps) {
     }
   };
 
+  const handleRestartBot = async () => {
+    setRestarting(true);
+    try {
+      await fetch("/api/xbox-bot/restart", {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
+      });
+      await fetchBotState();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setRestarting(false);
+    }
+  };
+
+  const handleAutoFixBot = async () => {
+    setFixing(true);
+    try {
+      await fetch("/api/xbox-bot/autofix", {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
+      });
+      await fetchBotState();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setFixing(false);
+    }
+  };
+
   const handleAddFriend = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!friendGamertag.trim()) return;
@@ -244,14 +276,14 @@ export default function XboxBotManager({ token }: XboxBotManagerProps) {
     <div className="flex-1 p-4 md:p-8 overflow-y-auto space-y-8 bg-zinc-950/40">
       
       {/* Header Block with high negative space precision */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-[#0d1627]/40 border border-[#152033]/50 rounded-2xl p-6 md:p-8 gap-4 shadow-[0_0_24px_rgba(0,0,0,0.2)]">
+      <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center bg-[#0d1627]/40 border border-[#152033]/50 rounded-2xl p-6 md:p-8 gap-4 shadow-[0_0_24px_rgba(0,0,0,0.2)]">
         <div className="space-y-1">
           <h2 className="text-xl md:text-2xl font-black text-white tracking-tight flex items-center gap-2.5">
-            <Bot className="w-6 h-6 text-indigo-400" />
-            Xbox Live Redirection Bot
+            <Gamepad2 className="w-6 h-6 text-indigo-400" />
+            Console Connect
           </h2>
           <p className="text-xs text-zinc-400 max-w-xl leading-relaxed">
-            Link a Microsoft Xbox Live account to act as a join proxy. Any console or cross-play player who friends this bot can click 'Join Game' to instantly redirect to your target Bedrock server.
+            Link a Microsoft Xbox Live account to act as a console join proxy. Any multiplayer or console player who friends this bot can click 'Join Game' to instantly redirect to your bedrock-selected server.
           </p>
           {botState.gamertag && (
             <div className="flex items-center gap-1.5 mt-2.5 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1.5 rounded-xl text-[11px] font-bold text-emerald-400 w-fit shadow-sm">
@@ -260,19 +292,33 @@ export default function XboxBotManager({ token }: XboxBotManagerProps) {
             </div>
           )}
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2">
           <span className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider border ${getStatusColor()}`}>
             ● {getStatusLabel()}
           </span>
-          {botState.status !== "stopped" ? (
-            <button
-              id="xbox-btn-stop"
-              onClick={handleStopBot}
-              className="bg-rose-600/15 hover:bg-rose-600/25 border border-rose-500/30 text-rose-300 px-5 py-2.5 rounded-xl text-xs font-black tracking-widest uppercase transition-all duration-300 flex items-center gap-2 cursor-pointer shadow-[0_0_12px_rgba(239,68,68,0.05)]"
-            >
-              <Square className="w-3.5 h-3.5" /> Stop Bot
-            </button>
-          ) : (
+
+          {botState.status !== "stopped" && (
+            <>
+              <button
+                id="xbox-btn-stop"
+                onClick={handleStopBot}
+                className="bg-rose-600/15 hover:bg-rose-600/25 border border-rose-500/30 text-rose-300 px-4 py-2.5 rounded-xl text-xs font-black tracking-widest uppercase transition-all duration-300 flex items-center gap-2 cursor-pointer"
+              >
+                <Square className="w-3.5 h-3.5" /> Stop
+              </button>
+
+              <button
+                id="xbox-btn-restart"
+                onClick={handleRestartBot}
+                disabled={restarting}
+                className="bg-indigo-500/15 hover:bg-indigo-500/25 border border-indigo-500/30 text-indigo-300 px-4 py-2.5 rounded-xl text-xs font-black tracking-widest uppercase transition-all duration-300 flex items-center gap-2 cursor-pointer"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${restarting ? "animate-spin" : ""}`} /> Restart
+              </button>
+            </>
+          )}
+
+          {botState.status === "stopped" && (
             <button
               id="xbox-btn-start"
               onClick={handleStartBot}
@@ -284,6 +330,16 @@ export default function XboxBotManager({ token }: XboxBotManagerProps) {
               <Play className="w-3.5 h-3.5" /> Start & Log In
             </button>
           )}
+
+          <button
+            id="xbox-btn-autofix"
+            onClick={handleAutoFixBot}
+            disabled={fixing}
+            title="Diagnose and repair Xbox Live session desync automatically"
+            className="bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-300 px-4 py-2.5 rounded-xl text-xs font-black tracking-widest uppercase transition-all duration-300 flex items-center gap-2 cursor-pointer"
+          >
+            <Settings className={`w-3.5 h-3.5 ${fixing ? "animate-pulse" : ""}`} /> Auto Fix
+          </button>
         </div>
       </div>
 
