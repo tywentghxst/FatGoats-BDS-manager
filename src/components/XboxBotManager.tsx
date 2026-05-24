@@ -13,7 +13,9 @@ import {
   ClipboardList,
   ExternalLink,
   Clock,
-  Users
+  Users,
+  Copy,
+  Check
 } from "lucide-react";
 
 interface XboxBotManagerProps {
@@ -40,7 +42,11 @@ export default function XboxBotManager({ token }: XboxBotManagerProps) {
     xuid: null as string | null,
     avatarUrl: null as string | null,
     friends: [] as Array<{ xuid: string; gamertag: string; status: string }>,
-    logs: [] as Array<{ timestamp: string; text: string; type: "info" | "success" | "warn" | "error" }>
+    logs: [] as Array<{ timestamp: string; text: string; type: "info" | "success" | "warn" | "error" }>,
+    autoApprovedCount: 0,
+    requestsSentCount: 0,
+    recentApprovals: [] as Array<{ gamertag: string; timestamp: string }>,
+    recentSent: [] as Array<{ gamertag: string; timestamp: string }>
   });
 
   const [inputIp, setInputIp] = useState("");
@@ -50,6 +56,8 @@ export default function XboxBotManager({ token }: XboxBotManagerProps) {
   const [friendError, setFriendError] = useState("");
   const [friendSuccess, setFriendSuccess] = useState("");
   const [configSaving, setConfigSaving] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [activeFriendsTab, setActiveFriendsTab] = useState<"mutual" | "approved" | "sent">("mutual");
 
   const logsEndRef = useRef<HTMLDivElement>(null);
 
@@ -245,6 +253,12 @@ export default function XboxBotManager({ token }: XboxBotManagerProps) {
           <p className="text-xs text-zinc-400 max-w-xl leading-relaxed">
             Link a Microsoft Xbox Live account to act as a join proxy. Any console or cross-play player who friends this bot can click 'Join Game' to instantly redirect to your target Bedrock server.
           </p>
+          {botState.gamertag && (
+            <div className="flex items-center gap-1.5 mt-2.5 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1.5 rounded-xl text-[11px] font-bold text-emerald-400 w-fit shadow-sm">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+              Active Minecraft Gamertag: <span className="text-white font-extrabold ml-0.5">{botState.gamertag}</span>
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-3">
           <span className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider border ${getStatusColor()}`}>
@@ -275,9 +289,9 @@ export default function XboxBotManager({ token }: XboxBotManagerProps) {
 
       {/* Verification prompt when needed */}
       {botState.status === "need_verify" && botState.verification && (
-        <div className="bg-amber-500/5 border border-amber-500/20 rounded-2xl p-6 space-y-4 animate-pulse">
+        <div className="bg-amber-500/5 border border-amber-500/20 rounded-2xl p-6 space-y-4">
           <div className="flex items-start gap-4">
-            <div className="p-3 bg-amber-500/15 border border-amber-400/20 text-amber-400 rounded-xl">
+            <div className="p-3 bg-amber-500/15 border border-amber-400/20 text-amber-400 rounded-xl animate-pulse">
               <AlertTriangle className="w-6 h-6" />
             </div>
             <div className="space-y-1 flex-1">
@@ -291,8 +305,33 @@ export default function XboxBotManager({ token }: XboxBotManagerProps) {
           <div className="flex flex-col sm:flex-row items-center justify-between bg-zinc-950/60 border border-zinc-900 rounded-xl p-4 gap-4">
             <div className="text-center sm:text-left space-y-1">
               <span className="text-[10px] text-zinc-500 font-bold tracking-widest uppercase">Verification Code</span>
-              <div className="text-3xl font-black text-indigo-400 font-mono tracking-widest">
-                {botState.verification.user_code}
+              <div className="flex items-center gap-3">
+                <div className="text-3xl font-black text-indigo-400 font-mono tracking-widest">
+                  {botState.verification.user_code}
+                </div>
+                <button
+                  id="xbox-btn-copy-code"
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(botState.verification?.user_code || "");
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 2000);
+                  }}
+                  className="p-1.5 hover:bg-zinc-800/50 bg-zinc-900/40 border border-zinc-800 hover:text-white rounded-lg transition-all flex items-center gap-1.5 text-xs font-semibold cursor-pointer text-indigo-300"
+                  title="Copy verification code"
+                >
+                  {copied ? (
+                    <>
+                      <Check className="w-3.5 h-3.5 text-emerald-400" />
+                      <span className="text-emerald-400 text-[10px] uppercase font-bold tracking-wider">Copied!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-3.5 h-3.5" />
+                      <span className="text-zinc-400 text-[10px] uppercase font-bold tracking-wider">Copy</span>
+                    </>
+                  )}
+                </button>
               </div>
             </div>
             <a
@@ -384,33 +423,47 @@ export default function XboxBotManager({ token }: XboxBotManagerProps) {
               <Users className="w-4 h-4" />
             </div>
             <span className="font-bold text-xs uppercase tracking-widest text-zinc-300">Identity & Friends</span>
-          </div>
-
-          {/* Xbox Live Linked Account Header */}
+          </div>          {/* Xbox Live Linked Account Header */}
           {botState.gamertag ? (
-            <div className="bg-zinc-950/30 border border-zinc-900/40 rounded-xl p-4 flex items-center gap-4">
+            <div className="bg-[#101b30]/30 border border-[#162947]/50 rounded-xl p-4 flex items-center gap-4 shadow-inner">
               {botState.avatarUrl ? (
                 <img
                   src={botState.avatarUrl}
                   alt="Avatar"
                   referrerPolicy="no-referrer"
-                  className="w-12 h-12 rounded-full border border-indigo-500/20 shadow-[0_0_8px_rgba(99,102,241,0.2)]"
+                  className="w-12 h-12 rounded-full border-2 border-indigo-500/30 shadow-[0_0_12px_rgba(99,102,241,0.25)]"
                 />
               ) : (
                 <div className="w-12 h-12 rounded-full bg-indigo-950 border border-indigo-500/30 flex items-center justify-center font-black text-indigo-400">
                   {botState.gamertag[0].toUpperCase()}
                 </div>
               )}
-              <div className="space-y-0.5">
-                <div className="text-xs font-bold text-zinc-200">{botState.gamertag}</div>
-                <div className="text-[9px] text-indigo-400 font-mono">XUID: {botState.xuid || "Unknown"}</div>
+              <div className="space-y-1">
+                <span className="text-[9px] text-zinc-400 font-bold uppercase tracking-widest block leading-none">Minecraft Gamertag</span>
+                <div className="text-sm font-black text-emerald-400 flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                  {botState.gamertag}
+                </div>
+                <div className="text-[9px] text-zinc-500 font-mono">XUID: {botState.xuid || "Unknown"}</div>
               </div>
             </div>
           ) : (
-            <div className="bg-zinc-950/15 border border-zinc-900/20 rounded-xl p-6 text-center text-zinc-500 text-xs">
+            <div className="bg-zinc-950/15 border border-zinc-900/20 rounded-xl p-6 text-center text-zinc-500 text-xs text-sans">
               No Xbox account currently integrated.
             </div>
           )}
+
+          {/* Metric counter statistics */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="bg-emerald-500/5 border border-emerald-500/10 rounded-xl p-2.5 text-center">
+              <div className="text-[8px] text-emerald-400 font-bold uppercase tracking-widest">Auto Approved</div>
+              <div className="text-sm font-black text-white mt-1 font-mono">{botState.autoApprovedCount || 0} Users</div>
+            </div>
+            <div className="bg-indigo-500/5 border border-indigo-500/10 rounded-xl p-2.5 text-center">
+              <div className="text-[8px] text-indigo-400 font-bold uppercase tracking-widest">Requests Sent</div>
+              <div className="text-sm font-black text-white mt-1 font-mono">{botState.requestsSentCount || 0} Friends</div>
+            </div>
+          </div>
 
           {/* Add Xbox Friend utility */}
           <form onSubmit={handleAddFriend} className="space-y-2">
@@ -436,25 +489,100 @@ export default function XboxBotManager({ token }: XboxBotManagerProps) {
             {friendSuccess && <div className="text-[10px] text-emerald-400">{friendSuccess}</div>}
           </form>
 
+          {/* Interactive activity and status tabs */}
+          <div className="flex border-b border-[#18233a]/40 text-[9px] font-bold uppercase tracking-widest gap-2">
+            <button
+              id="xbox-tab-mutual"
+              type="button"
+              onClick={() => setActiveFriendsTab("mutual")}
+              className={`flex-1 pb-1.5 border-b-2 text-center transition-all cursor-pointer ${
+                activeFriendsTab === "mutual"
+                  ? "border-emerald-500 text-emerald-400"
+                  : "border-transparent text-zinc-400 hover:text-zinc-200"
+              }`}
+            >
+              Mutual ({botState.friends.length})
+            </button>
+            <button
+              id="xbox-tab-approved"
+              type="button"
+              onClick={() => setActiveFriendsTab("approved")}
+              className={`flex-1 pb-1.5 border-b-2 text-center transition-all cursor-pointer ${
+                activeFriendsTab === "approved"
+                  ? "border-indigo-500 text-indigo-400"
+                  : "border-transparent text-zinc-400 hover:text-zinc-200"
+              }`}
+            >
+              Approved ({botState.autoApprovedCount || 0})
+            </button>
+            <button
+              id="xbox-tab-sent"
+              type="type"
+              onClick={() => setActiveFriendsTab("sent")}
+              className={`flex-1 pb-1.5 border-b-2 text-center transition-all cursor-pointer ${
+                activeFriendsTab === "sent"
+                  ? "border-amber-500 text-amber-400"
+                  : "border-transparent text-zinc-400 hover:text-zinc-200"
+              }`}
+            >
+              Sent ({botState.requestsSentCount || 0})
+            </button>
+          </div>
+
           {/* Friends List Status Panel */}
           <div className="flex-1 overflow-y-auto max-h-48 border border-[#18233a]/40 bg-zinc-950/20 rounded-xl p-3 space-y-2">
-            <div className="text-[9px] text-zinc-500 font-bold uppercase tracking-wider mb-1">
-              Mutual Xbox Friends ({botState.friends.length})
-            </div>
-            {botState.friends.length > 0 ? (
-              botState.friends.map((friend) => (
-                <div key={friend.xuid} className="flex justify-between items-center bg-zinc-950/30 p-2 rounded-lg border border-zinc-900">
-                  <span className="text-xs font-semibold text-zinc-300">{friend.gamertag}</span>
-                  <div className="flex items-center gap-1.5 text-[9px] font-bold text-zinc-400">
-                    <span className={`w-1.5 h-1.5 rounded-full ${friend.status === "Online" ? "bg-emerald-500 animate-pulse" : "bg-zinc-700"}`} />
-                    {friend.status}
+            {activeFriendsTab === "mutual" && (
+              <>
+                {botState.friends.length > 0 ? (
+                  botState.friends.map((friend) => (
+                    <div key={friend.xuid} className="flex justify-between items-center bg-zinc-950/30 p-2 rounded-lg border border-zinc-900">
+                      <span className="text-xs font-semibold text-zinc-300 font-sans">{friend.gamertag}</span>
+                      <div className="flex items-center gap-1.5 text-[9px] font-bold text-zinc-400">
+                        <span className={`w-1.5 h-1.5 rounded-full ${friend.status === "Online" ? "bg-emerald-500 animate-pulse" : "bg-zinc-700"}`} />
+                        {friend.status}
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-center py-6 text-zinc-650 text-xs">
+                    No active Xbox friends discovered.
                   </div>
-                </div>
-              ))
-            ) : (
-              <div className="text-center py-6 text-zinc-600 text-xs">
-                No active Xbox friends discovered.
-              </div>
+                )}
+              </>
+            )}
+
+            {activeFriendsTab === "approved" && (
+              <>
+                {botState.recentApprovals && botState.recentApprovals.length > 0 ? (
+                  botState.recentApprovals.map((item, idx) => (
+                    <div key={idx} className="flex justify-between items-center bg-emerald-950/10 p-2 rounded-lg border border-emerald-900/10">
+                      <span className="text-xs font-semibold text-emerald-400 font-sans">{item.gamertag}</span>
+                      <span className="text-[9px] font-mono text-zinc-500">{item.timestamp}</span>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-center py-6 text-zinc-600 text-xs font-sans">
+                    No self-approved requests yet. Bot will auto-approve any followers.
+                  </div>
+                )}
+              </>
+            )}
+
+            {activeFriendsTab === "sent" && (
+              <>
+                {botState.recentSent && botState.recentSent.length > 0 ? (
+                  botState.recentSent.map((item, idx) => (
+                    <div key={idx} className="flex justify-between items-center bg-indigo-950/10 p-2 rounded-lg border border-indigo-900/10">
+                      <span className="text-xs font-semibold text-indigo-400 font-sans">{item.gamertag}</span>
+                      <span className="text-[9px] font-mono text-zinc-500">{item.timestamp}</span>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-center py-6 text-zinc-600 text-xs font-sans">
+                    No outbound friends requested.
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>

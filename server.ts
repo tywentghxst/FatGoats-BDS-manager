@@ -4423,6 +4423,10 @@ interface XboxBotState {
   avatarUrl: string | null;
   friends: Array<{ xuid: string; gamertag: string; status: string }>;
   logs: Array<{ timestamp: string; text: string; type: "info" | "success" | "warn" | "error" }>;
+  autoApprovedCount: number;
+  requestsSentCount: number;
+  recentApprovals: Array<{ gamertag: string; timestamp: string }>;
+  recentSent: Array<{ gamertag: string; timestamp: string }>;
 }
 
 class XboxLiveBot {
@@ -4440,7 +4444,11 @@ class XboxLiveBot {
     xuid: null,
     avatarUrl: null,
     friends: [],
-    logs: []
+    logs: [],
+    autoApprovedCount: 0,
+    requestsSentCount: 0,
+    recentApprovals: [],
+    recentSent: []
   };
 
   private authflow: any = null;
@@ -4516,11 +4524,15 @@ class XboxLiveBot {
       this.state.status = "running";
       this.state.verification = null;
 
+      if (xboxTokens && xboxTokens.userXUID) {
+        this.state.xuid = xboxTokens.userXUID;
+      }
+
       this.addLog("Authentication successful! Loading profile details...", "info");
-      await this.fetchProfile(xboxTokens.userHash, xboxTokens.userToken);
+      await this.fetchProfile(xboxTokens.userHash, xboxTokens.XSTSToken);
       this.addLog(`Successfully logged in as Xbox Gamertag: '${this.state.gamertag}'`, "success");
 
-      this.startLoops(xboxTokens.userHash, xboxTokens.userToken);
+      this.startLoops(xboxTokens.userHash, xboxTokens.XSTSToken);
 
     } catch (err: any) {
       this.state.status = "error";
@@ -4537,6 +4549,10 @@ class XboxLiveBot {
     this.state.avatarUrl = null;
     this.state.xuid = null;
     this.state.friends = [];
+    this.state.autoApprovedCount = 0;
+    this.state.requestsSentCount = 0;
+    this.state.recentApprovals = [];
+    this.state.recentSent = [];
     this.config.enabled = false;
 
     if (this.loopInterval) {
@@ -4648,6 +4664,12 @@ class XboxLiveBot {
               });
               if (addRes.ok) {
                 this.addLog(`Successfully accepted friend request from '${follower.gamertag}'!`, "success");
+                this.state.autoApprovedCount += 1;
+                const timestamp = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+                this.state.recentApprovals.unshift({ gamertag: follower.gamertag, timestamp });
+                if (this.state.recentApprovals.length > 10) {
+                  this.state.recentApprovals.pop();
+                }
               } else {
                 this.addLog(`Failed to accept '${follower.gamertag}' friend status (HTTP ${addRes.status})`, "warn");
               }
@@ -4766,7 +4788,7 @@ class XboxLiveBot {
     }
     const myXuid = this.state.xuid || "me";
     const tokens = await this.authflow.getXboxToken();
-    const authHeader = `XBL3.0 x=${tokens.userHash};${tokens.userToken}`;
+    const authHeader = `XBL3.0 x=${tokens.userHash};${tokens.XSTSToken}`;
 
     this.addLog(`Sending Xbox Live friendship query to: '${gamertag}'...`, "info");
     const res = await fetch(`https://social.xboxlive.com/users/xuid(${myXuid})/people/gt(${gamertag})`, {
@@ -4781,7 +4803,13 @@ class XboxLiveBot {
 
     if (res.ok) {
       this.addLog(`Successfully added '${gamertag}' as a friend.`, "success");
-      await this.runSocialLoop(tokens.userHash, tokens.userToken);
+      this.state.requestsSentCount += 1;
+      const timestamp = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+      this.state.recentSent.unshift({ gamertag, timestamp });
+      if (this.state.recentSent.length > 10) {
+        this.state.recentSent.pop();
+      }
+      await this.runSocialLoop(tokens.userHash, tokens.XSTSToken);
     } else {
       throw new Error(`Failed to add friend (Xbox API Http ${res.status})`);
     }
