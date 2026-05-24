@@ -3110,6 +3110,28 @@ app.delete("/api/worlds/:folderName", authenticateRequest, requirePermission("ca
   try {
     fs.rmSync(targetWorldPath, { recursive: true, force: true });
     logServerMessage("SYS", `Deleted world folder from disk repository: ${folderName}`);
+
+    // Also automatically clean up any backup archive files for this world
+    const backupsDir = path.join(SERVER_DIR, "world_backups");
+    if (fs.existsSync(backupsDir)) {
+      try {
+        const files = fs.readdirSync(backupsDir);
+        const prefix = `backup-${folderName}-`;
+        let deletedBackupsCount = 0;
+        for (const file of files) {
+          if (file.startsWith(prefix) && file.endsWith(".zip")) {
+            fs.rmSync(path.join(backupsDir, file), { force: true });
+            deletedBackupsCount++;
+          }
+        }
+        if (deletedBackupsCount > 0) {
+          logServerMessage("SYS", `Automatically cleaned up ${deletedBackupsCount} backup archives for deleted world: ${folderName}`);
+        }
+      } catch (backupRmErr: any) {
+        console.error(`Error removing backup archives for deleted world ${folderName}:`, backupRmErr.message);
+      }
+    }
+
     res.json({ success: true });
   } catch (err: any) {
     res.status(500).json({ error: `Could not delete world directory: ${err.message}` });
@@ -4500,14 +4522,24 @@ class XboxLiveBot {
   }
 
   public async getTargetConnection() {
-    let targetIp = this.config.targetIp;
-    let targetPort = this.config.targetPort;
+    let targetIp = (this.config.targetIp || "").trim();
+    let targetPort = this.config.targetPort || 19132;
+
+    // Auto-split host:port if user pasted a combination into the Target Server IP box
+    if (targetIp.includes(":")) {
+      const parts = targetIp.split(":");
+      targetIp = parts[0].trim();
+      const parsedPort = parseInt(parts[1], 10);
+      if (!isNaN(parsedPort)) {
+        targetPort = parsedPort;
+      }
+    }
 
     // Pull from active global tunnel (playit) or local configurations if targetIp is empty
-    if (!targetIp || targetIp.trim() === "") {
+    if (!targetIp || targetIp === "") {
       if (typeof playitTunnelUrl === "string" && playitTunnelUrl.trim() !== "") {
         const parts = playitTunnelUrl.split(":");
-        targetIp = parts[0];
+        targetIp = parts[0].trim();
         if (parts[1]) {
           targetPort = parseInt(parts[1], 10) || dbCache?.appConfig?.serverPort || 19132;
         } else {
@@ -4519,20 +4551,86 @@ class XboxLiveBot {
       }
     }
 
-    // IMPORTANT: Resolve dns domain name (e.g., playit tunnels) into numeric IPv4 addresses.
-    // Minecraft Bedrock on Consoles fails to resolve custom domain names inside standard MPSD join details, 
-    // but works flawlessly when provided a numeric IPv4 address directly!
+    // Ensure we do direct resolution of dyndns hostnames (playit custom subdomains, duckdns, etc)
+    // to numeric IPv4 addresses. Minecraft Bedrock consoles fail to parse custom domain names in standard MPSD join details,
+    // but work flawlessly when given a numeric IPv4 address directly!
     if (targetIp && targetIp !== "127.0.0.1" && net.isIP(targetIp) === 0) {
+      this.addLog(`Resolving target server hostname '${targetIp}' into dedicated numeric IPv4 address...`, "info");
+      
+      // Step 1: Try traditional dns.promises.resolve4
       try {
         const addresses = await dns.promises.resolve4(targetIp);
         if (addresses && addresses.length > 0) {
           const resolvedIp = addresses[0];
-          this.addLog(`Dynamic DNS: Resolved hostname '${targetIp}' to IP '${resolvedIp}' for Xbox session.`, "info");
+          this.addLog(`Dynamic DNS [Resolve4]: Successfully resolved '${targetIp}' -> '${resolvedIp}' for Xbox session.`, "info");
           return { targetIp: resolvedIp, targetPort };
         }
       } catch (err: any) {
-        this.addLog(`Warning: Failed to resolve hostname '${targetIp}' via DNS: ${err.message || err}`, "warn");
+        this.addLog(`Warning: resolve4 failed for '${targetIp}' (${err.message || err}). Trying lookup...`, "warn");
       }
+
+      // Step 2: Try traditional dns.promises.lookup (uses local hosts/cache and system getaddrinfo)
+      try {
+        const lookupResult = await dns.promises.lookup(targetIp, { family: 4 });
+        if (lookupResult && lookupResult.address) {
+          const resolvedIp = lookupResult.address;
+          this.addLog(`Dynamic DNS [Lookup]: Successfully resolved '${targetIp}' -> '${resolvedIp}' for Xbox session.`, "info");
+          return { targetIp: resolvedIp, targetPort };
+        }
+      } catch (err: any) {
+        this.addLog(`Warning: lookup failed for '${targetIp}' (${err.message || err}). Trying Google HTTPS DNS...`, "warn");
+      }
+
+      // Step 3: Try Google Public DNS-over-HTTPS fallback (using a 3-second timeout)
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 3000);
+        const dnsRes = await fetch(`https://dns.google/resolve?name=${encodeURIComponent(targetIp)}&type=A`, {
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+        
+        if (dnsRes.ok) {
+          const jsonRes: any = await dnsRes.json();
+          if (jsonRes && jsonRes.Answer && jsonRes.Answer.length > 0) {
+            const firstA = jsonRes.Answer.find((ans: any) => ans.type === 1); // Type 1 is A record
+            if (firstA && firstA.data && net.isIP(firstA.data) === 4) {
+              const resolvedIp = firstA.data;
+              this.addLog(`Dynamic DNS [Google DoH]: Successfully resolved '${targetIp}' -> '${resolvedIp}' for Xbox session.`, "info");
+              return { targetIp: resolvedIp, targetPort };
+            }
+          }
+        }
+      } catch (err: any) {
+        this.addLog(`Warning: Google DoH fallback failed for '${targetIp}' (${err.message || err}). Trying Cloudflare HTTPS DNS...`, "warn");
+      }
+
+      // Step 4: Try Cloudflare Public DNS-over-HTTPS fallback
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 3000);
+        const dnsRes = await fetch(`https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(targetIp)}&type=A`, {
+          headers: { "accept": "application/dns-json" },
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+        
+        if (dnsRes.ok) {
+          const jsonRes: any = await dnsRes.json();
+          if (jsonRes && jsonRes.Answer && jsonRes.Answer.length > 0) {
+            const firstA = jsonRes.Answer.find((ans: any) => ans.type === 1); // Type 1 is A record
+            if (firstA && firstA.data && net.isIP(firstA.data) === 4) {
+              const resolvedIp = firstA.data;
+              this.addLog(`Dynamic DNS [Cloudflare DoH]: Successfully resolved '${targetIp}' -> '${resolvedIp}' for Xbox session.`, "info");
+              return { targetIp: resolvedIp, targetPort };
+            }
+          }
+        }
+      } catch (err: any) {
+        this.addLog(`Warning: Cloudflare DoH fallback failed for '${targetIp}' (${err.message || err})`, "warn");
+      }
+
+      this.addLog(`Critical: Could not resolve target hostname '${targetIp}' via traditional DNS or fallback DoH web resolvers! Bypassing resolution filter...`, "error");
     }
 
     return { targetIp, targetPort };
