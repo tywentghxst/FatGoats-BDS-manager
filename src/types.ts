@@ -43,10 +43,19 @@ export interface BedrockWorld {
   activeResourcePacks: { pack_id: string; version: number[] }[];
 }
 
+export interface InvitePermissions {
+  canControlServer: boolean;
+  canManageWorlds: boolean;
+  canManageBackups: boolean;
+  canUseConsole: boolean;
+  canManageAddons: boolean;
+}
+
 export interface UserAccount {
   username: string;
   role: 'admin' | 'viewer';
   registeredAt: string;
+  permissions?: InvitePermissions;
 }
 
 export interface TaskLog {
@@ -106,6 +115,7 @@ export interface UserInvite {
   createdAt: string;
   used: boolean;
   usedBy?: string;
+  permissions?: InvitePermissions;
 }
 
 export interface QuickCommand {

@@ -54,6 +54,13 @@ interface DBStructure {
     salt: string;
     role: "admin" | "viewer";
     registeredAt: string;
+    permissions?: {
+      canControlServer: boolean;
+      canManageWorlds: boolean;
+      canManageBackups: boolean;
+      canUseConsole: boolean;
+      canManageAddons: boolean;
+    };
   }>;
   appConfig: {
     bentoStyle: boolean;
@@ -113,6 +120,13 @@ interface DBStructure {
     createdAt: string;
     used: boolean;
     usedBy?: string;
+    permissions?: {
+      canControlServer: boolean;
+      canManageWorlds: boolean;
+      canManageBackups: boolean;
+      canUseConsole: boolean;
+      canManageAddons: boolean;
+    };
   }>;
 }
 
@@ -299,6 +313,28 @@ function requireAdmin(req: express.Request, res: express.Response, next: express
     return;
   }
   next();
+}
+
+function requirePermission(permissionKey: "canControlServer" | "canManageWorlds" | "canManageBackups" | "canUseConsole" | "canManageAddons") {
+  return (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    const user = (req as any).user;
+    if (!user) {
+      res.status(401).json({ error: "Unauthorized session." });
+      return;
+    }
+    // Admin role always has all permissions
+    if (user.role === "admin") {
+      next();
+      return;
+    }
+    // Check if permissions contains the key as true
+    const permissions = user.permissions || {};
+    if (permissions[permissionKey] === true) {
+      next();
+    } else {
+      res.status(403).json({ error: `Access denied. You do not have permission to perform this action (${permissionKey}).` });
+    }
+  };
 }
 
 // Spawning/Simulation state managers
@@ -1748,7 +1784,7 @@ app.get("/api/server/status", authenticateRequest, (req, res) => {
 });
 
 // Process Start/Stop Controls
-app.post("/api/server/control", authenticateRequest, (req, res) => {
+app.post("/api/server/control", authenticateRequest, requirePermission("canControlServer"), (req, res) => {
   const { action } = req.body;
 
   if (action === "start") {
@@ -1984,7 +2020,7 @@ app.get("/api/console", authenticateRequest, (req, res) => {
   res.json(serverLogs);
 });
 
-app.post("/api/console", authenticateRequest, (req, res) => {
+app.post("/api/console", authenticateRequest, requirePermission("canUseConsole"), (req, res) => {
   const { command } = req.body;
   if (!command) {
     res.status(400).json({ error: "No command text provided." });
@@ -2020,7 +2056,7 @@ app.get("/api/players", authenticateRequest, (req, res) => {
 });
 
 // POST Player commands and actions (Op, De-op, Kick, Ban, Unban)
-app.post("/api/players/control", authenticateRequest, (req, res) => {
+app.post("/api/players/control", authenticateRequest, requirePermission("canUseConsole"), (req, res) => {
   const { name, action } = req.body;
   if (!name || !action) {
     res.status(400).json({ error: "Missing name or action." });
@@ -2318,7 +2354,7 @@ app.get("/api/addons", authenticateRequest, (req, res) => {
 });
 
 // Handle Uploads
-app.post("/api/addons/upload", authenticateRequest, requireAdmin, upload.any(), (req, res) => {
+app.post("/api/addons/upload", authenticateRequest, requirePermission("canManageAddons"), upload.any(), (req, res) => {
   const files = (req.files as Express.Multer.File[]) || [];
   if (files.length === 0) {
     res.status(400).json({ error: "No pack files uploaded." });
@@ -2362,7 +2398,7 @@ app.post("/api/addons/upload", authenticateRequest, requireAdmin, upload.any(), 
 });
 
 // Enable All Addons
-app.post("/api/addons/enable-all", authenticateRequest, requireAdmin, (req, res) => {
+app.post("/api/addons/enable-all", authenticateRequest, requirePermission("canManageAddons"), (req, res) => {
   dbCache.addons.forEach(a => {
     if (a.type === "behavior" || a.type === "resource") {
       a.isEnabled = true;
@@ -2377,7 +2413,7 @@ app.post("/api/addons/enable-all", authenticateRequest, requireAdmin, (req, res)
 });
 
 // Disable All Addons
-app.post("/api/addons/disable-all", authenticateRequest, requireAdmin, (req, res) => {
+app.post("/api/addons/disable-all", authenticateRequest, requirePermission("canManageAddons"), (req, res) => {
   dbCache.addons.forEach(a => {
     if (a.type === "behavior" || a.type === "resource") {
       a.isEnabled = false;
@@ -2392,7 +2428,7 @@ app.post("/api/addons/disable-all", authenticateRequest, requireAdmin, (req, res
 });
 
 // Enable Addons
-app.post("/api/addons/:uuid/enable", authenticateRequest, requireAdmin, (req, res) => {
+app.post("/api/addons/:uuid/enable", authenticateRequest, requirePermission("canManageAddons"), (req, res) => {
   const addon = dbCache.addons.find(a => a.uuid === req.params.uuid);
   if (!addon) {
     res.status(404).json({ error: "Addon not found in records." });
@@ -2418,7 +2454,7 @@ app.post("/api/addons/:uuid/enable", authenticateRequest, requireAdmin, (req, re
 });
 
 // Disable Addons
-app.post("/api/addons/:uuid/disable", authenticateRequest, requireAdmin, (req, res) => {
+app.post("/api/addons/:uuid/disable", authenticateRequest, requirePermission("canManageAddons"), (req, res) => {
   const addon = dbCache.addons.find(a => a.uuid === req.params.uuid);
   if (!addon) {
     res.status(404).json({ error: "Addon not found in records." });
@@ -2444,7 +2480,7 @@ app.post("/api/addons/:uuid/disable", authenticateRequest, requireAdmin, (req, r
 });
 
 // Remove Addon and delete its resources (and delete all grouped packs in same .mcaddon group)
-app.delete("/api/addons/:uuid", authenticateRequest, requireAdmin, (req, res) => {
+app.delete("/api/addons/:uuid", authenticateRequest, requirePermission("canManageAddons"), (req, res) => {
   const uuid = req.params.uuid;
   const targetAddon = dbCache.addons.find(a => a.uuid === uuid);
   if (!targetAddon) {
@@ -2492,7 +2528,7 @@ app.delete("/api/addons/:uuid", authenticateRequest, requireAdmin, (req, res) =>
 });
 
 // Remove all addons and physical assets (Admin only)
-app.delete("/api/addons-all", authenticateRequest, requireAdmin, (req, res) => {
+app.delete("/api/addons-all", authenticateRequest, requirePermission("canManageAddons"), (req, res) => {
   const toDelete = [...dbCache.addons];
 
   for (const addon of toDelete) {
@@ -2517,7 +2553,7 @@ app.delete("/api/addons-all", authenticateRequest, requireAdmin, (req, res) => {
 });
 
 // Reorder Addons (Admin only)
-app.post("/api/addons/reorder", authenticateRequest, requireAdmin, (req, res) => {
+app.post("/api/addons/reorder", authenticateRequest, requirePermission("canManageAddons"), (req, res) => {
   const { uuids } = req.body;
   if (!uuids || !Array.isArray(uuids)) {
     res.status(400).json({ error: "Invalid or missing uuids array." });
@@ -2553,7 +2589,7 @@ app.post("/api/addons/reorder", authenticateRequest, requireAdmin, (req, res) =>
 });
 
 // Update/Override an Addon with a newly uploaded file (Admin only)
-app.post("/api/addons/:uuid/update-upload", authenticateRequest, requireAdmin, upload.single("file"), (req, res) => {
+app.post("/api/addons/:uuid/update-upload", authenticateRequest, requirePermission("canManageAddons"), upload.single("file"), (req, res) => {
   if (!req.file) {
     res.status(400).json({ error: "No pack file uploaded." });
     return;
@@ -2640,7 +2676,7 @@ app.post("/api/addons/:uuid/update-upload", authenticateRequest, requireAdmin, u
 });
 
 // Update/Edit Addon parameters (Admin only - applies to all grouped addons)
-app.put("/api/addons/:uuid", authenticateRequest, requireAdmin, (req, res) => {
+app.put("/api/addons/:uuid", authenticateRequest, requirePermission("canManageAddons"), (req, res) => {
   const { name, description, downloadUrl } = req.body;
   const targetAddon = dbCache.addons.find(a => a.uuid === req.params.uuid);
   if (!targetAddon) {
@@ -2858,7 +2894,7 @@ app.get("/api/worlds/backups", authenticateRequest, (req, res) => {
 });
 
 // Create manual world backup
-app.post("/api/worlds/backups/create", authenticateRequest, requireAdmin, (req, res) => {
+app.post("/api/worlds/backups/create", authenticateRequest, requirePermission("canManageBackups"), (req, res) => {
   const { worldFolderName } = req.body;
   const target = worldFolderName || dbCache.appConfig.levelName || "BedrockWorld";
   
@@ -2871,7 +2907,7 @@ app.post("/api/worlds/backups/create", authenticateRequest, requireAdmin, (req, 
 });
 
 // Restore world backup
-app.post("/api/worlds/backups/:fileName/restore", authenticateRequest, requireAdmin, (req, res) => {
+app.post("/api/worlds/backups/:fileName/restore", authenticateRequest, requirePermission("canManageBackups"), (req, res) => {
   const fileName = req.params.fileName;
   const backupsDir = path.join(SERVER_DIR, "world_backups");
   const zipPath = path.join(backupsDir, fileName);
@@ -2924,7 +2960,7 @@ app.post("/api/worlds/backups/:fileName/restore", authenticateRequest, requireAd
 });
 
 // Delete specific world backup
-app.delete("/api/worlds/backups/:fileName", authenticateRequest, requireAdmin, (req, res) => {
+app.delete("/api/worlds/backups/:fileName", authenticateRequest, requirePermission("canManageBackups"), (req, res) => {
   const fileName = req.params.fileName;
   const backupsDir = path.join(SERVER_DIR, "world_backups");
   const filePath = path.join(backupsDir, fileName);
@@ -3022,7 +3058,7 @@ app.get("/api/worlds", authenticateRequest, (req, res) => {
 });
 
 // Delete specific world folder from disk
-app.delete("/api/worlds/:folderName", authenticateRequest, requireAdmin, (req, res) => {
+app.delete("/api/worlds/:folderName", authenticateRequest, requirePermission("canManageWorlds"), (req, res) => {
   const folderName = req.params.folderName;
   
   if (dbCache.appConfig.levelName === folderName) {
@@ -3048,7 +3084,7 @@ app.delete("/api/worlds/:folderName", authenticateRequest, requireAdmin, (req, r
 });
 
 // Configure world folders or rename displays
-app.post("/api/worlds/:folderName/configure", authenticateRequest, requireAdmin, (req, res) => {
+app.post("/api/worlds/:folderName/configure", authenticateRequest, requirePermission("canManageWorlds"), (req, res) => {
   const folderName = req.params.folderName;
   const { newFolderName, newDisplayName } = req.body;
   
@@ -3113,7 +3149,7 @@ app.post("/api/worlds/:folderName/configure", authenticateRequest, requireAdmin,
 });
 
 // Active World switcher
-app.post("/api/worlds/:folderName/select", authenticateRequest, requireAdmin, (req, res) => {
+app.post("/api/worlds/:folderName/select", authenticateRequest, requirePermission("canManageWorlds"), (req, res) => {
   const folderName = req.params.folderName;
   const worldsDir = path.join(SERVER_DIR, "worlds", folderName);
 
@@ -3134,7 +3170,7 @@ app.post("/api/worlds/:folderName/select", authenticateRequest, requireAdmin, (r
 });
 
 // Direct world upload
-app.post("/api/worlds/upload", authenticateRequest, requireAdmin, upload.single("file"), (req, res) => {
+app.post("/api/worlds/upload", authenticateRequest, requirePermission("canManageWorlds"), upload.single("file"), (req, res) => {
   if (!req.file) {
     res.status(400).json({ error: "No .mcworld file uploaded." });
     return;

@@ -78,7 +78,8 @@ import {
   BedrockVersion,
   AppConfig,
   UserInvite,
-  QuickCommand
+  QuickCommand,
+  InvitePermissions
 } from "./types";
 
 import ConsoleConnect from "./components/ConsoleConnect";
@@ -417,6 +418,13 @@ export default function App() {
   const [usersList, setUsersList] = useState<UserAccount[]>([]);
   const [invitesList, setInvitesList] = useState<UserInvite[]>([]);
   const [newInviteRole, setNewInviteRole] = useState<"admin" | "viewer">("viewer");
+  const [newInvitePermissions, setNewInvitePermissions] = useState<InvitePermissions>({
+    canControlServer: false,
+    canManageWorlds: false,
+    canManageBackups: false,
+    canUseConsole: false,
+    canManageAddons: false,
+  });
   const [urlInviteToken, setUrlInviteToken] = useState<string | null>(() => {
     return new URLSearchParams(window.location.search).get("invite");
   });
@@ -633,6 +641,11 @@ export default function App() {
   }, [addons, addonViewMode]);
 
   const isAdmin = currentUser?.role === "admin";
+  const canControlServer = isAdmin || currentUser?.permissions?.canControlServer === true;
+  const canManageWorlds = isAdmin || currentUser?.permissions?.canManageWorlds === true;
+  const canManageBackups = isAdmin || currentUser?.permissions?.canManageBackups === true;
+  const canUseConsole = isAdmin || currentUser?.permissions?.canUseConsole === true;
+  const canManageAddons = isAdmin || currentUser?.permissions?.canManageAddons === true;
 
   // Centralized navigation bar configuration with beautifully polished, easy-to-identify icons and colors
   const navItems = useMemo(() => [
@@ -1006,7 +1019,16 @@ export default function App() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`
         },
-        body: JSON.stringify({ role: newInviteRole })
+        body: JSON.stringify({ 
+          role: newInviteRole,
+          permissions: newInviteRole === "admin" ? {
+            canControlServer: true,
+            canManageWorlds: true,
+            canManageBackups: true,
+            canUseConsole: true,
+            canManageAddons: true
+          } : newInvitePermissions
+        })
       });
       const data = await res.json();
       if (res.ok) {
@@ -1046,10 +1068,10 @@ export default function App() {
     );
   };
 
-  // Addon action togglers (Admin only)
+  // Addon action togglers
   const toggleAddonEnabled = async (uuid: string, isCurrentlyEnabled: boolean) => {
-    if (!token || !isAdmin) {
-      showBanner("Requires administrator authorization.", "error");
+    if (!token || !canManageAddons) {
+      showBanner("Requires authorization to manage addons.", "error");
       return;
     }
     const endpoint = `/api/addons/${uuid}/${isCurrentlyEnabled ? "disable" : "enable"}`;
@@ -1071,13 +1093,13 @@ export default function App() {
   };
 
   const deleteAddon = async (uuid: string) => {
-    if (!token || !isAdmin) return;
+    if (!token || !canManageAddons) return;
 
     const addon = addons.find(a => a.uuid === uuid);
     const otherGrouped = addon ? addons.find(a => 
       a.uuid !== uuid && 
       ((addon.groupId && a.groupId === addon.groupId) || 
-       (addon.originalName && a.originalName === addon.originalName && addon.originalName !== ""))
+         (addon.originalName && a.originalName === addon.originalName && addon.originalName !== ""))
     ) : null;
 
     const title = otherGrouped ? "Delete Grouped Addon Packs" : "Delete Addon Pack";
@@ -1114,7 +1136,7 @@ export default function App() {
   };
 
   const handleDeleteAllAddons = async () => {
-    if (!token || !isAdmin) return;
+    if (!token || !canManageAddons) return;
 
     promptConfirm(
       "Delete All Addons",
@@ -1151,7 +1173,7 @@ export default function App() {
 
   const handleSaveAddon = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingAddon || !token || !isAdmin) return;
+    if (!editingAddon || !token || !canManageAddons) return;
 
     setIsSavingAddon(true);
     try {
@@ -1184,7 +1206,7 @@ export default function App() {
   };
 
   const handleEnableAllAddons = async () => {
-    if (!token || !isAdmin) return;
+    if (!token || !canManageAddons) return;
     try {
       const res = await fetch("/api/addons/enable-all", {
         method: "POST",
@@ -1202,7 +1224,7 @@ export default function App() {
   };
 
   const handleDisableAllAddons = async () => {
-    if (!token || !isAdmin) return;
+    if (!token || !canManageAddons) return;
     try {
       const res = await fetch("/api/addons/disable-all", {
         method: "POST",
@@ -1220,7 +1242,7 @@ export default function App() {
   };
 
   const handleSaveAddonLoadOrder = async (reorderedUuids: string[]) => {
-    if (!token || !isAdmin) return;
+    if (!token || !canManageAddons) return;
     setIsSavingLoadOrder(true);
     try {
       const res = await fetch("/api/addons/reorder", {
@@ -1411,7 +1433,7 @@ export default function App() {
 
   // Switch Active Minecraft World
   const setActiveWorld = async (folderName: string) => {
-    if (!token || !isAdmin) return;
+    if (!token || !canManageWorlds) return;
     try {
       const res = await fetch(`/api/worlds/${folderName}/select`, {
         method: "POST",
@@ -1431,7 +1453,7 @@ export default function App() {
 
   // Create Manual World Backup
   const handleCreateBackup = async (worldFolderName: string) => {
-    if (!token || !isAdmin) return;
+    if (!token || !canManageBackups) return;
     setLoadingBackups(true);
     try {
       const res = await fetch("/api/worlds/backups/create", {
@@ -1459,7 +1481,7 @@ export default function App() {
 
   // Delete World directory
   const handleDeleteWorld = async (folderName: string) => {
-    if (!token || !isAdmin) return;
+    if (!token || !canManageWorlds) return;
     try {
       const res = await fetch(`/api/worlds/${folderName}`, {
         method: "DELETE",
@@ -1479,7 +1501,7 @@ export default function App() {
 
   // Configure world settings (folder name & display name)
   const handleConfigureWorld = async (folderName: string) => {
-    if (!token || !isAdmin) return;
+    if (!token || !canManageWorlds) return;
     try {
       const res = await fetch(`/api/worlds/${folderName}/configure`, {
         method: "POST",
@@ -1507,7 +1529,7 @@ export default function App() {
 
   // Restore World Backup
   const handleRestoreBackup = async (fileName: string, worldName: string) => {
-    if (!token || !isAdmin) return;
+    if (!token || !canManageBackups) return;
     
     if (stats?.status && stats.status !== "stopped") {
       showBanner("Cannot restore world backup while the server is running. Please stop the Bedrock server first!", "error");
@@ -1544,7 +1566,7 @@ export default function App() {
 
   // Delete specific backup file
   const handleDeleteBackup = async (fileName: string) => {
-    if (!token || !isAdmin) return;
+    if (!token || !canManageBackups) return;
     
     promptConfirm(
       "Delete Backup File",
@@ -2938,7 +2960,7 @@ export default function App() {
                   </p>
                 </div>
 
-                {isAdmin ? (
+                {canManageWorlds ? (
                   <div className="flex gap-2">
                     <input
                       type="file"
@@ -3053,7 +3075,7 @@ export default function App() {
 
                         <div className="flex justify-between items-center mt-5 pt-4 border-t border-zinc-900/65">
                           <div className="flex items-center gap-2">
-                            {isAdmin && !w.isActive && !editingWorld && (
+                            {canManageWorlds && !w.isActive && !editingWorld && (
                               <button
                                 onClick={() => setActiveWorld(w.folderName)}
                                 className="bg-emerald-600/10 text-emerald-400 hover:bg-emerald-605/20 border border-emerald-500/20 font-black text-[9px] uppercase tracking-widest px-3 py-1.5 rounded-lg select-none cursor-pointer animate-fadeIn"
@@ -3070,7 +3092,7 @@ export default function App() {
 
                           <div className="flex items-center gap-1.5">
                             {/* Configure World Button */}
-                            {isAdmin && !editingWorld && (
+                            {canManageWorlds && !editingWorld && (
                               <button
                                 onClick={() => {
                                   setEditingWorld(w.folderName);
@@ -3085,7 +3107,7 @@ export default function App() {
                             )}
 
                             {/* Create Backup */}
-                            {isAdmin && !editingWorld && (
+                            {canManageBackups && !editingWorld && (
                               <button
                                 onClick={() => handleCreateBackup(w.folderName)}
                                 disabled={loadingBackups}
@@ -3108,7 +3130,7 @@ export default function App() {
                             )}
 
                             {/* Delete World */}
-                            {isAdmin && !w.isActive && !editingWorld && (
+                            {canManageWorlds && !w.isActive && !editingWorld && (
                               <button
                                 onClick={() => {
                                   promptConfirm(
@@ -3147,7 +3169,7 @@ export default function App() {
                       </p>
                     </div>
 
-                    {isAdmin && worlds.length > 0 && (
+                    {canManageBackups && worlds.length > 0 && (
                       <button
                         onClick={() => {
                           const activeWorld = appConfig.levelName || "BedrockWorld";
@@ -3210,24 +3232,24 @@ export default function App() {
 
                             <div className="flex gap-2 shrink-0">
                               {/* Restore Button */}
-                              {isAdmin && (
+                              {canManageBackups && (
                                 <button
                                   onClick={() => handleRestoreBackup(b.fileName, b.worldName)}
                                   disabled={loadingBackups}
                                   title="Restore and replace database directory files"
-                                  className="py-1 px-2.5 rounded-lg font-bold text-[9px] uppercase tracking-wider bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 text-amber-500 hover:text-amber-400 transition-all cursor-pointer"
+                                  className="py-1 px-2.5 rounded-lg font-bold text-[9px] uppercase tracking-wider bg-zinc-900 hover:bg-zinc-805 border border-zinc-800 hover:border-zinc-705 text-amber-500 hover:text-amber-400 transition-all cursor-pointer"
                                 >
                                   Restore
                                 </button>
                               )}
 
                               {/* Delete Button */}
-                              {isAdmin && (
+                              {canManageBackups && (
                                 <button
                                   onClick={() => handleDeleteBackup(b.fileName)}
                                   disabled={loadingBackups}
                                   title="Delete this backup archive file from server storage."
-                                  className="p-1.5 rounded-lg text-zinc-600 hover:text-red-400 hover:bg-red-500/5 transition-colors cursor-pointer"
+                                  className="p-1.5 rounded-lg text-zinc-650 hover:text-red-400 hover:bg-red-500/5 transition-colors cursor-pointer"
                                 >
                                   <Trash2 className="w-3.5 h-3.5" />
                                 </button>
@@ -3673,7 +3695,7 @@ export default function App() {
               <div className="bg-zinc-900/40 border border-zinc-900 rounded-2xl p-5 h-fit shadow-lg">
                 <div className="flex items-center gap-2 mb-4">
                   <UserPlus className="w-5 h-5 text-amber-500" />
-                  <h3 className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Create Signup invite</h3>
+                  <h3 className="text-[10px] font-black uppercase tracking-widest text-zinc-500 font-sans">Create Signup invite</h3>
                 </div>
 
                 <form onSubmit={handleGenerateInvite} className="space-y-4">
@@ -3684,10 +3706,81 @@ export default function App() {
                       onChange={e => setNewInviteRole(e.target.value as "admin" | "viewer")}
                       className="w-full bg-zinc-950 border border-zinc-850 p-2.5 text-xs text-white rounded-xl outline-none focus:border-amber-500"
                     >
-                      <option value="viewer">Viewer (Read & Restart only)</option>
+                      <option value="viewer">Viewer (Granular Permissions)</option>
                       <option value="admin">Administrator (Full Access)</option>
                     </select>
                   </div>
+
+                  {newInviteRole === "viewer" && (
+                    <div className="space-y-2 border border-zinc-850 bg-zinc-950/40 p-3 rounded-xl">
+                      <div className="text-[10px] font-black uppercase text-zinc-500 tracking-wider mb-2">Configure Allowed Actions</div>
+                      
+                      <label className="flex items-center gap-2 cursor-pointer py-1">
+                        <input
+                          type="checkbox"
+                          checked={newInvitePermissions.canControlServer}
+                          onChange={e => setNewInvitePermissions(prev => ({ ...prev, canControlServer: e.target.checked }))}
+                          className="rounded border-zinc-800 bg-zinc-900 text-amber-500 focus:ring-0 focus:ring-offset-0 w-3.5 h-3.5"
+                        />
+                        <div className="flex flex-col">
+                          <span className="text-[11px] text-zinc-300 font-medium">Control Server</span>
+                          <span className="text-[9px] text-zinc-500 -mt-0.5">Start & stop bedrock host</span>
+                        </div>
+                      </label>
+
+                      <label className="flex items-center gap-2 cursor-pointer py-1">
+                        <input
+                          type="checkbox"
+                          checked={newInvitePermissions.canUseConsole}
+                          onChange={e => setNewInvitePermissions(prev => ({ ...prev, canUseConsole: e.target.checked }))}
+                          className="rounded border-zinc-800 bg-zinc-900 text-amber-500 focus:ring-0 focus:ring-offset-0 w-3.5 h-3.5"
+                        />
+                        <div className="flex flex-col">
+                          <span className="text-[11px] text-zinc-300 font-medium">Use Live Console</span>
+                          <span className="text-[9px] text-zinc-500 -mt-0.5">Issue commands & edit players</span>
+                        </div>
+                      </label>
+
+                      <label className="flex items-center gap-2 cursor-pointer py-1">
+                        <input
+                          type="checkbox"
+                          checked={newInvitePermissions.canManageWorlds}
+                          onChange={e => setNewInvitePermissions(prev => ({ ...prev, canManageWorlds: e.target.checked }))}
+                          className="rounded border-zinc-800 bg-zinc-900 text-amber-500 focus:ring-0 focus:ring-offset-0 w-3.5 h-3.5"
+                        />
+                        <div className="flex flex-col">
+                          <span className="text-[11px] text-zinc-300 font-medium">Manage Worlds</span>
+                          <span className="text-[9px] text-zinc-500 -mt-0.5">Rename, upload & delete worlds</span>
+                        </div>
+                      </label>
+
+                      <label className="flex items-center gap-2 cursor-pointer py-1">
+                        <input
+                          type="checkbox"
+                          checked={newInvitePermissions.canManageBackups}
+                          onChange={e => setNewInvitePermissions(prev => ({ ...prev, canManageBackups: e.target.checked }))}
+                          className="rounded border-zinc-800 bg-zinc-900 text-amber-500 focus:ring-0 focus:ring-offset-0 w-3.5 h-3.5"
+                        />
+                        <div className="flex flex-col">
+                          <span className="text-[11px] text-zinc-300 font-medium">Manage Backups</span>
+                          <span className="text-[9px] text-zinc-500 -mt-0.5 font-sans">Trigger, restore & clear backup archives</span>
+                        </div>
+                      </label>
+
+                      <label className="flex items-center gap-2 cursor-pointer py-1">
+                        <input
+                          type="checkbox"
+                          checked={newInvitePermissions.canManageAddons}
+                          onChange={e => setNewInvitePermissions(prev => ({ ...prev, canManageAddons: e.target.checked }))}
+                          className="rounded border-zinc-800 bg-zinc-900 text-amber-500 focus:ring-0 focus:ring-offset-0 w-3.5 h-3.5"
+                        />
+                        <div className="flex flex-col">
+                          <span className="text-[11px] text-zinc-300 font-medium">Manage Addons</span>
+                          <span className="text-[9px] text-zinc-500 -mt-0.5">Install & toggle addon packs</span>
+                        </div>
+                      </label>
+                    </div>
+                  )}
 
                   <button
                     type="submit"
@@ -3743,6 +3836,22 @@ export default function App() {
                                 }`}>
                                   {invite.role}
                                 </span>
+                                {invite.role === "viewer" && invite.permissions && (
+                                  <div className="text-[9px] text-zinc-500 mt-1.5 space-y-0.5 font-mono">
+                                    {invite.permissions.canControlServer && <div>• Server Control</div>}
+                                    {invite.permissions.canUseConsole && <div>• Terminal / Players</div>}
+                                    {invite.permissions.canManageWorlds && <div>• Manage Worlds</div>}
+                                    {invite.permissions.canManageBackups && <div>• Manage Backups</div>}
+                                    {invite.permissions.canManageAddons && <div>• Pack Addons</div>}
+                                    {!invite.permissions.canControlServer &&
+                                     !invite.permissions.canUseConsole &&
+                                     !invite.permissions.canManageWorlds &&
+                                     !invite.permissions.canManageBackups &&
+                                     !invite.permissions.canManageAddons && (
+                                      <div className="text-zinc-650 italic">Strict Read-Only</div>
+                                    )}
+                                  </div>
+                                )}
                               </td>
                               <td className="py-4 text-xs">
                                 {invite.used ? (
