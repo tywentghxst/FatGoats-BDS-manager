@@ -881,6 +881,12 @@ export default function App() {
   };
 
   const handleLogout = () => {
+    if (token) {
+      fetch("/api/auth/logout", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` }
+      }).catch(() => {});
+    }
     localStorage.removeItem("bedrock_token");
     localStorage.removeItem("bedrock_user");
     setToken(null);

@@ -12,6 +12,8 @@ import multer from "multer";
 import AdmZip from "adm-zip";
 import http from "http";
 import https from "https";
+import dns from "dns";
+import net from "net";
 import pkg from "express";
 import { Authflow, Titles } from "prismarine-auth";
 
@@ -19,6 +21,9 @@ const { json, urlencoded } = pkg;
 
 const app = express();
 const PORT = 3000;
+
+// Session / Simple token store
+const activeTokens: Record<string, { username: string; role: "admin" | "viewer" }> = {};
 
 app.use(json({ limit: "50mb" }));
 app.use(urlencoded({ extended: true, limit: "50mb" }));
@@ -130,6 +135,7 @@ interface DBStructure {
     };
   }>;
   xboxBotConfig?: any;
+  activeTokens?: Record<string, { username: string; role: "admin" | "viewer" }>;
 }
 
 let dbCache: DBStructure = {
@@ -177,6 +183,11 @@ function loadDB() {
       // Ensure key arrays are present
       dbCache.invites = dbCache.invites || [];
       dbCache.addons = dbCache.addons || [];
+      dbCache.activeTokens = dbCache.activeTokens || {};
+      
+      // Sync memory tokens with persisted database
+      Object.assign(activeTokens, dbCache.activeTokens);
+
       dbCache.xboxBotConfig = dbCache.xboxBotConfig || {
         targetIp: "",
         targetPort: 19132,
@@ -268,9 +279,6 @@ let activeTasks: Array<{
   message: string;
   timestamp: string;
 }> = [];
-
-// Session / Simple token store
-const activeTokens: Record<string, { username: string; role: "admin" | "viewer" }> = {};
 
 // Add logs with timestamp
 function logServerMessage(type: "INFO" | "WARN" | "ERROR" | "PLAYER" | "SYS", message: string) {
@@ -1489,6 +1497,9 @@ app.post("/api/auth/login", (req, res) => {
 
   const token = crypto.randomBytes(32).toString("hex");
   activeTokens[token] = { username: user.username, role: user.role };
+  dbCache.activeTokens = dbCache.activeTokens || {};
+  dbCache.activeTokens[token] = { username: user.username, role: user.role };
+  saveDB();
 
   res.json({
     success: true,
@@ -1499,6 +1510,20 @@ app.post("/api/auth/login", (req, res) => {
       registeredAt: user.registeredAt
     }
   });
+});
+
+// User session logout
+app.post("/api/auth/logout", (req, res) => {
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith("Bearer ")) {
+    const token = authHeader.split(" ")[1];
+    delete activeTokens[token];
+    if (dbCache.activeTokens) {
+      delete dbCache.activeTokens[token];
+      saveDB();
+    }
+  }
+  res.json({ success: true });
 });
 
 // Users list (Admin only)
@@ -4474,7 +4499,7 @@ class XboxLiveBot {
     }
   }
 
-  public getTargetConnection() {
+  public async getTargetConnection() {
     let targetIp = this.config.targetIp;
     let targetPort = this.config.targetPort;
 
@@ -4493,6 +4518,23 @@ class XboxLiveBot {
         targetPort = dbCache?.appConfig?.serverPort || 19132;
       }
     }
+
+    // IMPORTANT: Resolve dns domain name (e.g., playit tunnels) into numeric IPv4 addresses.
+    // Minecraft Bedrock on Consoles fails to resolve custom domain names inside standard MPSD join details, 
+    // but works flawlessly when provided a numeric IPv4 address directly!
+    if (targetIp && targetIp !== "127.0.0.1" && net.isIP(targetIp) === 0) {
+      try {
+        const addresses = await dns.promises.resolve4(targetIp);
+        if (addresses && addresses.length > 0) {
+          const resolvedIp = addresses[0];
+          this.addLog(`Dynamic DNS: Resolved hostname '${targetIp}' to IP '${resolvedIp}' for Xbox session.`, "info");
+          return { targetIp: resolvedIp, targetPort };
+        }
+      } catch (err: any) {
+        this.addLog(`Warning: Failed to resolve hostname '${targetIp}' via DNS: ${err.message || err}`, "warn");
+      }
+    }
+
     return { targetIp, targetPort };
   }
 
@@ -4537,15 +4579,29 @@ class XboxLiveBot {
     return this.state;
   }
 
-  public updateConfig(newConfig: Partial<XboxBotConfig>) {
+  public async updateConfig(newConfig: Partial<XboxBotConfig>) {
     this.config = { ...this.config, ...newConfig };
     this.config.enabled = this.state.status === "running" || this.state.status === "starting";
     if (dbCache) {
       dbCache.xboxBotConfig = { ...this.config };
       saveDB();
     }
-    const { targetIp, targetPort } = this.getTargetConnection();
+    const { targetIp, targetPort } = await this.getTargetConnection();
     this.addLog(`Configuration updated. Active routing target resolved to: ${targetIp}:${targetPort}`, "info");
+
+    // Immediately push new presence and MPSD session to Xbox Live so the change is instant!
+    if (this.state.status === "running" && this.authflow) {
+      this.authflow.getXboxToken().then(async (tokens: any) => {
+        if (tokens && tokens.userHash && tokens.XSTSToken) {
+          this.addLog(`Pushing updated routing target directly to Xbox Live active session...`, "info");
+          await this.updatePresence(tokens.userHash, tokens.XSTSToken).catch((err: any) => {
+            this.addLog(`Failed to push instant target update: ${err.message}`, "warn");
+          });
+        }
+      }).catch((err: any) => {
+        console.error("Failed to fetch fresh tokens for dynamic config update:", err);
+      });
+    }
   }
 
   public addLog(text: string, type: "info" | "success" | "warn" | "error" = "info") {
@@ -4773,7 +4829,7 @@ class XboxLiveBot {
     if (!xuid) return;
 
     try {
-      const { targetIp, targetPort } = this.getTargetConnection();
+      const { targetIp, targetPort } = await this.getTargetConnection();
       const authHeader = `XBL3.0 x=${userHash};${userToken}`;
       const body = {
         state: "Online",
@@ -4815,7 +4871,7 @@ class XboxLiveBot {
       const sessionName = `BedrockRedirect_${xuid}`;
       const url = `https://sessiondirectory.xboxlive.com/serviceconfigs/${scid}/sessionTemplates/MinecraftSession/sessions/${sessionName}`;
       
-      const { targetIp, targetPort } = this.getTargetConnection();
+      const { targetIp, targetPort } = await this.getTargetConnection();
       const authHeader = `XBL3.0 x=${userHash};${userToken}`;
       const sessionBody = {
         properties: {
@@ -4911,12 +4967,12 @@ app.get("/api/xbox-bot/config", (req, res) => {
   res.json(xboxBot.getConfig());
 });
 
-app.post("/api/xbox-bot/config", (req, res) => {
+app.post("/api/xbox-bot/config", async (req, res) => {
   const { targetIp, targetPort, autoAcceptFriends } = req.body;
   
   if (targetIp !== undefined && typeof targetIp === "string") {
     const portNum = targetPort !== undefined ? parseInt(targetPort, 10) : 19132;
-    xboxBot.updateConfig({
+    await xboxBot.updateConfig({
       targetIp,
       targetPort: isNaN(portNum) ? 19132 : portNum,
       autoAcceptFriends: !!autoAcceptFriends
