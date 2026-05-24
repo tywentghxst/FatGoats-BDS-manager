@@ -4933,7 +4933,7 @@ class XboxLiveBot {
         state: "Online",
         titles: [
           {
-            id: "1828328813", // Minecraft Title ID
+            id: "1142737259", // Minecraft Nintendo Switch Title ID (matching our authenticated Title Token)
             state: "Active",
             placement: "Full",
             activity: {
@@ -4963,6 +4963,8 @@ class XboxLiveBot {
       if (!res.ok) {
         const text = await res.text().catch(() => "");
         this.addLog(`Xbox Presence API returned status ${res.status}: ${text || "Unknown"}. Enforcing dual-compatibility MPSD target sync...`, "warn");
+      } else {
+        this.addLog(`Xbox Presence successfully updated directly on Xbox Live (Title: Nintendo Switch)`, "success");
       }
 
       // ALWAYS attempt MPSD registration regardless of whether presence POST succeeds,
@@ -4981,8 +4983,25 @@ class XboxLiveBot {
       const { targetIp, targetPort } = await this.getTargetConnection();
       if (!targetIp) return;
 
+      let mpsdHash = userHash;
+      let mpsdToken = userToken;
+
+      if (this.authflow) {
+        try {
+          this.addLog("Acquiring dedicated MPSD session directory token...", "info");
+          const mpsdTokens = await this.authflow.getXboxToken("http://sessiondirectory.xboxlive.com");
+          if (mpsdTokens && mpsdTokens.XSTSToken) {
+            mpsdHash = mpsdTokens.userHash || mpsdHash;
+            mpsdToken = mpsdTokens.XSTSToken;
+            this.addLog("Dedicated MPSD session directory token successfully acquired.", "success");
+          }
+        } catch (tokErr: any) {
+          this.addLog(`Failed to acquire dedicated MPSD token: ${tokErr.message || tokErr}. Falling back to default token.`, "warn");
+        }
+      }
+
       const scid = "4fc10100-3fa5-4089-8d19-45036bf6ba22"; // SCID of Minecraft
-      const authHeader = `XBL3.0 x=${userHash};${userToken}`;
+      const authHeader = `XBL3.0 x=${mpsdHash};${mpsdToken}`;
       const sessionBody = {
         properties: {
           system: {
