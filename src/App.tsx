@@ -65,7 +65,9 @@ import {
   FlaskConical,
   GripVertical,
   Search,
-  Edit3
+  Edit3,
+  Bot,
+  Gamepad2
 } from "lucide-react";
 
 import {
@@ -87,6 +89,7 @@ import SoftwareUpdates from "./components/SoftwareUpdates";
 import PlayitConnect from "./components/PlayitConnect";
 import PlayersMap from "./components/PlayersMap";
 import AddonManager from "./components/AddonManager";
+import XboxBotManager from "./components/XboxBotManager";
 
 const ICON_MAP: Record<string, React.ComponentType<any>> = {
   Sun,
@@ -650,6 +653,7 @@ export default function App() {
   // Centralized navigation bar configuration with beautifully polished, easy-to-identify icons and colors
   const navItems = useMemo(() => [
     { id: "dashboard", label: "Dashboard Space", icon: LayoutDashboard, color: "text-emerald-400" },
+    { id: "xbox_bot", label: "Xbox Join Bot", icon: Bot, color: "text-indigo-400" },
     { id: "addons", label: "Addons & Packs", icon: Blocks, color: "text-indigo-400" },
     { id: "worlds", label: "Worlds Vault", icon: FolderOpen, color: "text-amber-400" },
     { id: "quick_commands", label: "Quick Commands", icon: Zap, color: "text-yellow-400", pulse: true },
@@ -4588,6 +4592,11 @@ export default function App() {
                 </div>
               </div>
             </div>
+          )}
+
+          {/* ==================== XBOX LIVE REDIRECTION BOT ==================== */}
+          {navTab === "xbox_bot" && (
+            <XboxBotManager token={token} />
           )}
 
           {/* ==================== EXPERIMENTAL LAB TABS ==================== */}
