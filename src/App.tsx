@@ -84,6 +84,7 @@ import ConsoleConnect from "./components/ConsoleConnect";
 import SoftwareUpdates from "./components/SoftwareUpdates";
 import PlayitConnect from "./components/PlayitConnect";
 import PlayersMap from "./components/PlayersMap";
+import AddonManager from "./components/AddonManager";
 
 const ICON_MAP: Record<string, React.ComponentType<any>> = {
   Sun,
@@ -428,6 +429,7 @@ export default function App() {
   const [localBehaviorOrder, setLocalBehaviorOrder] = useState<AddonMetadata[]>([]);
   const [localResourceOrder, setLocalResourceOrder] = useState<AddonMetadata[]>([]);
   const [isSavingLoadOrder, setIsSavingLoadOrder] = useState(false);
+  const [isDraggingAddon, setIsDraggingAddon] = useState(false);
 
   // Drag and Drop reordering states & handlers
   const [draggedCmdIdx, setDraggedCmdIdx] = useState<number | null>(null);
@@ -1283,8 +1285,7 @@ export default function App() {
   };
 
   // Multer Addons and Worlds uploading trigger hooks
-  const handleUploadFile = async (e: React.ChangeEvent<HTMLInputElement>, isWorld: boolean = false) => {
-    const files = e.target.files;
+  const handleUploadFileListDirect = async (files: FileList | null, isWorld: boolean = false) => {
     if (!files || files.length === 0 || !token || !isAdmin) return;
 
     setIsUploading(true);
@@ -1330,9 +1331,14 @@ export default function App() {
       showBanner(errMsg, "error");
     } finally {
       setIsUploading(false);
-      // reset forms
-      if (e.target) e.target.value = "";
     }
+  };
+
+  const handleUploadFile = async (e: React.ChangeEvent<HTMLInputElement>, isWorld: boolean = false) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    await handleUploadFileListDirect(files, isWorld);
+    if (e.target) e.target.value = "";
   };
 
   const handleUpdateAddonFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -2751,695 +2757,46 @@ export default function App() {
             );
           })()}
 
-          {/* ==================== B. ADDONS & PACKS MANAGER VIEW ==================== */}
+             {/* ==================== B. ADDONS & PACKS MANAGER VIEW ==================== */}
           {navTab === "addons" && (
-            <div className="space-y-6 select-none">
-              <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-zinc-900/10 border border-zinc-900 rounded-2xl p-6 gap-4 animate-fade-in">
-                <div>
-                  <h2 className="text-lg font-black text-white tracking-tight">Addon Pack Manager</h2>
-                  <p className="text-xs text-zinc-500 mt-0.5">
-                    {addonViewMode === "grid"
-                      ? "Configure Behaviour and Resource folders. Support for unzipped .mcpack and .mcaddon bundles."
-                      : "Adjust package sequence priority. The loading precedence is defined from top to bottom."}
-                  </p>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-3">
-                  {/* View Mode Toggle Switch */}
-                  <div className="flex bg-zinc-950 p-1 border border-zinc-900 rounded-xl">
-                    <button
-                      onClick={() => setAddonViewMode("grid")}
-                      className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 transition-all cursor-pointer ${
-                        addonViewMode === "grid"
-                          ? "bg-emerald-600 text-white shadow-sm"
-                          : "text-zinc-500 hover:text-white"
-                      }`}
-                    >
-                      <Grid className="w-3.5 h-3.5" />
-                      Manage Packs
-                    </button>
-                    <button
-                      onClick={() => setAddonViewMode("order")}
-                      className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 transition-all cursor-pointer ${
-                        addonViewMode === "order"
-                          ? "bg-emerald-600 text-white shadow-sm"
-                          : "text-zinc-500 hover:text-white"
-                      }`}
-                    >
-                      <ListOrdered className="w-3.5 h-3.5" />
-                      Mod Load Order
-                    </button>
-                  </div>
-
-                  {isAdmin && addonViewMode === "grid" && (
-                    <div className="flex gap-2">
-                      {/* Hidden Inputs for upload files */}
-                      <input
-                        type="file"
-                        ref={addonFileInputRef}
-                        accept=".mcpack,.mcaddon"
-                        multiple
-                        onChange={e => handleUploadFile(e, false)}
-                        className="hidden"
-                      />
-                      <input
-                        type="file"
-                        ref={updateAddonFileInputRef}
-                        accept=".mcpack,.mcaddon"
-                        onChange={handleUpdateAddonFile}
-                        className="hidden"
-                      />
-                      <button
-                        id="upload-addon-trigger"
-                        onClick={() => addonFileInputRef.current?.click()}
-                        className="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs tracking-wider uppercase px-4 py-2.5 rounded-xl flex items-center gap-2 shadow-md cursor-pointer text-center"
-                      >
-                        <UploadCloud className="w-4 h-4" />
-                        Import Pack
-                      </button>
-                    </div>
-                  )}
-
-                  {!isAdmin && (
-                    <span className="px-3 py-1.5 rounded-xl bg-zinc-900 text-zinc-550 border border-zinc-850 text-xs font-bold leading-normal uppercase">
-                      Viewer View-Only Modes
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              {uploadError && addonViewMode === "grid" && (
-                <div className="p-4 bg-red-500/10 border border-red-500/20 text-red-400 rounded-xl text-xs flex gap-2 animate-fade-in">
-                  <AlertTriangle className="w-4.5 h-4.5 flex-shrink-0" />
-                  <span>{uploadError}</span>
-                </div>
-              )}
-
-              {addonViewMode === "order" ? (
-                // ------------------ REORDER PRIORITY VIEW ------------------
-                <div className="space-y-6 animate-fade-in">
-                  <div className="bg-zinc-950 border border-zinc-900 rounded-2xl p-5 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                    <div>
-                      <h3 className="text-xs font-black uppercase tracking-widest text-emerald-400 font-sans">Load Sequence Engine</h3>
-                      <p className="text-[11px] text-zinc-500 mt-1 font-sans">
-                        Minecraft Bedrock processes active plugins sequentially. Move items to settle dependency priority, then commit load orders.
-                      </p>
-                    </div>
-                    {isAdmin && (
-                      <div className="flex gap-2 flex-shrink-0">
-                        <button
-                          onClick={() => {
-                            setLocalBehaviorOrder(addons.filter(a => a.type === "behavior" && a.isEnabled));
-                            setLocalResourceOrder(addons.filter(a => (a.type === "resource" || a.type === "world") && a.isEnabled));
-                            showBanner("Reverted unsaved sequence local changes.", "info");
-                          }}
-                          className="px-4 py-2 bg-zinc-900 hover:bg-zinc-850 text-zinc-300 font-bold text-xs rounded-xl border border-zinc-800 transition-all cursor-pointer select-none uppercase tracking-wider font-sans"
-                        >
-                          Reset List
-                        </button>
-                        <button
-                          onClick={() => {
-                            const behaviorUuids = localBehaviorOrder.map(a => a.uuid);
-                            const resourceUuids = localResourceOrder.map(a => a.uuid);
-                            handleSaveAddonLoadOrder([...behaviorUuids, ...resourceUuids]);
-                          }}
-                          disabled={isSavingLoadOrder}
-                          className="px-5 py-2 bg-emerald-600 hover:bg-emerald-555 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer select-none uppercase tracking-wider flex items-center gap-2 font-sans"
-                        >
-                          <CheckCircle className="w-4 h-4 animate-pulse" />
-                          {isSavingLoadOrder ? "Saving..." : "Save Load Order"}
-                        </button>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    {/* Behavior Column Orderer */}
-                    <div className="bg-zinc-900/10 border border-zinc-900 rounded-2xl p-5 space-y-4">
-                      <div className="flex items-center justify-between pb-3 border-b border-zinc-900/60">
-                        <div className="flex items-center gap-2">
-                          <span className="w-2.5 h-2.5 rounded-full bg-purple-500 animate-pulse" />
-                          <h4 className="text-xs font-black uppercase text-purple-400 tracking-wider font-sans">
-                            Active Behavior Packs ({localBehaviorOrder.length})
-                          </h4>
-                        </div>
-                        <span className="text-[9px] text-purple-400/90 font-mono font-bold leading-none bg-purple-500/10 px-2 py-1 rounded select-none">
-                          First Loaded → Last Loaded
-                        </span>
-                      </div>
-
-                      {localBehaviorOrder.length === 0 ? (
-                        <div className="p-12 text-center text-zinc-650 italic text-xs font-semibold">
-                          No active behavior packs found. Activate packs in the "Manage Packs" tab first.
-                        </div>
-                      ) : (
-                        <div className="space-y-2 max-h-[500px] overflow-y-auto pr-1">
-                          {localBehaviorOrder.map((addon, index) => {
-                            const isFirst = index === 0;
-                            const isLast = index === localBehaviorOrder.length - 1;
-
-                            const moveUp = () => {
-                              if (isFirst) return;
-                              const updated = [...localBehaviorOrder];
-                              const temp = updated[index];
-                              updated[index] = updated[index - 1];
-                              updated[index - 1] = temp;
-                              setLocalBehaviorOrder(updated);
-                            };
-
-                            const moveDown = () => {
-                              if (isLast) return;
-                              const updated = [...localBehaviorOrder];
-                              const temp = updated[index];
-                              updated[index] = updated[index + 1];
-                              updated[index + 1] = temp;
-                              setLocalBehaviorOrder(updated);
-                            };
-
-                            return (
-                              <div
-                                key={addon.uuid}
-                                draggable={isAdmin}
-                                onDragStart={(e) => {
-                                  e.dataTransfer.setData("text/plain", addon.uuid);
-                                  e.dataTransfer.effectAllowed = "move";
-                                  setDraggedBehaviorIdx(index);
-                                }}
-                                onDragOver={(e) => {
-                                  e.preventDefault();
-                                }}
-                                onDragEnter={() => {
-                                  handleReorderBehaviorPacks(index);
-                                }}
-                                onDragEnd={() => setDraggedBehaviorIdx(null)}
-                                className={`flex items-center justify-between bg-zinc-900/40 hover:bg-zinc-900/60 border p-3 rounded-xl transition-all shadow-sm select-none ${
-                                  draggedBehaviorIdx === index
-                                    ? "border-purple-500 bg-purple-955/20 opacity-60 scale-[0.98]"
-                                    : "border-zinc-900 hover:border-zinc-800"
-                                }`}
-                              >
-                                <div className="flex items-center gap-3 min-w-0">
-                                  {isAdmin && (
-                                    <div className="text-zinc-650 hover:text-zinc-400 cursor-grab active:cursor-grabbing p-1 transition-colors flex-shrink-0">
-                                      <GripVertical className="w-4 h-4" />
-                                    </div>
-                                  )}
-                                  <div className="text-xs font-black font-mono text-purple-400 bg-purple-500/5 w-6 h-6 rounded flex items-center justify-center border border-purple-500/15 flex-shrink-0">
-                                    {index + 1}
-                                  </div>
-                                  <div className="w-8 h-8 rounded-lg bg-zinc-850 flex-shrink-0 overflow-hidden border border-zinc-800 flex items-center justify-center">
-                                    {addon.icon ? (
-                                      <img src={addon.icon} alt={addon.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                                    ) : (
-                                      <Layers className="w-4 h-4 text-zinc-650" />
-                                    )}
-                                  </div>
-                                  <div className="truncate pr-2">
-                                    <h5 className="text-xs font-bold text-white truncate" title={addon.name}>
-                                      {addon.name}
-                                    </h5>
-                                    <p className="text-[9px] text-zinc-500 truncate font-mono mt-0.5">
-                                      Ver: {addon.version.join(".")}
-                                    </p>
-                                  </div>
-                                </div>
-                                
-                                {isAdmin && (
-                                  <div className="flex items-center gap-1 flex-shrink-0">
-                                    <button
-                                      disabled={isFirst}
-                                      onClick={moveUp}
-                                      className="p-1.5 rounded-lg border border-zinc-900 bg-zinc-950 text-zinc-400 hover:text-white hover:bg-zinc-900 cursor-pointer disabled:opacity-20 disabled:cursor-not-allowed transition-all"
-                                      title="Move Up (Load Earlier)"
-                                    >
-                                      <ChevronUp className="w-3.5 h-3.5" />
-                                    </button>
-                                    <button
-                                      disabled={isLast}
-                                      onClick={moveDown}
-                                      className="p-1.5 rounded-lg border border-zinc-900 bg-zinc-950 text-zinc-400 hover:text-white hover:bg-zinc-900 cursor-pointer disabled:opacity-20 disabled:cursor-not-allowed transition-all"
-                                      title="Move Down (Load Later)"
-                                    >
-                                      <ChevronDown className="w-3.5 h-3.5" />
-                                    </button>
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Resource Column Orderer */}
-                    <div className="bg-zinc-900/10 border border-zinc-900 rounded-2xl p-5 space-y-4">
-                      <div className="flex items-center justify-between pb-3 border-b border-zinc-900/60">
-                        <div className="flex items-center gap-2">
-                          <span className="w-2.5 h-2.5 rounded-full bg-blue-500 animate-pulse" />
-                          <h4 className="text-xs font-black uppercase text-blue-400 tracking-wider font-sans">
-                            Active Resource Packs ({localResourceOrder.length})
-                          </h4>
-                        </div>
-                        <span className="text-[9px] text-blue-400/90 font-mono font-bold leading-none bg-blue-500/10 px-2 py-1 rounded select-none">
-                          First Loaded → Last Loaded
-                        </span>
-                      </div>
-
-                      {localResourceOrder.length === 0 ? (
-                        <div className="p-12 text-center text-zinc-650 italic text-xs font-semibold">
-                          No active resource packs found. Activate packs in the "Manage Packs" tab first.
-                        </div>
-                      ) : (
-                        <div className="space-y-2 max-h-[500px] overflow-y-auto pr-1">
-                          {localResourceOrder.map((addon, index) => {
-                            const isFirst = index === 0;
-                            const isLast = index === localResourceOrder.length - 1;
-
-                            const moveUp = () => {
-                              if (isFirst) return;
-                              const updated = [...localResourceOrder];
-                              const temp = updated[index];
-                              updated[index] = updated[index - 1];
-                              updated[index - 1] = temp;
-                              setLocalResourceOrder(updated);
-                            };
-
-                            const moveDown = () => {
-                              if (isLast) return;
-                              const updated = [...localResourceOrder];
-                              const temp = updated[index];
-                              updated[index] = updated[index + 1];
-                              updated[index + 1] = temp;
-                              setLocalResourceOrder(updated);
-                            };
-
-                            return (
-                              <div
-                                key={addon.uuid}
-                                draggable={isAdmin}
-                                onDragStart={(e) => {
-                                  e.dataTransfer.setData("text/plain", addon.uuid);
-                                  e.dataTransfer.effectAllowed = "move";
-                                  setDraggedResourceIdx(index);
-                                }}
-                                onDragOver={(e) => {
-                                  e.preventDefault();
-                                }}
-                                onDragEnter={() => {
-                                  handleReorderResourcePacks(index);
-                                }}
-                                onDragEnd={() => setDraggedResourceIdx(null)}
-                                className={`flex items-center justify-between bg-zinc-900/40 hover:bg-zinc-900/60 border p-3 rounded-xl transition-all shadow-sm select-none ${
-                                  draggedResourceIdx === index
-                                    ? "border-blue-500 bg-blue-955/20 opacity-60 scale-[0.98]"
-                                    : "border-zinc-900 hover:border-zinc-800"
-                                }`}
-                              >
-                                <div className="flex items-center gap-3 min-w-0">
-                                  {isAdmin && (
-                                    <div className="text-zinc-650 hover:text-zinc-400 cursor-grab active:cursor-grabbing p-1 transition-colors flex-shrink-0">
-                                      <GripVertical className="w-4 h-4" />
-                                    </div>
-                                  )}
-                                  <div className="text-xs font-black font-mono text-blue-400 bg-blue-500/5 w-6 h-6 rounded flex items-center justify-center border border-blue-500/15 flex-shrink-0">
-                                    {index + 1}
-                                  </div>
-                                  <div className="w-8 h-8 rounded-lg bg-zinc-850 flex-shrink-0 overflow-hidden border border-zinc-800 flex items-center justify-center">
-                                    {addon.icon ? (
-                                      <img src={addon.icon} alt={addon.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                                    ) : (
-                                      <Layers className="w-4 h-4 text-zinc-650" />
-                                    )}
-                                  </div>
-                                  <div className="truncate pr-2">
-                                    <h5 className="text-xs font-bold text-white truncate" title={addon.name}>
-                                      {addon.name}
-                                    </h5>
-                                    <p className="text-[9px] text-zinc-500 truncate font-mono mt-0.5">
-                                      Ver: {addon.version.join(".")}
-                                    </p>
-                                  </div>
-                                </div>
-                                
-                                {isAdmin && (
-                                  <div className="flex items-center gap-1 flex-shrink-0">
-                                    <button
-                                      disabled={isFirst}
-                                      onClick={moveUp}
-                                      className="p-1.5 rounded-lg border border-zinc-900 bg-zinc-950 text-zinc-400 hover:text-white hover:bg-zinc-900 cursor-pointer disabled:opacity-20 disabled:cursor-not-allowed transition-all"
-                                      title="Move Up (Load Earlier)"
-                                    >
-                                      <ChevronUp className="w-3.5 h-3.5" />
-                                    </button>
-                                    <button
-                                      disabled={isLast}
-                                      onClick={moveDown}
-                                      className="p-1.5 rounded-lg border border-zinc-900 bg-zinc-950 text-zinc-400 hover:text-white hover:bg-zinc-900 cursor-pointer disabled:opacity-20 disabled:cursor-not-allowed transition-all"
-                                      title="Move Down (Load Later)"
-                                    >
-                                      <ChevronDown className="w-3.5 h-3.5" />
-                                    </button>
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                // ------------------ STANDALONE GRID LIST MANAGER VIEW ------------------
-                <>
-                  <div className="flex flex-wrap items-center gap-4 bg-zinc-900/15 border border-zinc-900 rounded-2xl p-4 justify-between animate-fade-in">
-                    <div className="flex flex-wrap items-center gap-3">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-bold text-zinc-500 uppercase tracking-wide">Sort by:</span>
-                        <select
-                          value={addonSortBy}
-                          onChange={(e) => setAddonSortBy(e.target.value as any)}
-                          className="bg-zinc-950 text-zinc-350 text-xs font-semibold px-3 py-1.5 rounded-lg border border-zinc-900 outline-none cursor-pointer focus:border-zinc-700 transition-colors"
-                        >
-                          <option value="name">Name</option>
-                          <option value="date">Date Added</option>
-                          <option value="enabled">Enabled First</option>
-                          <option value="disabled">Disabled First</option>
-                        </select>
-                      </div>
-
-                      {/* Addon Quick Filter Search Bar */}
-                      <div className="relative w-64">
-                        <Search className="absolute left-3 top-2.5 w-3.5 h-3.5 text-zinc-500" />
-                        <input
-                          type="text"
-                          placeholder="Quick search addons..."
-                          value={addonSearch}
-                          onChange={(e) => setAddonSearch(e.target.value)}
-                          className="w-full pl-9 pr-8 py-1.5 bg-zinc-950 border border-zinc-900 rounded-lg text-xs text-white placeholder-zinc-550 outline-none focus:border-zinc-750 focus:bg-zinc-950 transition-all font-sans"
-                        />
-                        {addonSearch && (
-                          <button
-                            onClick={() => setAddonSearch("")}
-                            className="absolute right-2 top-1.5 p-1 text-zinc-500 hover:text-white transition-colors"
-                            title="Clear search"
-                          >
-                            <X className="w-3 h-3" />
-                          </button>
-                        )}
-                      </div>
-                    </div>
-
-                    {isAdmin && addons.length > 0 && (
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={handleEnableAllAddons}
-                          className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl transition-all cursor-pointer uppercase tracking-wider shadow-sm"
-                        >
-                          Enable All
-                        </button>
-                        <button
-                          onClick={handleDisableAllAddons}
-                          className="px-4 py-2 bg-zinc-800 hover:bg-zinc-750 text-zinc-200 font-bold text-xs rounded-xl transition-all cursor-pointer uppercase tracking-wider border border-zinc-700 shadow-sm"
-                        >
-                          Disable All
-                        </button>
-                        <button
-                          onClick={handleDeleteAllAddons}
-                          className="px-4 py-2 bg-red-950/40 hover:bg-red-900/60 text-red-400 hover:text-red-300 font-bold text-xs rounded-xl transition-all cursor-pointer uppercase tracking-wider border border-red-900/50 shadow-sm flex items-center gap-1.5"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                          Delete All
-                        </button>
-                      </div>
-                    )}
-                  </div>
-
-                  {addons.length === 0 ? (
-                    <div className="bg-zinc-900/30 border border-zinc-900 p-12 text-center rounded-2xl flex flex-col items-center">
-                      <Layers className="w-12 h-12 text-zinc-800 mb-3" />
-                      <h3 className="text-sm font-black text-white tracking-wide">No minecraft addons installed</h3>
-                      <p className="text-xs text-zinc-500 max-w-sm mt-1 leading-relaxed">
-                        Upload .mcpack and .mcaddon bundles directly using the "Import Pack" button. Systems will unzip, extract, and index metadata records.
-                      </p>
-                    </div>
-                  ) : (() => {
-                    // Inline sorting & rendering logic
-                    const sortedAddons = [...addons].sort((a, b) => {
-                      if (addonSortBy === "name") {
-                        return a.name.localeCompare(b.name);
-                      } else if (addonSortBy === "date") {
-                        const dateA = a.uploadedAt ? new Date(a.uploadedAt).getTime() : 0;
-                        const dateB = b.uploadedAt ? new Date(b.uploadedAt).getTime() : 0;
-                        return dateB - dateA;
-                      } else if (addonSortBy === "enabled") {
-                        if (a.isEnabled === b.isEnabled) return a.name.localeCompare(b.name);
-                        return a.isEnabled ? -1 : 1;
-                      } else if (addonSortBy === "disabled") {
-                        if (a.isEnabled === b.isEnabled) return a.name.localeCompare(b.name);
-                        return a.isEnabled ? 1 : -1;
-                      }
-                      return 0;
-                    });
-
-                    // Search filtering
-                    const searchFilteredAddons = addonSearch.trim()
-                      ? sortedAddons.filter(addon => 
-                          addon.name.toLowerCase().includes(addonSearch.toLowerCase()) ||
-                          (addon.description && addon.description.toLowerCase().includes(addonSearch.toLowerCase())) ||
-                          (addon.originalName && addon.originalName.toLowerCase().includes(addonSearch.toLowerCase()))
-                        )
-                      : sortedAddons;
-
-                    if (addons.length > 0 && searchFilteredAddons.length === 0) {
-                      return (
-                        <div className="bg-zinc-900/10 border border-zinc-900 border-dashed p-12 text-center rounded-2xl flex flex-col items-center mt-6">
-                          <Search className="w-10 h-10 text-zinc-700 mb-3" />
-                          <h3 className="text-sm font-black text-white tracking-wide">No listing matches found</h3>
-                          <p className="text-xs text-zinc-500 max-w-sm mt-1 leading-relaxed">
-                            No addon names, descriptions, or filenames match the search query <strong className="text-zinc-400">"{addonSearch}"</strong>.
-                          </p>
-                          <button
-                            onClick={() => setAddonSearch("")}
-                            className="mt-4 px-4 py-2 bg-zinc-850 hover:bg-zinc-800 text-white text-xs font-semibold rounded-xl border border-zinc-700 transition-colors cursor-pointer"
-                          >
-                            Clear Search Filters
-                          </button>
-                        </div>
-                      );
-                    }
-
-                    const activeBehaviorPacks = searchFilteredAddons.filter(a => a.type === "behavior" && a.isEnabled);
-                    const activeResourcePacks = searchFilteredAddons.filter(a => (a.type === "resource" || a.type === "world") && a.isEnabled);
-                    const disabledBehaviorPacks = searchFilteredAddons.filter(a => a.type === "behavior" && !a.isEnabled);
-                    const disabledResourcePacks = searchFilteredAddons.filter(a => (a.type === "resource" || a.type === "world") && !a.isEnabled);
-
-                    const renderAddonCard = (addon: AddonMetadata) => {
-                      const isGrouped = addons.some(a => 
-                        a.uuid !== addon.uuid && 
-                        ((addon.groupId && a.groupId === addon.groupId) || 
-                         (addon.originalName && a.originalName === addon.originalName && addon.originalName !== ""))
-                      );
-
-                      return (
-                        <div
-                          key={addon.uuid}
-                          className={`bg-zinc-900/40 border rounded-2xl p-5 flex flex-col justify-between shadow transition-all hover:border-zinc-850 ${
-                            addon.isEnabled ? "border-emerald-500/20 bg-emerald-950/10 animate-fade-in" : "border-zinc-900"
-                          }`}
-                        >
-                          <div>
-                            <div className="flex gap-4 items-start">
-                              <div className="w-14 h-14 rounded-xl bg-zinc-850 flex-shrink-0 overflow-hidden border border-zinc-800 flex items-center justify-center">
-                                {addon.icon ? (
-                                  <img src={addon.icon} alt={addon.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                                ) : (
-                                  <Layers className="w-6 h-6 text-zinc-600" />
-                                )}
-                              </div>
-
-                              <div className="min-w-0 flex-1">
-                                <h4 className="text-xs font-black text-white truncate tracking-wide" title={addon.name}>{addon.name}</h4>
-                                <div className="flex flex-wrap gap-1 mt-1.5">
-                                  <span
-                                    className={`text-[8px] uppercase tracking-widest font-black px-1.5 py-0.5 rounded ${
-                                      addon.type === "behavior" ? "bg-purple-500/10 text-purple-400" : "bg-blue-500/10 text-blue-400"
-                                    }`}
-                                  >
-                                    {addon.type} Pack
-                                  </span>
-                                  {isGrouped && (
-                                    <span className="text-[8px] uppercase tracking-widest font-black px-1.5 py-0.5 rounded bg-pink-500/15 text-pink-400 border border-pink-500/20" title="Toggles are synchronized with matching behavior/resource dual packs">
-                                      Grouped Addon
-                                    </span>
-                                  )}
-                                </div>
-                                <p className="text-[10px] text-zinc-650 font-mono mt-1">Ver: {addon.version.join(".")}</p>
-                              </div>
-                            </div>
-
-                            {addon.originalName && addon.originalName !== addon.name && (
-                              <div className="mt-2.5 px-2 py-1 bg-zinc-950/40 border border-zinc-900/60 rounded font-mono text-[9px] text-zinc-550 truncate" title="Uploaded filename source">
-                                Filename: {addon.originalName}
-                              </div>
-                            )}
-
-                            <p className="text-[10px] text-zinc-500 mt-4 leading-relaxed line-clamp-3 h-10">{addon.description}</p>
-                          </div>
-
-                          <div className="flex justify-between items-center mt-5 pt-4 border-t border-zinc-900/60 select-none">
-                            <div className="flex gap-2 items-center text-xs">
-                              {addon.isEnabled ? (
-                                <span className="text-[10px] font-black text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 uppercase tracking-widest leading-none">
-                                  Active
-                                </span>
-                              ) : (
-                                <span className="text-[10px] font-black text-zinc-500 bg-zinc-950 px-2 py-0.5 rounded border border-zinc-900 uppercase tracking-widest leading-none">
-                                  Disabled
-                                </span>
-                              )}
-
-                              {addon.downloadUrl && (
-                                <a
-                                  href={addon.downloadUrl}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="text-emerald-500 hover:text-emerald-400 hover:scale-105 transition-all p-1 flex items-center gap-1 font-mono text-[9px] font-black tracking-wider border border-emerald-500/10 rounded bg-emerald-950/20"
-                                  title="Go to Pack Download Link"
-                                >
-                                  <ExternalLink className="w-3 h-3" />
-                                  <span>PACK LINK</span>
-                                </a>
-                              )}
-                            </div>
-
-                            {isAdmin && (
-                              <div className="flex items-center gap-1">
-                                <button
-                                  onClick={() => toggleAddonEnabled(addon.uuid, addon.isEnabled)}
-                                  className={`px-3 py-1.5 rounded-lg text-[10px] uppercase font-black tracking-wider border cursor-pointer select-none transition-all ${
-                                    addon.isEnabled
-                                      ? "bg-amber-600/10 text-amber-500 border-amber-500/25 hover:bg-amber-600/20"
-                                      : "bg-emerald-600/10 text-emerald-400 border-emerald-500/25 hover:bg-emerald-600/20"
-                                  }`}
-                                >
-                                  {addon.isEnabled ? "Disable" : "Enable"}
-                                </button>
-
-                                <button
-                                  onClick={() => openEditAddon(addon)}
-                                  className="p-1.5 border border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-700 rounded-lg cursor-pointer"
-                                  title="Edit addon properties"
-                                >
-                                  <Edit className="w-3.5 h-3.5" />
-                                </button>
-
-                                <button
-                                  onClick={() => {
-                                    setUpdatingAddonUuid(addon.uuid);
-                                    setTimeout(() => updateAddonFileInputRef.current?.click(), 10);
-                                  }}
-                                  className="p-1.5 border border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-700 rounded-lg cursor-pointer"
-                                  title="Update/Override pack with updated file"
-                                >
-                                  <UploadCloud className="w-3.5 h-3.5 text-blue-400" />
-                                </button>
-
-                                <button
-                                  onClick={() => deleteAddon(addon.uuid)}
-                                  className="p-1.5 border border-zinc-800 text-zinc-500 hover:text-red-500 hover:border-red-550 rounded-lg cursor-pointer"
-                                  title="Delete physical pack"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    };
-
-                    return (
-                      <div className="space-y-10 mt-6 animate-fade-in">
-                        {/* Active Behavior Packs */}
-                        <div className="space-y-4">
-                          <div className="flex items-center gap-2 pb-2 border-b border-zinc-900">
-                            <span className="w-2.5 h-2.5 rounded-full bg-purple-500 animate-pulse" />
-                            <h3 className="text-xs font-black uppercase tracking-widest text-emerald-400">
-                              Active Behavior Packs ({activeBehaviorPacks.length})
-                            </h3>
-                          </div>
-                          {activeBehaviorPacks.length === 0 ? (
-                            <p className="text-xs text-zinc-600 italic pl-1 animate-fade-in">No Active Behavior packs currently loaded.</p>
-                          ) : (
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-                              {activeBehaviorPacks.map(renderAddonCard)}
-                            </div>
-                          )}
-                        </div>
-
-                        <div className="h-[1px] bg-gradient-to-r from-purple-500/10 via-zinc-900 to-transparent opacity-80" />
-
-                        {/* Active Resource Packs */}
-                        <div className="space-y-4">
-                          <div className="flex items-center gap-2 pb-2 border-b border-zinc-900">
-                            <span className="w-2.5 h-2.5 rounded-full bg-blue-500 animate-pulse" />
-                            <h3 className="text-xs font-black uppercase tracking-widest text-emerald-400">
-                              Active Resource Packs ({activeResourcePacks.length})
-                            </h3>
-                          </div>
-                          {activeResourcePacks.length === 0 ? (
-                            <p className="text-xs text-zinc-650 italic pl-1 animate-fade-in">No Active Resource packs currently loaded.</p>
-                          ) : (
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-                              {activeResourcePacks.map(renderAddonCard)}
-                            </div>
-                          )}
-                        </div>
-
-                        <div className="h-[1px] bg-gradient-to-r from-zinc-900 via-zinc-800 to-zinc-900 my-8 opacity-60" />
-
-                        {/* Disabled Behavior Packs */}
-                        <div className="space-y-4">
-                          <div className="flex items-center gap-2 pb-2 border-b border-zinc-900">
-                            <span className="w-2.5 h-2.5 rounded-full bg-zinc-700" />
-                            <h3 className="text-xs font-black uppercase tracking-widest text-zinc-500">
-                              Disabled Behavior Packs ({disabledBehaviorPacks.length})
-                            </h3>
-                          </div>
-                          {disabledBehaviorPacks.length === 0 ? (
-                            <p className="text-xs text-zinc-750 italic pl-1 animate-fade-in">No Disabled Behavior packs.</p>
-                          ) : (
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 opacity-65 hover:opacity-100 transition-opacity">
-                              {disabledBehaviorPacks.map(renderAddonCard)}
-                            </div>
-                          )}
-                        </div>
-
-                        <div className="h-[1px] bg-gradient-to-r from-transparent via-zinc-900 to-zinc-900 opacity-80 animate-pulse" />
-
-                        {/* Disabled Resource Packs */}
-                        <div className="space-y-4">
-                          <div className="flex items-center gap-2 pb-2 border-b border-zinc-900">
-                            <span className="w-2.5 h-2.5 rounded-full bg-zinc-700" />
-                            <h3 className="text-xs font-black uppercase tracking-widest text-zinc-500">
-                              Disabled Resource Packs ({disabledResourcePacks.length})
-                            </h3>
-                          </div>
-                          {disabledResourcePacks.length === 0 ? (
-                            <p className="text-xs text-zinc-750 italic pl-1 animate-fade-in">No Disabled Resource packs.</p>
-                          ) : (
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 opacity-65 hover:opacity-100 transition-opacity">
-                              {disabledResourcePacks.map(renderAddonCard)}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })()}
-                </>
-              )}
-            </div>
+            <AddonManager
+              addons={addons}
+              isAdmin={isAdmin}
+              token={token}
+              addonSortBy={addonSortBy}
+              setAddonSortBy={setAddonSortBy}
+              addonViewMode={addonViewMode}
+              setAddonViewMode={setAddonViewMode}
+              addonSearch={addonSearch}
+              setAddonSearch={setAddonSearch}
+              localBehaviorOrder={localBehaviorOrder}
+              setLocalBehaviorOrder={setLocalBehaviorOrder}
+              localResourceOrder={localResourceOrder}
+              setLocalResourceOrder={setLocalResourceOrder}
+              isSavingLoadOrder={isSavingLoadOrder}
+              uploadError={uploadError}
+              isUploading={isUploading}
+              uploadProgress={uploadProgress}
+              uploadingFilesNames={uploadingFilesNames}
+              handleUploadFileListDirect={handleUploadFileListDirect}
+              handleSaveAddonLoadOrder={handleSaveAddonLoadOrder}
+              handleEnableAllAddons={handleEnableAllAddons}
+              handleDisableAllAddons={handleDisableAllAddons}
+              handleDeleteAllAddons={handleDeleteAllAddons}
+              toggleAddonEnabled={toggleAddonEnabled}
+              openEditAddon={openEditAddon}
+              deleteAddon={deleteAddon}
+              setUpdatingAddonUuid={setUpdatingAddonUuid}
+              updateAddonFileInputRef={updateAddonFileInputRef}
+              addonFileInputRef={addonFileInputRef}
+              showBanner={showBanner}
+              draggedBehaviorIdx={draggedBehaviorIdx}
+              setDraggedBehaviorIdx={setDraggedBehaviorIdx}
+              draggedResourceIdx={draggedResourceIdx}
+              setDraggedResourceIdx={setDraggedResourceIdx}
+              handleReorderBehaviorPacks={handleReorderBehaviorPacks}
+              handleReorderResourcePacks={handleReorderResourcePacks}
+            />
           )}
 
           {/* ==================== C. WORLDS ARCHIVE MANAGEMENT VIEW ==================== */}
