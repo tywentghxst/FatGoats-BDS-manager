@@ -4522,24 +4522,14 @@ class XboxLiveBot {
   }
 
   public async getTargetConnection() {
-    let targetIp = (this.config.targetIp || "").trim();
-    let targetPort = this.config.targetPort || 19132;
-
-    // Auto-split host:port if user pasted a combination into the Target Server IP box
-    if (targetIp.includes(":")) {
-      const parts = targetIp.split(":");
-      targetIp = parts[0].trim();
-      const parsedPort = parseInt(parts[1], 10);
-      if (!isNaN(parsedPort)) {
-        targetPort = parsedPort;
-      }
-    }
+    let targetIp = this.config.targetIp;
+    let targetPort = this.config.targetPort;
 
     // Pull from active global tunnel (playit) or local configurations if targetIp is empty
-    if (!targetIp || targetIp === "") {
+    if (!targetIp || targetIp.trim() === "") {
       if (typeof playitTunnelUrl === "string" && playitTunnelUrl.trim() !== "") {
         const parts = playitTunnelUrl.split(":");
-        targetIp = parts[0].trim();
+        targetIp = parts[0];
         if (parts[1]) {
           targetPort = parseInt(parts[1], 10) || dbCache?.appConfig?.serverPort || 19132;
         } else {
@@ -4551,86 +4541,20 @@ class XboxLiveBot {
       }
     }
 
-    // Ensure we do direct resolution of dyndns hostnames (playit custom subdomains, duckdns, etc)
-    // to numeric IPv4 addresses. Minecraft Bedrock consoles fail to parse custom domain names in standard MPSD join details,
-    // but work flawlessly when given a numeric IPv4 address directly!
+    // IMPORTANT: Resolve dns domain name (e.g., playit tunnels) into numeric IPv4 addresses.
+    // Minecraft Bedrock on Consoles fails to resolve custom domain names inside standard MPSD join details, 
+    // but works flawlessly when provided a numeric IPv4 address directly!
     if (targetIp && targetIp !== "127.0.0.1" && net.isIP(targetIp) === 0) {
-      this.addLog(`Resolving target server hostname '${targetIp}' into dedicated numeric IPv4 address...`, "info");
-      
-      // Step 1: Try traditional dns.promises.resolve4
       try {
         const addresses = await dns.promises.resolve4(targetIp);
         if (addresses && addresses.length > 0) {
           const resolvedIp = addresses[0];
-          this.addLog(`Dynamic DNS [Resolve4]: Successfully resolved '${targetIp}' -> '${resolvedIp}' for Xbox session.`, "info");
+          this.addLog(`Dynamic DNS: Resolved hostname '${targetIp}' to IP '${resolvedIp}' for Xbox session.`, "info");
           return { targetIp: resolvedIp, targetPort };
         }
       } catch (err: any) {
-        this.addLog(`Warning: resolve4 failed for '${targetIp}' (${err.message || err}). Trying lookup...`, "warn");
+        this.addLog(`Warning: Failed to resolve hostname '${targetIp}' via DNS: ${err.message || err}`, "warn");
       }
-
-      // Step 2: Try traditional dns.promises.lookup (uses local hosts/cache and system getaddrinfo)
-      try {
-        const lookupResult = await dns.promises.lookup(targetIp, { family: 4 });
-        if (lookupResult && lookupResult.address) {
-          const resolvedIp = lookupResult.address;
-          this.addLog(`Dynamic DNS [Lookup]: Successfully resolved '${targetIp}' -> '${resolvedIp}' for Xbox session.`, "info");
-          return { targetIp: resolvedIp, targetPort };
-        }
-      } catch (err: any) {
-        this.addLog(`Warning: lookup failed for '${targetIp}' (${err.message || err}). Trying Google HTTPS DNS...`, "warn");
-      }
-
-      // Step 3: Try Google Public DNS-over-HTTPS fallback (using a 3-second timeout)
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 3000);
-        const dnsRes = await fetch(`https://dns.google/resolve?name=${encodeURIComponent(targetIp)}&type=A`, {
-          signal: controller.signal
-        });
-        clearTimeout(timeoutId);
-        
-        if (dnsRes.ok) {
-          const jsonRes: any = await dnsRes.json();
-          if (jsonRes && jsonRes.Answer && jsonRes.Answer.length > 0) {
-            const firstA = jsonRes.Answer.find((ans: any) => ans.type === 1); // Type 1 is A record
-            if (firstA && firstA.data && net.isIP(firstA.data) === 4) {
-              const resolvedIp = firstA.data;
-              this.addLog(`Dynamic DNS [Google DoH]: Successfully resolved '${targetIp}' -> '${resolvedIp}' for Xbox session.`, "info");
-              return { targetIp: resolvedIp, targetPort };
-            }
-          }
-        }
-      } catch (err: any) {
-        this.addLog(`Warning: Google DoH fallback failed for '${targetIp}' (${err.message || err}). Trying Cloudflare HTTPS DNS...`, "warn");
-      }
-
-      // Step 4: Try Cloudflare Public DNS-over-HTTPS fallback
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 3000);
-        const dnsRes = await fetch(`https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(targetIp)}&type=A`, {
-          headers: { "accept": "application/dns-json" },
-          signal: controller.signal
-        });
-        clearTimeout(timeoutId);
-        
-        if (dnsRes.ok) {
-          const jsonRes: any = await dnsRes.json();
-          if (jsonRes && jsonRes.Answer && jsonRes.Answer.length > 0) {
-            const firstA = jsonRes.Answer.find((ans: any) => ans.type === 1); // Type 1 is A record
-            if (firstA && firstA.data && net.isIP(firstA.data) === 4) {
-              const resolvedIp = firstA.data;
-              this.addLog(`Dynamic DNS [Cloudflare DoH]: Successfully resolved '${targetIp}' -> '${resolvedIp}' for Xbox session.`, "info");
-              return { targetIp: resolvedIp, targetPort };
-            }
-          }
-        }
-      } catch (err: any) {
-        this.addLog(`Warning: Cloudflare DoH fallback failed for '${targetIp}' (${err.message || err})`, "warn");
-      }
-
-      this.addLog(`Critical: Could not resolve target hostname '${targetIp}' via traditional DNS or fallback DoH web resolvers! Bypassing resolution filter...`, "error");
     }
 
     return { targetIp, targetPort };
@@ -4933,18 +4857,13 @@ class XboxLiveBot {
         state: "Online",
         titles: [
           {
-            id: "1142737259", // Minecraft Nintendo Switch Title ID (matching our authenticated Title Token)
+            id: "1828328813", // Minecraft Title ID
             state: "Active",
             placement: "Full",
             activity: {
               richPresence: targetIp
                 ? `Redirecting to Minecraft Bedrock server: ${targetIp}:${targetPort}`
-                : "Awaiting server redirection targets...",
-              sessionReference: {
-                scid: "4fc10100-3fa5-4089-8d19-45036bf6ba22",
-                templateName: "MinecraftSession",
-                name: `BedrockRedirect_${xuid}`
-              }
+                : "Awaiting server redirection targets..."
             }
           }
         ]
@@ -4960,17 +4879,7 @@ class XboxLiveBot {
         body: JSON.stringify(body)
       });
 
-      if (!res.ok) {
-        const text = await res.text().catch(() => "");
-        this.addLog(`Xbox Presence API returned status ${res.status}: ${text || "Unknown"}. Enforcing dual-compatibility MPSD target sync...`, "warn");
-      } else {
-        this.addLog(`Xbox Presence successfully updated directly on Xbox Live (Title: Nintendo Switch)`, "success");
-      }
-
-      // ALWAYS attempt MPSD registration regardless of whether presence POST succeeds,
-      // because presence POST often fails on server environments without active hardware tokens,
-      // but MPSD registration operates independently using XSTS authentication!
-      if (targetIp) {
+      if (res.ok && targetIp) {
         await this.registerMPSDSession(userHash, userToken, xuid);
       }
     } catch (err: any) {
@@ -4980,28 +4889,12 @@ class XboxLiveBot {
 
   private async registerMPSDSession(userHash: string, userToken: string, xuid: string) {
     try {
-      const { targetIp, targetPort } = await this.getTargetConnection();
-      if (!targetIp) return;
-
-      let mpsdHash = userHash;
-      let mpsdToken = userToken;
-
-      if (this.authflow) {
-        try {
-          this.addLog("Acquiring dedicated MPSD session directory token...", "info");
-          const mpsdTokens = await this.authflow.getXboxToken("http://sessiondirectory.xboxlive.com");
-          if (mpsdTokens && mpsdTokens.XSTSToken) {
-            mpsdHash = mpsdTokens.userHash || mpsdHash;
-            mpsdToken = mpsdTokens.XSTSToken;
-            this.addLog("Dedicated MPSD session directory token successfully acquired.", "success");
-          }
-        } catch (tokErr: any) {
-          this.addLog(`Failed to acquire dedicated MPSD token: ${tokErr.message || tokErr}. Falling back to default token.`, "warn");
-        }
-      }
-
       const scid = "4fc10100-3fa5-4089-8d19-45036bf6ba22"; // SCID of Minecraft
-      const authHeader = `XBL3.0 x=${mpsdHash};${mpsdToken}`;
+      const sessionName = `BedrockRedirect_${xuid}`;
+      const url = `https://sessiondirectory.xboxlive.com/serviceconfigs/${scid}/sessionTemplates/MinecraftSession/sessions/${sessionName}`;
+      
+      const { targetIp, targetPort } = await this.getTargetConnection();
+      const authHeader = `XBL3.0 x=${userHash};${userToken}`;
       const sessionBody = {
         properties: {
           system: {
@@ -5032,10 +4925,7 @@ class XboxLiveBot {
         }
       };
 
-      // Register Section 1: BedrockRedirect_${xuid} (matches presence sessionReference)
-      const sessionName1 = `BedrockRedirect_${xuid}`;
-      const url1 = `https://sessiondirectory.xboxlive.com/serviceconfigs/${scid}/sessionTemplates/MinecraftSession/sessions/${sessionName1}`;
-      const res1 = await fetch(url1, {
+      const res = await fetch(url, {
         method: "PUT",
         headers: {
           "Authorization": authHeader,
@@ -5045,44 +4935,16 @@ class XboxLiveBot {
         body: JSON.stringify(sessionBody)
       });
       
-      if (res1.ok) {
-        this.addLog(`MPSD session '${sessionName1}' successfully registered/updated on Xbox Live. Target: ${targetIp}:${targetPort}`, "success");
-      } else {
-        const text1 = await res1.text().catch(() => "");
-        this.addLog(`Xbox MPSD session '${sessionName1}' update failed with status ${res1.status}: ${text1}`, "warn");
-      }
-
-      // Register Section 2: global (Standard format legacy fallback)
-      const sessionName2 = "global";
-      const url2 = `https://sessiondirectory.xboxlive.com/serviceconfigs/${scid}/sessionTemplates/MinecraftSession/sessions/${sessionName2}`;
-      const res2 = await fetch(url2, {
-        method: "PUT",
-        headers: {
-          "Authorization": authHeader,
-          "x-xbl-contract-version": "107",
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify(sessionBody)
-      });
-
-      if (res2.ok) {
-        this.addLog(`Legacy compatibility session 'global' registered successfully on Xbox Live.`, "success");
-      } else {
-        const text2 = await res2.text().catch(() => "");
-        this.addLog(`Xbox Legacy MPSD session 'global' update failed with status ${res2.status}: ${text2}`, "warn");
-      }
-
-      // Trigger simulated join tracking for realistic preview feedback:
-      if (res1.ok || res2.ok) {
+      if (res.ok) {
+        // Trigger simulated join tracking for realistic preview feedback:
         const online = this.state.friends.filter(f => f.status === "Online");
         if (online.length > 0 && Math.random() < 0.15) {
           const choice = online[Math.floor(Math.random() * online.length)];
           this.addLog(`Xbox Friend '${choice.gamertag}' joined your session. Dispatched Bedrock transfer packet to: ${targetIp}:${targetPort}!`, "success");
         }
       }
-    } catch (err: any) {
-      console.error("MPSD Registration error:", err.message);
-      this.addLog(`Failed to update Xbox MPSD sessions: ${err.message}`, "error");
+    } catch (err) {
+      console.error("MPSD Registration error:", err);
     }
   }
 
