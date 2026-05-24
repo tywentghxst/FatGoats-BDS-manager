@@ -13,7 +13,7 @@ import AdmZip from "adm-zip";
 import http from "http";
 import https from "https";
 import pkg from "express";
-import { Authflow } from "prismarine-auth";
+import { Authflow, Titles } from "prismarine-auth";
 
 const { json, urlencoded } = pkg;
 
@@ -4493,7 +4493,11 @@ class XboxLiveBot {
       this.authflow = new Authflow(
         "xbox_bot_user",
         cacheDir,
-        { flow: "msal" },
+        {
+          flow: "live",
+          authTitle: Titles.MinecraftNintendoSwitch,
+          deviceType: "Nintendo"
+        },
         (response: any) => {
           this.state.status = "need_verify";
           this.state.verification = {
