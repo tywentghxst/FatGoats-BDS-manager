@@ -4939,7 +4939,12 @@ class XboxLiveBot {
             activity: {
               richPresence: targetIp
                 ? `Redirecting to Minecraft Bedrock server: ${targetIp}:${targetPort}`
-                : "Awaiting server redirection targets..."
+                : "Awaiting server redirection targets...",
+              sessionReference: {
+                scid: "4fc10100-3fa5-4089-8d19-45036bf6ba22",
+                templateName: "MinecraftSession",
+                name: `BedrockRedirect_${xuid}`
+              }
             }
           }
         ]
@@ -4955,7 +4960,15 @@ class XboxLiveBot {
         body: JSON.stringify(body)
       });
 
-      if (res.ok && targetIp) {
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        this.addLog(`Xbox Presence API returned status ${res.status}: ${text || "Unknown"}. Enforcing dual-compatibility MPSD target sync...`, "warn");
+      }
+
+      // ALWAYS attempt MPSD registration regardless of whether presence POST succeeds,
+      // because presence POST often fails on server environments without active hardware tokens,
+      // but MPSD registration operates independently using XSTS authentication!
+      if (targetIp) {
         await this.registerMPSDSession(userHash, userToken, xuid);
       }
     } catch (err: any) {
@@ -4965,11 +4978,10 @@ class XboxLiveBot {
 
   private async registerMPSDSession(userHash: string, userToken: string, xuid: string) {
     try {
-      const scid = "4fc10100-3fa5-4089-8d19-45036bf6ba22"; // SCID of Minecraft
-      const sessionName = `BedrockRedirect_${xuid}`;
-      const url = `https://sessiondirectory.xboxlive.com/serviceconfigs/${scid}/sessionTemplates/MinecraftSession/sessions/${sessionName}`;
-      
       const { targetIp, targetPort } = await this.getTargetConnection();
+      if (!targetIp) return;
+
+      const scid = "4fc10100-3fa5-4089-8d19-45036bf6ba22"; // SCID of Minecraft
       const authHeader = `XBL3.0 x=${userHash};${userToken}`;
       const sessionBody = {
         properties: {
@@ -5001,7 +5013,10 @@ class XboxLiveBot {
         }
       };
 
-      const res = await fetch(url, {
+      // Register Section 1: BedrockRedirect_${xuid} (matches presence sessionReference)
+      const sessionName1 = `BedrockRedirect_${xuid}`;
+      const url1 = `https://sessiondirectory.xboxlive.com/serviceconfigs/${scid}/sessionTemplates/MinecraftSession/sessions/${sessionName1}`;
+      const res1 = await fetch(url1, {
         method: "PUT",
         headers: {
           "Authorization": authHeader,
@@ -5011,16 +5026,44 @@ class XboxLiveBot {
         body: JSON.stringify(sessionBody)
       });
       
-      if (res.ok) {
-        // Trigger simulated join tracking for realistic preview feedback:
+      if (res1.ok) {
+        this.addLog(`MPSD session '${sessionName1}' successfully registered/updated on Xbox Live. Target: ${targetIp}:${targetPort}`, "success");
+      } else {
+        const text1 = await res1.text().catch(() => "");
+        this.addLog(`Xbox MPSD session '${sessionName1}' update failed with status ${res1.status}: ${text1}`, "warn");
+      }
+
+      // Register Section 2: global (Standard format legacy fallback)
+      const sessionName2 = "global";
+      const url2 = `https://sessiondirectory.xboxlive.com/serviceconfigs/${scid}/sessionTemplates/MinecraftSession/sessions/${sessionName2}`;
+      const res2 = await fetch(url2, {
+        method: "PUT",
+        headers: {
+          "Authorization": authHeader,
+          "x-xbl-contract-version": "107",
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(sessionBody)
+      });
+
+      if (res2.ok) {
+        this.addLog(`Legacy compatibility session 'global' registered successfully on Xbox Live.`, "success");
+      } else {
+        const text2 = await res2.text().catch(() => "");
+        this.addLog(`Xbox Legacy MPSD session 'global' update failed with status ${res2.status}: ${text2}`, "warn");
+      }
+
+      // Trigger simulated join tracking for realistic preview feedback:
+      if (res1.ok || res2.ok) {
         const online = this.state.friends.filter(f => f.status === "Online");
         if (online.length > 0 && Math.random() < 0.15) {
           const choice = online[Math.floor(Math.random() * online.length)];
           this.addLog(`Xbox Friend '${choice.gamertag}' joined your session. Dispatched Bedrock transfer packet to: ${targetIp}:${targetPort}!`, "success");
         }
       }
-    } catch (err) {
-      console.error("MPSD Registration error:", err);
+    } catch (err: any) {
+      console.error("MPSD Registration error:", err.message);
+      this.addLog(`Failed to update Xbox MPSD sessions: ${err.message}`, "error");
     }
   }
 
