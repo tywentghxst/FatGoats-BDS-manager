@@ -2044,46 +2044,41 @@ export default function App() {
           </div>
         )}
 
-        {/* Mobile Header (Tactly tactile icons, easy thumb access) */}
-        <header className="md:hidden flex h-16 border-b border-zinc-900 bg-zinc-900/40 px-4 items-center justify-between flex-shrink-0 select-none z-[80]">
+        {/* Mobile Header (Aesthetic premium frosted header with glowing accents) */}
+        <header className="md:hidden flex h-16 border-b border-[#141d2e]/80 bg-[#090e18]/85 backdrop-blur-xl px-4 items-center justify-between flex-shrink-0 select-none z-[80] shadow-md">
           <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => setMobileMenuOpen(true)}
-              className="p-2 -ml-2 rounded-lg bg-zinc-900/50 border border-zinc-800 text-zinc-400 hover:text-white active:bg-zinc-850 hover:bg-zinc-800 transition-colors cursor-pointer"
-              aria-label="Open navigation menu"
-            >
-              <Menu className="w-5 h-5" />
-            </button>
+            <div className="flex items-center justify-center w-8 h-8 bg-indigo-600/15 border border-indigo-500/35 rounded-lg font-black text-sm text-indigo-400 select-none shadow-[0_0_10px_rgba(99,102,241,0.2)]">
+              F
+            </div>
             <div className="flex flex-col">
-              <span className="font-bold tracking-tight text-xs text-white leading-tight">FatGoats BDS</span>
-              <span className="text-[8px] text-zinc-500 uppercase font-black tracking-widest leading-none mt-0.5">MCPE Dedicate</span>
+              <span className="font-extrabold tracking-tight text-xs text-white leading-tight">FatGoats BDS</span>
+              <span className="text-[8px] text-indigo-400 uppercase font-black tracking-widest leading-none mt-0.5">Mobile Control</span>
             </div>
           </div>
 
           {/* Quick status dot or icon based on server status */}
           <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1 mt-[1px]">
-              <span className={`w-1.5 h-1.5 rounded-full ${
+            <div className="flex items-center gap-1.5 px-2 py-1 bg-zinc-950/60 border border-zinc-900 rounded-lg">
+              <span className={`w-2 h-2 rounded-full ${
                 stats?.status === "running" ? "bg-emerald-400 animate-ping" :
                 stats?.status === "starting" ? "bg-amber-400 animate-pulse" :
                 "bg-zinc-500"
               }`} />
-              <span className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider block">
+              <span className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest font-mono">
                 {stats?.status || "offline"}
               </span>
             </div>
 
-            {/* Micro Controls */}
-            <div className="flex gap-1 bg-zinc-900/80 border border-zinc-800/80 p-1 rounded-lg">
+            {/* Tap-tactile modern quick control buttons */}
+            <div className="flex gap-1.5 bg-zinc-900/60 border border-zinc-800/40 p-1 rounded-xl">
               <button
                 type="button"
                 onClick={() => executeServerControl("start")}
                 disabled={stats?.status !== "stopped"}
-                className={`p-1.5 rounded-md text-xs transition-colors shrink-0 ${
+                className={`p-2 rounded-lg transition-all duration-200 active:scale-95 flex items-center justify-center ${
                   stats?.status === "stopped"
-                    ? "bg-emerald-600/30 text-emerald-400 hover:bg-emerald-600 hover:text-white cursor-pointer"
-                    : "text-zinc-650 cursor-not-allowed"
+                    ? "bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600 hover:text-white border border-emerald-500/20 cursor-pointer"
+                    : "text-zinc-700 cursor-not-allowed"
                 }`}
                 title="Start Server"
               >
@@ -2093,10 +2088,10 @@ export default function App() {
                 type="button"
                 onClick={() => executeServerControl("stop")}
                 disabled={stats?.status === "stopped" || stats?.status === "stopping"}
-                className={`p-1.5 rounded-md text-xs transition-colors shrink-0 ${
+                className={`p-2 rounded-lg transition-all duration-200 active:scale-95 flex items-center justify-center ${
                   stats?.status !== "stopped" && stats?.status !== "stopping"
-                    ? "bg-red-650/35 text-red-400 hover:bg-red-600 hover:text-white cursor-pointer"
-                    : "text-zinc-650 cursor-not-allowed"
+                    ? "bg-rose-500/10 text-rose-400 hover:bg-rose-600 hover:text-white border border-rose-500/20 cursor-pointer"
+                    : "text-zinc-700 cursor-not-allowed"
                 }`}
                 title="Stop Server"
               >
@@ -2106,10 +2101,10 @@ export default function App() {
                 type="button"
                 onClick={() => executeServerControl("restart")}
                 disabled={stats?.status === "stopped"}
-                className={`p-1.5 rounded-md text-xs transition-colors shrink-0 ${
+                className={`p-2 rounded-lg transition-all duration-200 active:scale-95 flex items-center justify-center ${
                   stats?.status !== "stopped"
-                    ? "bg-zinc-800 text-zinc-300 hover:bg-zinc-700 cursor-pointer"
-                    : "text-zinc-650 cursor-not-allowed"
+                    ? "bg-zinc-800 text-zinc-300 hover:bg-zinc-700 border border-zinc-700/35 cursor-pointer"
+                    : "text-zinc-700 cursor-not-allowed"
                 }`}
                 title="Restart Server"
               >
@@ -2119,37 +2114,108 @@ export default function App() {
           </div>
         </header>
 
+        {/* Premium, Glassmorphic Floating Bottom Navigation (Only visible on mobile) */}
+        <nav id="mobile-bottom-nav" className="md:hidden fixed bottom-4 left-4 right-4 h-16 bg-[#080d16]/85 backdrop-blur-xl border border-zinc-800/45 rounded-2xl flex items-center justify-around px-3 z-[900] shadow-[0_12px_40px_rgba(0,0,0,0.65)] select-none animate-fade-in">
+          <button
+            type="button"
+            onClick={() => setNavTab("dashboard")}
+            className={`flex flex-col items-center justify-center w-12 h-12 rounded-xl transition-all duration-300 active:scale-95 cursor-pointer ${
+              navTab === "dashboard"
+                ? "text-emerald-400 bg-emerald-500/10 shadow-[0_0_12px_rgba(16,185,129,0.15)] font-bold"
+                : "text-zinc-500 hover:text-zinc-300"
+            }`}
+          >
+            <LayoutDashboard className="w-4 h-4" />
+            <span className="text-[8px] font-black tracking-widest mt-0.5 uppercase">Home</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setNavTab("addons")}
+            className={`flex flex-col items-center justify-center w-12 h-12 rounded-xl transition-all duration-300 active:scale-95 cursor-pointer ${
+              navTab === "addons"
+                ? "text-indigo-400 bg-indigo-500/10 shadow-[0_0_12px_rgba(99,102,241,0.15)] font-bold"
+                : "text-zinc-500 hover:text-zinc-300"
+            }`}
+          >
+            <Blocks className="w-4 h-4" />
+            <span className="text-[8px] font-black tracking-widest mt-0.5 uppercase">Packs</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setNavTab("worlds")}
+            className={`flex flex-col items-center justify-center w-12 h-12 rounded-xl transition-all duration-300 active:scale-95 cursor-pointer ${
+              navTab === "worlds"
+                ? "text-amber-400 bg-amber-500/10 shadow-[0_0_12px_rgba(245,158,11,0.15)] font-bold"
+                : "text-zinc-500 hover:text-zinc-300"
+            }`}
+          >
+            <FolderOpen className="w-4 h-4" />
+            <span className="text-[8px] font-black tracking-widest mt-0.5 uppercase">Worlds</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setNavTab("quick_commands")}
+            className={`flex flex-col items-center justify-center w-12 h-12 rounded-xl transition-all duration-300 active:scale-95 cursor-pointer ${
+              navTab === "quick_commands"
+                ? "text-yellow-400 bg-yellow-400/10 shadow-[0_0_12px_rgba(250,204,21,0.15)] font-bold"
+                : "text-zinc-500 hover:text-zinc-300"
+            }`}
+          >
+            <Zap className="w-4 h-4" />
+            <span className="text-[8px] font-black tracking-widest mt-0.5 uppercase">Cmds</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setMobileMenuOpen(!mobileMenuOpen);
+            }}
+            className={`flex flex-col items-center justify-center w-12 h-12 rounded-xl transition-all duration-300 active:scale-95 cursor-pointer ${
+              mobileMenuOpen
+                ? "text-white bg-zinc-800"
+                : "text-zinc-500 hover:text-zinc-350"
+            }`}
+          >
+            <Menu className="w-4 h-4 text-indigo-400" />
+            <span className="text-[8px] font-black tracking-widest mt-0.5 uppercase">More</span>
+          </button>
+        </nav>
+
         {/* Mobile Navigation Drawer backdrop & slider */}
         {mobileMenuOpen && (
-          <div className="md:hidden fixed inset-0 z-[999] flex">
+          <div className="md:hidden fixed inset-0 z-[999] flex animate-fade-in">
             {/* Backdrop */}
             <div
-              className="fixed inset-0 bg-black/60 backdrop-blur-sm transition-opacity duration-300"
+              className="fixed inset-0 bg-black/75 backdrop-blur-md transition-opacity duration-300"
               onClick={() => setMobileMenuOpen(false)}
             />
             {/* Slide-out Panel */}
-            <div className="relative flex flex-col w-72 max-w-[80vw] h-full bg-zinc-950 border-r border-zinc-900 shadow-2xl p-6 transition-transform duration-300 transform-none select-none">
-              <div className="flex items-center justify-between pb-4 border-b border-zinc-900 mb-6 flex-shrink-0">
+            <div className="relative flex flex-col w-72 max-w-[80vw] h-full bg-[#070b13]/95 backdrop-blur-2xl border-l border-zinc-900 shadow-2xl p-6 transition-transform duration-300 transform-none select-none ml-auto">
+              <div className="flex items-center justify-between pb-4 border-b border-zinc-900/60 mb-6 flex-shrink-0">
                 <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 bg-emerald-600/20 border border-emerald-500/30 rounded-lg flex items-center justify-center font-black text-lg text-emerald-400">
+                  <div className="w-8 h-8 bg-indigo-600/20 border border-indigo-500/30 rounded-lg flex items-center justify-center font-black text-lg text-indigo-400 shadow-sm">
                     F
                   </div>
                   <div className="flex flex-col">
-                    <span className="font-bold tracking-tight text-base text-white">FatGoats BDS</span>
-                    <span className="text-[9px] text-zinc-500 uppercase font-black tracking-widest leading-none mt-0.5">MCPE Dedicate</span>
+                    <span className="font-extrabold tracking-tight text-sm text-white">FatGoats BDS</span>
+                    <span className="text-[9px] text-indigo-400 uppercase font-bold tracking-widest leading-none mt-1">Control Center</span>
                   </div>
                 </div>
                 <button
                   type="button"
                   onClick={() => setMobileMenuOpen(false)}
-                  className="p-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white cursor-pointer"
+                  className="p-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white cursor-pointer transition-colors"
                 >
                   <X className="w-4 h-4" />
                 </button>
               </div>
 
               {/* Menu selections */}
-              <div className="flex-1 space-y-1 overflow-y-auto pr-1">
+              <div className="flex-1 space-y-1.5 overflow-y-auto pr-1">
+                <p className="text-[9px] font-black uppercase text-zinc-500 tracking-wider mb-2 select-none">Quick Navigation</p>
                 {navItems.map((item) => {
                   const IconComponent = item.icon;
                   const isSelected = navTab === item.id;
@@ -2161,13 +2227,13 @@ export default function App() {
                         setNavTab(item.id as any);
                         setMobileMenuOpen(false);
                       }}
-                      className={`w-full px-4 py-2.5 rounded-xl flex items-center gap-3 text-xs font-semibold transition-all cursor-pointer ${
+                      className={`w-full px-4 py-3 rounded-xl flex items-center gap-3.5 text-xs font-bold transition-all cursor-pointer ${
                         isSelected
-                          ? "bg-zinc-800/80 text-white shadow-xl border border-zinc-750/50"
-                          : "text-zinc-400 hover:bg-zinc-900/60 hover:text-zinc-350"
+                          ? "bg-indigo-650/15 text-indigo-200 border border-indigo-500/30 shadow-md font-extrabold"
+                          : "text-zinc-400 hover:bg-zinc-900/60 hover:text-zinc-200 border border-transparent"
                       }`}
                     >
-                      <IconComponent className={`w-3.5 h-3.5 ${item.color} opacity-90 ${item.pulse ? "animate-pulse" : ""}`} />
+                      <IconComponent className={`w-3.5 h-3.5 ${item.color} opacity-95 ${item.pulse ? "animate-pulse" : ""}`} />
                       {item.label}
                     </button>
                   );
@@ -2176,13 +2242,13 @@ export default function App() {
 
               {/* User profile footer controls */}
               <div className="pt-4 border-t border-zinc-900 mt-6 space-y-3 flex-shrink-0">
-                <div className="flex items-center gap-3 p-2 bg-zinc-900/30 border border-zinc-900 rounded-xl">
-                  <div className="w-7 h-7 rounded-full bg-emerald-750 flex items-center justify-center font-bold text-xs text-white select-none">
+                <div className="flex items-center gap-3 p-2.5 bg-[#0a0f18]/65 border border-zinc-900 rounded-xl">
+                  <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-indigo-600 to-purple-600 flex items-center justify-center font-bold text-xs text-white select-none">
                     {currentUser.username[0]?.toUpperCase() || "A"}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-[11px] font-bold text-white truncate leading-tight">{currentUser.username}</p>
-                    <span className={`text-[8px] uppercase font-black tracking-widest leading-none ${currentUser.role === "admin" ? "text-emerald-400" : "text-amber-400"}`}>
+                    <p className="text-xs font-bold text-white truncate leading-tight">{currentUser.username}</p>
+                    <span className={`text-[8px] uppercase tracking-widest font-extrabold leading-none ${currentUser.role === "admin" ? "text-indigo-400" : "text-amber-400"}`}>
                       {currentUser.role}
                     </span>
                   </div>
@@ -2192,13 +2258,13 @@ export default function App() {
                       setMobileMenuOpen(false);
                       handleLogout();
                     }}
-                    className="p-1.5 hover:bg-zinc-800 text-zinc-400 hover:text-white rounded-lg transition-colors cursor-pointer"
+                    className="p-2 hover:bg-zinc-800 text-zinc-400 hover:text-white rounded-lg transition-colors cursor-pointer border border-transparent hover:border-zinc-700/50"
                     title="Logout"
                   >
                     <LogOut className="w-3.5 h-3.5" />
                   </button>
                 </div>
-                <div className="text-[9px] text-zinc-650 text-center uppercase tracking-widest font-black leading-none pb-1">v1.4.2 stable</div>
+                <div className="text-[9px] text-zinc-500 text-center uppercase tracking-widest font-black leading-none pb-1">v1.4.2 stable</div>
               </div>
             </div>
           </div>
@@ -2277,7 +2343,7 @@ export default function App() {
         </header>
 
         {/* 4.4 Dynamic routing container depending on visible Nav Tab */}
-        <div className="flex-1 p-4 md:p-6 overflow-y-auto min-h-0 select-none">
+        <div className="flex-1 p-4 md:p-6 pb-28 md:pb-6 overflow-y-auto min-h-0 select-none">
           {navTab === "dashboard" && (
             <div className="grid grid-cols-1 xl:grid-cols-4 gap-6 z-10 relative animate-fade-in">
               {/* Stats Widgets Bento */}
@@ -2499,7 +2565,7 @@ export default function App() {
             });
 
             return (
-              <div className="space-y-6 select-none flex-1 p-8 bg-zinc-950/40 font-sans animate-fade-in">
+              <div className="space-y-6 select-none flex-1 p-4 md:p-8 bg-zinc-950/40 font-sans animate-fade-in">
                 
                 {/* Central Settings Navigation */}
                 <div className="mb-6 space-y-5 select-none animate-fadeIn">
@@ -2521,7 +2587,7 @@ export default function App() {
                     )}
                   </div>
 
-                  <div className="flex flex-wrap gap-2 p-1 bg-zinc-950/80 border border-zinc-900 rounded-xl w-fit max-w-full">
+                  <div className="flex overflow-x-auto whitespace-nowrap scrollbar-none gap-2 p-1 bg-zinc-950/80 border border-zinc-900 rounded-xl w-full max-w-full">
                     <button
                       type="button"
                       onClick={() => setSettingsSubTab("properties")}
@@ -3259,7 +3325,7 @@ export default function App() {
 
           {/* ==================== E. USERS AND SECURITY AUTHORIZATIONS ==================== */}
           {navTab === "settings" && settingsSubTab === "users" && isAdmin && (
-            <div className="space-y-6 flex-1 p-8 bg-zinc-950/40 font-sans">
+            <div className="space-y-6 flex-1 p-4 md:p-8 bg-zinc-950/40 font-sans">
               
               {/* Central Settings Navigation */}
               <div className="mb-6 space-y-5 select-none animate-fadeIn">
@@ -3281,7 +3347,7 @@ export default function App() {
                   )}
                 </div>
 
-                <div className="flex flex-wrap gap-2 p-1 bg-zinc-950/80 border border-zinc-900 rounded-xl w-fit max-w-full">
+                <div className="flex overflow-x-auto whitespace-nowrap scrollbar-none gap-2 p-1 bg-zinc-950/80 border border-zinc-900 rounded-xl w-full max-w-full">
                   <button
                     type="button"
                     onClick={() => setSettingsSubTab("properties")}
@@ -3815,7 +3881,7 @@ export default function App() {
           )}
 
           {navTab === "settings" && settingsSubTab === "selfhost" && (
-            <div className="space-y-6 select-none animate-fade-in flex-1 p-8 bg-zinc-950/40 font-sans">
+            <div className="space-y-6 select-none animate-fade-in flex-1 p-4 md:p-8 bg-zinc-950/40 font-sans">
               
               {/* Central Settings Navigation */}
               <div className="mb-6 space-y-5 select-none animate-fadeIn">
@@ -3837,7 +3903,7 @@ export default function App() {
                   )}
                 </div>
 
-                <div className="flex flex-wrap gap-2 p-1 bg-zinc-950/80 border border-zinc-900 rounded-xl w-fit max-w-full">
+                <div className="flex overflow-x-auto whitespace-nowrap scrollbar-none gap-2 p-1 bg-zinc-950/80 border border-zinc-900 rounded-xl w-full max-w-full">
                   <button
                     type="button"
                     onClick={() => setSettingsSubTab("properties")}
@@ -4282,7 +4348,7 @@ export default function App() {
 
           {/* ==================== EXPERIMENTAL LAB TABS ==================== */}
           {navTab === "experimental" && (
-            <div className="flex-1 p-8 overflow-y-auto space-y-8 bg-zinc-950/40 font-sans">
+            <div className="flex-1 p-4 md:p-8 overflow-y-auto space-y-8 bg-zinc-950/40 font-sans">
               
               {/* Central Experimental Navigation */}
               <div className="mb-6 space-y-5 select-none animate-fadeIn">
@@ -4302,7 +4368,7 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="flex flex-wrap gap-2 p-1 bg-zinc-950/80 border border-zinc-900 rounded-xl w-fit max-w-full">
+                <div className="flex overflow-x-auto whitespace-nowrap scrollbar-none gap-2 p-1 bg-zinc-950/80 border border-zinc-900 rounded-xl w-full max-w-full">
                   <button
                     type="button"
                     onClick={() => setExperimentalSubTab("players_map")}
@@ -4373,7 +4439,7 @@ export default function App() {
           )}
 
           {navTab === "settings" && settingsSubTab === "updates" && (
-            <div className="flex-1 p-8 overflow-y-auto space-y-8 bg-zinc-950/40 font-sans">
+            <div className="flex-1 p-4 md:p-8 overflow-y-auto space-y-8 bg-zinc-950/40 font-sans">
               
               {/* Central Settings Navigation */}
               <div className="mb-6 space-y-5 select-none animate-fadeIn">
@@ -4395,7 +4461,7 @@ export default function App() {
                   )}
                 </div>
 
-                <div className="flex flex-wrap gap-2 p-1 bg-zinc-950/80 border border-zinc-900 rounded-xl w-fit max-w-full">
+                <div className="flex overflow-x-auto whitespace-nowrap scrollbar-none gap-2 p-1 bg-zinc-950/80 border border-zinc-900 rounded-xl w-full max-w-full">
                   <button
                     type="button"
                     onClick={() => setSettingsSubTab("properties")}
@@ -4473,7 +4539,7 @@ export default function App() {
           )}
 
           {navTab === "settings" && settingsSubTab === "properties" && (
-            <div className="flex-1 p-8 overflow-y-auto space-y-8 bg-zinc-950/40 font-sans">
+            <div className="flex-1 p-4 md:p-8 overflow-y-auto space-y-8 bg-zinc-950/40 font-sans">
               
               {/* Central Settings Navigation */}
               <div className="mb-6 space-y-5 select-none animate-fadeIn">
@@ -4495,7 +4561,7 @@ export default function App() {
                   )}
                 </div>
 
-                <div className="flex flex-wrap gap-2 p-1 bg-zinc-950/80 border border-zinc-900 rounded-xl w-fit max-w-full">
+                <div className="flex overflow-x-auto whitespace-nowrap scrollbar-none gap-2 p-1 bg-zinc-950/80 border border-zinc-900 rounded-xl w-full max-w-full">
                   <button
                     type="button"
                     onClick={() => setSettingsSubTab("properties")}
