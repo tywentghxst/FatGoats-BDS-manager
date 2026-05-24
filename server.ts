@@ -2685,6 +2685,27 @@ app.put("/api/addons/:uuid", authenticateRequest, requireAdmin, (req, res) => {
   res.json({ success: true, updatedCount: toUpdate.length, updatedNames });
 });
 
+// Helper function to recursively copy files while catching lock/permission errors gracefully
+function copyFolderSyncRecursive(src: string, dest: string) {
+  if (!fs.existsSync(src)) return;
+  const stats = fs.statSync(src);
+  if (stats.isDirectory()) {
+    if (!fs.existsSync(dest)) {
+      fs.mkdirSync(dest, { recursive: true });
+    }
+    const files = fs.readdirSync(src);
+    for (const file of files) {
+      copyFolderSyncRecursive(path.join(src, file), path.join(dest, file));
+    }
+  } else if (stats.isFile()) {
+    try {
+      fs.copyFileSync(src, dest);
+    } catch (err: any) {
+      console.warn(`Could not copy file ${src} during backup due to locks or permission error: ${err.message}`);
+    }
+  }
+}
+
 // World backup helper function
 function performWorldBackup(worldFolderName: string, isAutomaticReason?: string): string | null {
   try {
@@ -2709,8 +2730,20 @@ function performWorldBackup(worldFolderName: string, isAutomaticReason?: string)
     const destZipPath = path.join(backupsDir, zipName);
     
     const zip = new AdmZip();
-    zip.addLocalFolder(targetWorldPath);
-    zip.writeZip(destZipPath);
+    const tempBackupDir = path.join(SERVER_DIR, "temp_backup_dir_" + Date.now());
+    
+    try {
+      copyFolderSyncRecursive(targetWorldPath, tempBackupDir);
+      zip.addLocalFolder(tempBackupDir);
+      zip.writeZip(destZipPath);
+    } finally {
+      // Cleanup the temporary copied directory securely
+      if (fs.existsSync(tempBackupDir)) {
+        try {
+          fs.rmSync(tempBackupDir, { recursive: true, force: true });
+        } catch (rmErr) {}
+      }
+    }
     
     const msg = isAutomaticReason 
       ? `Auto-backup (triggered by ${isAutomaticReason}) successfully compiled for "${worldFolderName}": ${zipName}`
@@ -2965,8 +2998,17 @@ app.get("/api/worlds", authenticateRequest, (req, res) => {
       }
       try { calcSize(fullPath); } catch (e) {}
 
+      // Get display name from levelname.txt under the world's directory
+      const levelNameFile = path.join(fullPath, "levelname.txt");
+      let displayName = folder;
+      if (fs.existsSync(levelNameFile)) {
+        try {
+          displayName = fs.readFileSync(levelNameFile, "utf-8").trim();
+        } catch (e) {}
+      }
+
       return {
-        name: folder,
+        name: displayName || folder,
         folderName: folder,
         sizeBytes: size,
         isActive: dbCache.appConfig.levelName === folder
@@ -2976,6 +3018,97 @@ app.get("/api/worlds", authenticateRequest, (req, res) => {
     res.json(worlds);
   } catch (e: any) {
     res.status(500).json({ error: e.message });
+  }
+});
+
+// Delete specific world folder from disk
+app.delete("/api/worlds/:folderName", authenticateRequest, requireAdmin, (req, res) => {
+  const folderName = req.params.folderName;
+  
+  if (dbCache.appConfig.levelName === folderName) {
+    res.status(400).json({ error: "Cannot delete the currently active world on the server. Please set another world active first." });
+    return;
+  }
+  
+  const worldsDir = path.join(SERVER_DIR, "worlds");
+  const targetWorldPath = path.join(worldsDir, folderName);
+  
+  if (!fs.existsSync(targetWorldPath)) {
+    res.status(404).json({ error: "World directory not found on the server filesystem." });
+    return;
+  }
+  
+  try {
+    fs.rmSync(targetWorldPath, { recursive: true, force: true });
+    logServerMessage("SYS", `Deleted world folder from disk repository: ${folderName}`);
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: `Could not delete world directory: ${err.message}` });
+  }
+});
+
+// Configure world folders or rename displays
+app.post("/api/worlds/:folderName/configure", authenticateRequest, requireAdmin, (req, res) => {
+  const folderName = req.params.folderName;
+  const { newFolderName, newDisplayName } = req.body;
+  
+  const worldsDir = path.join(SERVER_DIR, "worlds");
+  const oldPath = path.join(worldsDir, folderName);
+  
+  if (!fs.existsSync(oldPath)) {
+    res.status(404).json({ error: "World directory not found." });
+    return;
+  }
+  
+  try {
+    // 1. If display name is supplied, write it directly to levelname.txt
+    if (typeof newDisplayName === "string") {
+      const levelNameFile = path.join(oldPath, "levelname.txt");
+      fs.writeFileSync(levelNameFile, newDisplayName.trim(), "utf-8");
+    }
+    
+    let finalFolderName = folderName;
+    
+    // 2. If new folder name is provided and different, rename the directory
+    if (newFolderName && typeof newFolderName === "string" && newFolderName.trim() !== folderName) {
+      const sanitizedFolder = newFolderName.trim().replace(/[^a-zA-Z0-9_\- ]/g, "");
+      if (!sanitizedFolder) {
+        res.status(400).json({ error: "Invalid target folder name." });
+        return;
+      }
+      
+      const newPath = path.join(worldsDir, sanitizedFolder);
+      if (fs.existsSync(newPath)) {
+        res.status(400).json({ error: "A world folder with that directory name already exists." });
+        return;
+      }
+      
+      // If server is active, prevent directory rename of the current world folder name
+      const isActiveWorld = dbCache.appConfig.levelName === folderName;
+      if (isActiveWorld && serverStatus !== "stopped") {
+        res.status(400).json({ error: "Cannot rename the active world folder while the Bedrock server is active! Please stop the Bedrock server first." });
+        return;
+      }
+      
+      fs.renameSync(oldPath, newPath);
+      finalFolderName = sanitizedFolder;
+      
+      // If it was active, update levelName config state
+      if (isActiveWorld) {
+        dbCache.appConfig.levelName = sanitizedFolder;
+        saveDB();
+        writeServerProperties();
+        updateWorldPacksConfig();
+      }
+      
+      logServerMessage("SYS", `Renamed world folder from "${folderName}" to "${sanitizedFolder}"`);
+    } else {
+      logServerMessage("SYS", `Updated metadata details of world configuration: ${folderName}`);
+    }
+    
+    res.json({ success: true, folderName: finalFolderName });
+  } catch (err: any) {
+    res.status(500).json({ error: `Failed to configure world: ${err.message}` });
   }
 });
 

@@ -64,7 +64,8 @@ import {
   CloudDownload,
   FlaskConical,
   GripVertical,
-  Search
+  Search,
+  Edit3
 } from "lucide-react";
 
 import {
@@ -405,6 +406,9 @@ export default function App() {
     return count;
   }, [addons]);
   const [worlds, setWorlds] = useState<any[]>([]);
+  const [editingWorld, setEditingWorld] = useState<string | null>(null);
+  const [editDisplayName, setEditDisplayName] = useState<string>("");
+  const [editFolderName, setEditFolderName] = useState<string>("");
   const [backups, setBackups] = useState<any[]>([]);
   const [loadingBackups, setLoadingBackups] = useState<boolean>(false);
   const [versions, setVersions] = useState<BedrockVersion[]>([]);
@@ -1450,6 +1454,54 @@ export default function App() {
       showBanner("Communication failure saving backup.", "error");
     } finally {
       setLoadingBackups(false);
+    }
+  };
+
+  // Delete World directory
+  const handleDeleteWorld = async (folderName: string) => {
+    if (!token || !isAdmin) return;
+    try {
+      const res = await fetch(`/api/worlds/${folderName}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        showBanner(`Successfully deleted world folder "${folderName}" from disk repository.`, "success");
+        fetchDataFeed();
+      } else {
+        const d = await res.json();
+        showBanner(d.error || "Failed to delete world.", "error");
+      }
+    } catch (e) {
+      showBanner("Communication failure deleting world folder.", "error");
+    }
+  };
+
+  // Configure world settings (folder name & display name)
+  const handleConfigureWorld = async (folderName: string) => {
+    if (!token || !isAdmin) return;
+    try {
+      const res = await fetch(`/api/worlds/${folderName}/configure`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          newFolderName: editFolderName,
+          newDisplayName: editDisplayName
+        })
+      });
+      if (res.ok) {
+        showBanner("World configuration updated successfully.", "success");
+        setEditingWorld(null);
+        fetchDataFeed();
+      } else {
+        const d = await res.json();
+        showBanner(d.error || "Failed to configure world parameters.", "error");
+      }
+    } catch (e) {
+      showBanner("Communication failure configuring world.", "error");
     }
   };
 
@@ -2932,30 +2984,79 @@ export default function App() {
                         }`}
                       >
                         <div className="space-y-4">
-                          <div className="flex items-center gap-3">
-                            <FolderOpen className={`w-8 h-8 ${w.isActive ? "text-emerald-400" : "text-zinc-500"}`} />
-                            <div>
-                              <h4 className="text-xs font-black text-white tracking-wide">{w.name}</h4>
-                              <p className="text-[10px] text-zinc-500 font-mono mt-0.5">Size on Disk: {formatBytes(w.sizeBytes)}</p>
-                            </div>
-                          </div>
-
-                          {w.isActive ? (
-                            <div className="p-3 bg-emerald-500/5 rounded-xl border border-emerald-500/10 flex items-center gap-2 text-[10px] text-emerald-400">
-                              <CheckCircle className="w-3.5 h-3.5 flex-shrink-0" />
-                              <span>This world is currently active on server start configs.</span>
+                          {editingWorld === w.folderName ? (
+                            <div className="space-y-3 p-3 bg-zinc-950 border border-zinc-800 rounded-xl">
+                              <span className="text-[10px] font-black text-zinc-400 block uppercase tracking-widest">Configure World</span>
+                              <div className="space-y-2">
+                                <div>
+                                  <label className="text-[10px] text-zinc-500 block mb-1">World Display Name</label>
+                                  <input
+                                    type="text"
+                                    value={editDisplayName}
+                                    onChange={(e) => setEditDisplayName(e.target.value)}
+                                    className="w-full text-xs bg-zinc-900 border border-zinc-800 rounded-lg p-2 text-white focus:border-indigo-500 focus:outline-none"
+                                    placeholder="e.g. My Survival Realm"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="text-[10px] text-zinc-500 block mb-1">Folder Name (on disk)</label>
+                                  <input
+                                    type="text"
+                                    value={editFolderName}
+                                    onChange={(e) => setEditFolderName(e.target.value)}
+                                    className="w-full text-xs bg-zinc-900 border border-zinc-800 rounded-lg p-2 text-white focus:border-indigo-500 focus:outline-none"
+                                    placeholder="e.g. BedrockWorld"
+                                  />
+                                  {w.isActive && (
+                                    <span className="text-[9px] text-amber-500/80 leading-normal block mt-1">
+                                      * Renaming folder name of the active world requires bedrock server to be fully stopped first.
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="flex gap-1.5 justify-end mt-2 pt-1">
+                                <button
+                                  onClick={() => setEditingWorld(null)}
+                                  className="text-[10px] uppercase font-black text-zinc-400 bg-zinc-900 hover:bg-zinc-800 px-3 py-1.5 rounded-lg border border-zinc-800 cursor-pointer"
+                                >
+                                  Cancel
+                                </button>
+                                <button
+                                  onClick={() => handleConfigureWorld(w.folderName)}
+                                  className="text-[10px] uppercase font-black text-white bg-indigo-600 hover:bg-indigo-500 px-3 py-1.5 rounded-lg cursor-pointer"
+                                >
+                                  Save Change
+                                </button>
+                              </div>
                             </div>
                           ) : (
-                            <p className="text-[10px] text-zinc-600 leading-snug">Folder: worlds/{w.folderName}</p>
+                            <>
+                              <div className="flex items-center gap-3">
+                                <FolderOpen className={`w-8 h-8 ${w.isActive ? "text-emerald-400" : "text-zinc-500"}`} />
+                                <div className="min-w-0 flex-1">
+                                  <h4 className="text-xs font-black text-white tracking-wide truncate" title={w.name}>{w.name}</h4>
+                                  <p className="text-[10px] text-zinc-500 font-mono mt-0.5">Size on Disk: {formatBytes(w.sizeBytes)}</p>
+                                </div>
+                              </div>
+
+                              {w.isActive ? (
+                                <div className="p-3 bg-emerald-500/5 rounded-xl border border-emerald-500/10 flex items-center gap-2 text-[10px] text-emerald-400">
+                                  <CheckCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                                  <span>This world is currently active on server start configs.</span>
+                                </div>
+                              ) : (
+                                <p className="text-[10px] text-zinc-600 leading-snug truncate">Folder: worlds/{w.folderName}</p>
+                              )}
+                            </>
                           )}
                         </div>
 
                         <div className="flex justify-between items-center mt-5 pt-4 border-t border-zinc-900/65">
                           <div className="flex items-center gap-2">
-                            {isAdmin && !w.isActive && (
+                            {isAdmin && !w.isActive && !editingWorld && (
                               <button
                                 onClick={() => setActiveWorld(w.folderName)}
-                                className="bg-emerald-600/10 text-emerald-400 hover:bg-emerald-605/20 border border-emerald-500/20 font-black text-[9px] uppercase tracking-widest px-3 py-1.5 rounded-lg select-none cursor-pointer"
+                                className="bg-emerald-600/10 text-emerald-400 hover:bg-emerald-605/20 border border-emerald-500/20 font-black text-[9px] uppercase tracking-widest px-3 py-1.5 rounded-lg select-none cursor-pointer animate-fadeIn"
                               >
                                 Set Active
                               </button>
@@ -2968,8 +3069,23 @@ export default function App() {
                           </div>
 
                           <div className="flex items-center gap-1.5">
+                            {/* Configure World Button */}
+                            {isAdmin && !editingWorld && (
+                              <button
+                                onClick={() => {
+                                  setEditingWorld(w.folderName);
+                                  setEditDisplayName(w.name);
+                                  setEditFolderName(w.folderName);
+                                }}
+                                title="Configure Display Name & Folder directory"
+                                className="p-1.5 rounded-lg border border-zinc-800 bg-zinc-900/40 hover:bg-zinc-800 text-zinc-300 transition-colors cursor-pointer"
+                              >
+                                <Edit3 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+
                             {/* Create Backup */}
-                            {isAdmin && (
+                            {isAdmin && !editingWorld && (
                               <button
                                 onClick={() => handleCreateBackup(w.folderName)}
                                 disabled={loadingBackups}
@@ -2981,13 +3097,32 @@ export default function App() {
                             )}
 
                             {/* Export Download */}
-                            <button
-                              onClick={() => handleExportWorld(w.folderName)}
-                              title="Download world directory package as .mcworld"
-                              className="p-1.5 rounded-lg border border-zinc-805 bg-amber-550/5 hover:bg-amber-500/19 text-amber-400 transition-colors cursor-pointer"
-                            >
-                              <CloudDownload className="w-3.5 h-3.5" />
-                            </button>
+                            {!editingWorld && (
+                              <button
+                                onClick={() => handleExportWorld(w.folderName)}
+                                title="Download world directory package as .mcworld"
+                                className="p-1.5 rounded-lg border border-zinc-805 bg-amber-550/5 hover:bg-amber-500/19 text-amber-400 transition-colors cursor-pointer"
+                              >
+                                <CloudDownload className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+
+                            {/* Delete World */}
+                            {isAdmin && !w.isActive && !editingWorld && (
+                              <button
+                                onClick={() => {
+                                  promptConfirm(
+                                    "Delete World Directory",
+                                    `Are you sure you want to permanently delete the world directory "${w.folderName}"? ALL structures, players inventory, and blocks in it will be lost forever.`,
+                                    () => handleDeleteWorld(w.folderName)
+                                  );
+                                }}
+                                title="Permanently delete world folder"
+                                className="p-1.5 rounded-lg border border-red-900/30 bg-red-950/10 hover:bg-red-950/30 text-red-400 transition-colors cursor-pointer"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
                           </div>
                         </div>
                       </div>
