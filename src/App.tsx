@@ -357,7 +357,13 @@ export default function App() {
     backupFrequencyHours: 24,
     backupOnStart: false,
     backupOnStop: false,
-    lastBackupTimestamp: 0
+    lastBackupTimestamp: 0,
+    appPort: 3000,
+    bindAddress: "0.0.0.0",
+    enableHttps: false,
+    sslCertPath: "",
+    sslKeyPath: "",
+    upnpEnabled: false
   });
 
   // Live collections
@@ -3910,6 +3916,184 @@ export default function App() {
                 <p className="text-xs text-zinc-400 mt-1 max-w-3xl leading-relaxed">
                   Learn how to build, run and orchestrate this server manager on local physical machines, configure headless automation backgrounds, or utilize container standardization with Docker.
                 </p>
+              </div>
+
+              {/* Dynamic Network Settings Panel (Requested by User) */}
+              <div className="bg-zinc-900/30 border border-zinc-900 rounded-2xl p-6 shadow-xl space-y-6 select-none animate-fade-in font-sans">
+                <div>
+                  <h3 className="text-sm font-black uppercase text-white tracking-wider flex items-center gap-2">
+                    <Globe className="w-4 h-4 text-teal-400" />
+                    Network & Port Configuration
+                  </h3>
+                  <p className="text-xs text-zinc-400 mt-1">
+                    Manage the IP binding hosts, router discovery mechanisms, and port routing mapping parameters for the administration system and Bedrock server.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {/* Web App Panel Port */}
+                  <div className="bg-zinc-950/40 border border-zinc-900 p-4 rounded-xl space-y-2">
+                    <div className="flex justify-between items-center">
+                      <label className="text-xs font-bold text-zinc-300 block">Web Panel Port</label>
+                      <span className="text-[10px] bg-zinc-900 px-2 py-0.5 rounded text-zinc-500 font-mono">APP_PORT</span>
+                    </div>
+                    <input
+                      type="number"
+                      disabled={!isAdmin}
+                      min="1"
+                      max="65535"
+                      value={appConfig.appPort ?? 3000}
+                      onChange={(e) => {
+                        const val = parseInt(e.target.value) || 3000;
+                        updateSettingsField({ appPort: val });
+                      }}
+                      className="w-full bg-zinc-950 border border-zinc-900 focus:border-zinc-800 focus:ring-1 focus:ring-zinc-800 rounded-lg px-3 py-2 text-xs font-mono text-white outline-none cursor-text disabled:opacity-50"
+                    />
+                    <p className="text-[10px] text-zinc-500 leading-normal">
+                      The network port that this web administration manager runs on.
+                    </p>
+                    <div className="text-[10px] text-amber-500/80 bg-amber-950/10 border border-amber-900/20 p-2 rounded-lg leading-relaxed flex items-start gap-1.5 mt-2">
+                      <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                      <span>
+                        Port is locked to <strong>3000</strong> on this hosted sandbox to preserve live preview, but your custom port will be active when running self-hosted!
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Bedrock Minecraft Port */}
+                  <div className="bg-zinc-950/40 border border-zinc-900 p-4 rounded-xl space-y-2">
+                    <div className="flex justify-between items-center">
+                      <label className="text-xs font-bold text-zinc-300 block">Bedrock Server Port</label>
+                      <span className="text-[10px] bg-zinc-900 px-2 py-0.5 rounded text-teal-400 font-mono">PORTS_UDP</span>
+                    </div>
+                    <input
+                      type="number"
+                      disabled={!isAdmin}
+                      min="1"
+                      max="65535"
+                      value={appConfig.serverPort ?? 19132}
+                      onChange={(e) => {
+                        const val = parseInt(e.target.value) || 19132;
+                        updateSettingsField({ serverPort: val });
+                      }}
+                      className="w-full bg-zinc-950 border border-zinc-900 focus:border-zinc-800 focus:ring-1 focus:ring-zinc-800 rounded-lg px-3 py-2 text-xs font-mono text-white outline-none cursor-text disabled:opacity-50"
+                    />
+                    <p className="text-[10px] text-zinc-500 leading-normal">
+                      The game port that Minecraft players use to connect.
+                    </p>
+                    <div className="text-[10px] text-zinc-530 bg-zinc-900/40 border border-zinc-900 p-2 rounded-lg leading-relaxed flex items-start gap-1.5 mt-2">
+                      <Activity className="w-3.5 h-3.5 text-zinc-400 flex-shrink-0 mt-0.5" />
+                      <span>
+                        Bedrock Dedicated uses UDP protocol. Be sure to select <strong>UDP</strong> in your router settings.
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* IPv4 Bind Host Address */}
+                  <div className="bg-zinc-950/40 border border-zinc-900 p-4 rounded-xl space-y-2">
+                    <div className="flex justify-between items-center">
+                      <label className="text-xs font-bold text-zinc-300 block">IP Interface Binding</label>
+                      <span className="text-[10px] bg-zinc-900 px-2 py-0.5 rounded text-zinc-500 font-mono">BIND_ADDR</span>
+                    </div>
+                    <select
+                      disabled={!isAdmin}
+                      value={appConfig.bindAddress ?? "0.0.0.0"}
+                      onChange={(e) => updateSettingsField({ bindAddress: e.target.value })}
+                      className="w-full bg-zinc-950 border border-zinc-900 focus:border-zinc-808 focus:ring-1 focus:ring-zinc-800 rounded-lg px-3 py-2 text-xs font-mono text-white outline-none cursor-pointer disabled:opacity-50"
+                    >
+                      <option value="0.0.0.0">0.0.0.0 (All interfaces - default)</option>
+                      <option value="127.0.0.1">127.0.0.1 (Local loopback only - secure)</option>
+                    </select>
+                    <p className="text-[10px] text-zinc-500 leading-normal">
+                      Restricts access to loopback connection card or allows all incoming network clients.
+                    </p>
+                    <div className="text-[10px] text-teal-400 bg-teal-950/10 border border-teal-900/20 p-2 rounded-lg leading-relaxed flex items-start gap-1.5 mt-2">
+                      <Shield className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                      <span>
+                        Using 127.0.0.1 secures the dashboard so only callers directly on the host computer can connect.
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* UPnP Routing Switch */}
+                  <div className="bg-zinc-950/40 border border-zinc-900 p-4 rounded-xl space-y-3">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <label className="text-xs font-bold text-zinc-300 block">Router UPnP Port-Mapping</label>
+                        <p className="text-[10px] text-zinc-500 mt-1">
+                          Automatically negotiate port-mappings via UPnP. Easy multiplayer without manual router modification.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        disabled={!isAdmin}
+                        onClick={() => updateSettingsField({ upnpEnabled: !appConfig.upnpEnabled })}
+                        className={`w-10 h-6 shrink-0 rounded-full p-1 transition-all duration-300 cursor-pointer outline-none ${
+                          appConfig.upnpEnabled ? "bg-teal-500" : "bg-zinc-800"
+                        } disabled:opacity-50`}
+                      >
+                        <div
+                          className={`w-4 h-4 rounded-full bg-white transition-all duration-300 ${
+                            appConfig.upnpEnabled ? "translate-x-4" : "translate-x-0"
+                          }`}
+                        />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* SSL HTTPS toggle (Self Hosted only) */}
+                  <div className="bg-zinc-950/40 border border-zinc-900 p-4 rounded-xl space-y-3 md:col-span-1 lg:col-span-2">
+                    <div className="flex justify-between items-start border-b border-zinc-900/60 pb-2 mb-2">
+                      <div>
+                        <label className="text-xs font-bold text-zinc-300 block">SSL HTTPS Encryption</label>
+                        <p className="text-[10px] text-zinc-500 mt-1">
+                          Encrypt control panel transport payloads with TLS context. Requires local paths to certificates.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        disabled={!isAdmin}
+                        onClick={() => updateSettingsField({ enableHttps: !appConfig.enableHttps })}
+                        className={`w-10 h-6 shrink-0 rounded-full p-1 transition-all duration-300 cursor-pointer outline-none ${
+                          appConfig.enableHttps ? "bg-teal-500" : "bg-zinc-800"
+                        } disabled:opacity-50`}
+                      >
+                        <div
+                          className={`w-4 h-4 rounded-full bg-white transition-all duration-300 ${
+                            appConfig.enableHttps ? "translate-x-4" : "translate-x-0"
+                          }`}
+                        />
+                      </button>
+                    </div>
+
+                    {appConfig.enableHttps && (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 animate-fade-in">
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-zinc-400 block">Certificate Path (.crt / .pem)</label>
+                          <input
+                            type="text"
+                            disabled={!isAdmin}
+                            placeholder="e.g., C:/certs/server.crt"
+                            value={appConfig.sslCertPath ?? ""}
+                            onChange={(e) => updateSettingsField({ sslCertPath: e.target.value })}
+                            className="w-full bg-zinc-950 border border-zinc-900 focus:border-zinc-800 text-[11px] font-mono rounded-lg px-2.5 py-1.5 text-white outline-none cursor-text disabled:opacity-50"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-zinc-400 block">Private Key Path (.key)</label>
+                          <input
+                            type="text"
+                            disabled={!isAdmin}
+                            placeholder="e.g., C:/certs/server.key"
+                            value={appConfig.sslKeyPath ?? ""}
+                            onChange={(e) => updateSettingsField({ sslKeyPath: e.target.value })}
+                            className="w-full bg-zinc-950 border border-zinc-905 focus:border-zinc-800 text-[11px] font-mono rounded-lg px-2.5 py-1.5 text-white outline-none cursor-text disabled:opacity-50"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
 
               {/* Guide Selector Tabs */}

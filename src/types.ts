@@ -92,6 +92,12 @@ export interface AppConfig {
   backupOnStart?: boolean;
   backupOnStop?: boolean;
   lastBackupTimestamp?: number;
+  appPort?: number;
+  bindAddress?: string;
+  enableHttps?: boolean;
+  sslCertPath?: string;
+  sslKeyPath?: string;
+  upnpEnabled?: boolean;
 }
 
 export interface UserInvite {

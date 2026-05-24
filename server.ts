@@ -78,6 +78,12 @@ interface DBStructure {
     backupOnStart?: boolean;
     backupOnStop?: boolean;
     lastBackupTimestamp?: number;
+    appPort?: number;
+    bindAddress?: string;
+    enableHttps?: boolean;
+    sslCertPath?: string;
+    sslKeyPath?: string;
+    upnpEnabled?: boolean;
   };
   addons: Array<{
     uuid: string;
@@ -134,7 +140,13 @@ let dbCache: DBStructure = {
     backupFrequencyHours: 24,
     backupOnStart: false,
     backupOnStop: false,
-    lastBackupTimestamp: 0
+    lastBackupTimestamp: 0,
+    appPort: 3000,
+    bindAddress: "0.0.0.0",
+    enableHttps: false,
+    sslCertPath: "",
+    sslKeyPath: "",
+    upnpEnabled: false
   },
   addons: [],
   pastLogs: [],
@@ -174,7 +186,13 @@ function loadDB() {
           backupFrequencyHours: 24,
           backupOnStart: false,
           backupOnStop: false,
-          lastBackupTimestamp: 0
+          lastBackupTimestamp: 0,
+          appPort: 3000,
+          bindAddress: "0.0.0.0",
+          enableHttps: false,
+          sslCertPath: "",
+          sslKeyPath: "",
+          upnpEnabled: false
         };
       } else {
         dbCache.appConfig.serverName = dbCache.appConfig.serverName || "Bedrock Dedicated Server";
@@ -192,6 +210,12 @@ function loadDB() {
         dbCache.appConfig.backupOnStart = dbCache.appConfig.backupOnStart ?? false;
         dbCache.appConfig.backupOnStop = dbCache.appConfig.backupOnStop ?? false;
         dbCache.appConfig.lastBackupTimestamp = dbCache.appConfig.lastBackupTimestamp ?? 0;
+        dbCache.appConfig.appPort = dbCache.appConfig.appPort || 3000;
+        dbCache.appConfig.bindAddress = dbCache.appConfig.bindAddress || "0.0.0.0";
+        dbCache.appConfig.enableHttps = dbCache.appConfig.enableHttps ?? false;
+        dbCache.appConfig.sslCertPath = dbCache.appConfig.sslCertPath || "";
+        dbCache.appConfig.sslKeyPath = dbCache.appConfig.sslKeyPath || "";
+        dbCache.appConfig.upnpEnabled = dbCache.appConfig.upnpEnabled ?? false;
       }
     } catch (e) {
       console.error("Failed to parse database, resetting", e);
@@ -4239,13 +4263,17 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server is running at http://localhost:${PORT}`);
+  const isHostedSandbox = !!process.env.K_SERVICE || !!process.env.AIS_DEV || process.env.IS_SANDBOX === "true";
+  const effectivePort = isHostedSandbox ? 3000 : (dbCache.appConfig.appPort || 3000);
+  const effectiveHost = isHostedSandbox ? "0.0.0.0" : (dbCache.appConfig.bindAddress || "0.0.0.0");
+
+  app.listen(effectivePort, effectiveHost, () => {
+    console.log(`Server is running at http://${effectiveHost}:${effectivePort}`);
     
     // Auto-open browser when starting on Windows in production mode
     if (process.platform === "win32" && isProd) {
       setTimeout(() => {
-        const url = `http://localhost:${PORT}`;
+        const url = `http://localhost:${effectivePort}`;
         const cmd = "cmd";
         const args = ["/c", "start", url];
         console.log(`Launching administration panel automatically: ${url}`);
