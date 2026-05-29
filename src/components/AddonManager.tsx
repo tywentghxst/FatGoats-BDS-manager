@@ -103,6 +103,23 @@ export default function AddonManager({
   const dragCounter = useRef(0);
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
 
+  // Support custom Gemini API key on the fly
+  const [customGeminiKey, setCustomGeminiKey] = useState(() => {
+    return localStorage.getItem("custom_gemini_api_key") || "";
+  });
+  const [showKeyInput, setShowKeyInput] = useState(false);
+
+  const saveCustomKey = (key: string) => {
+    const trimmed = key.trim();
+    setCustomGeminiKey(trimmed);
+    if (trimmed) {
+      localStorage.setItem("custom_gemini_api_key", trimmed);
+    } else {
+      localStorage.removeItem("custom_gemini_api_key");
+    }
+    setDiagnosticData(null); // Force re-scan with the new key
+  };
+
   // State managers and handlers for AI addon diagnostics
   const [diagnosticData, setDiagnosticData] = useState<any>(null);
   const [isLoadingDiagnostic, setIsLoadingDiagnostic] = useState(false);
@@ -115,12 +132,17 @@ export default function AddonManager({
     setDiagnosticError(null);
     setDiagnosticMessage(null);
     try {
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+        "Authorization": token ? `Bearer ${token}` : ""
+      };
+      if (customGeminiKey && customGeminiKey.trim() !== "") {
+        headers["X-Gemini-Key"] = customGeminiKey.trim();
+      }
+
       const response = await fetch("/api/addons/analyze", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": token ? `Bearer ${token}` : ""
-        }
+        headers
       });
       if (!response.ok) {
         throw new Error("Unable to analyze addon pack status. Please verify server connection.");
@@ -684,6 +706,64 @@ export default function AddonManager({
             </button>
           </div>
 
+          {/* Custom Gemini Key configuration section */}
+          <div className="glass-panel border border-zinc-900/40 bg-zinc-950/30 rounded-2xl p-4 space-y-3">
+            <div className="flex justify-between items-center flex-wrap gap-2">
+              <div className="flex items-center gap-2 text-left">
+                <div className={`w-2.5 h-2.5 rounded-full ${customGeminiKey ? 'bg-emerald-500' : 'bg-zinc-650'}`} />
+                <div>
+                  <h4 className="text-xs font-black text-zinc-350 uppercase tracking-wider font-mono">
+                    YOUR GEMINI API KEY: {customGeminiKey ? <span className="text-emerald-400">ACTIVE (CUSTOM OVERRIDE)</span> : <span className="text-zinc-500">SYSTEM DEFAULT ACTIVE</span>}
+                  </h4>
+                  <p className="text-[10px] text-zinc-500">
+                    {customGeminiKey ? "Using your browser's private saved API key for addon diagnostics." : "Currently querying diagnostics via default server backend settings."}
+                  </p>
+                </div>
+              </div>
+              
+              <button
+                onClick={() => setShowKeyInput(!showKeyInput)}
+                className="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 text-zinc-200 text-[11px] font-bold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer"
+              >
+                <Cpu className="w-3 h-3 text-purple-400" />
+                {customGeminiKey ? "Edit / Remove Custom Key" : "Add Your Own Key"}
+              </button>
+            </div>
+
+            {showKeyInput && (
+              <div className="pt-3 border-t border-zinc-900 grid grid-cols-1 md:grid-cols-12 gap-3 items-end animate-fade-in">
+                <div className="col-span-1 md:col-span-9 space-y-1.5 text-left">
+                  <label className="text-[10px] font-black uppercase text-zinc-500 tracking-wider font-mono">Gemini AI API Key Input</label>
+                  <input
+                    type="password"
+                    value={customGeminiKey}
+                    onChange={(e) => saveCustomKey(e.target.value)}
+                    placeholder="AIzaSy..."
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs font-mono text-zinc-300 focus:outline-none focus:border-purple-650 transition-colors"
+                  />
+                  <p className="text-[10px] text-zinc-500 mt-1">
+                    Your key is saved <span className="font-bold">strictly in your local browser</span> and passed securely as a header during scans. To remove, clear this field.
+                  </p>
+                </div>
+                <div className="col-span-1 md:col-span-3 flex gap-2">
+                  <button
+                    onClick={() => saveCustomKey("")}
+                    disabled={!customGeminiKey}
+                    className="w-full px-3 py-2 bg-rose-950/30 hover:bg-rose-950/50 disabled:bg-zinc-950/20 disabled:text-zinc-700 border border-rose-900/30 disabled:border-transparent text-rose-450 text-[11px] font-bold rounded-xl transition-all cursor-pointer"
+                  >
+                    Clear Key
+                  </button>
+                  <button
+                    onClick={() => setShowKeyInput(false)}
+                    className="w-full px-3 py-2 bg-zinc-900 hover:bg-zinc-850 text-zinc-300 text-[11px] font-bold border border-zinc-800 rounded-xl transition-all cursor-pointer"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* Inline Feedback Alerts */}
           {diagnosticMessage && (
             <div className={`p-4 rounded-xl border flex items-center gap-3 text-xs font-bold leading-relaxed text-left ${
@@ -756,7 +836,7 @@ export default function AddonManager({
                         <span className="text-[10px] font-bold text-purple-300 uppercase tracking-wider font-mono">Configure Gemini Intelligence</span>
                       </div>
                       <p className="text-[9.5px] text-zinc-500 leading-normal text-left">
-                        To activate deep generative AI summarization and sequence repairs, configure your <code className="text-purple-300 font-mono text-[9px]">GEMINI_API_KEY</code> key under Secrets. Currently operating in local checks mode.
+                        To activate deep generative AI diagnostics on the fly, paste your personal Gemini API Key in the "Add Your Own Key" section above or configure a <code className="text-purple-300 font-mono text-[9px]">GEMINI_API_KEY</code> in project settings. Currently running in offline checks mode.
                       </p>
                     </div>
                   )}

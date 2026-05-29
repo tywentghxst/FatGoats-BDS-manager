@@ -2801,10 +2801,20 @@ function getAddonManifest(uuid: string, type: string) {
 
 // Lazy Gemini AI Client Initialization
 let aiClient: any = null;
-function getGeminiClient() {
-  const key = process.env.GEMINI_API_KEY;
+function getGeminiClient(customKey?: string) {
+  const key = (customKey && customKey.trim() !== "") ? customKey : process.env.GEMINI_API_KEY;
   if (!key || key === "MY_GEMINI_API_KEY" || key.trim() === "") {
     return null;
+  }
+  if (customKey && customKey.trim() !== "") {
+    return new GoogleGenAI({
+      apiKey: key.trim(),
+      httpOptions: {
+        headers: {
+          'User-Agent': 'aistudio-build',
+        }
+      }
+    });
   }
   if (!aiClient) {
     aiClient = new GoogleGenAI({
@@ -2821,6 +2831,7 @@ function getGeminiClient() {
 
 // POST: Deep diagnostic analysis (AI-powered or local fallback checks)
 app.post("/api/addons/analyze", authenticateRequest, async (req, res) => {
+  const customApiKey = req.headers["x-gemini-key"] as string | undefined;
   const activePacks = dbCache.addons.filter(a => a.isEnabled);
   const addonsWithFiles: any[] = [];
   const addonManifests: Record<string, any> = {};
@@ -2878,7 +2889,7 @@ app.post("/api/addons/analyze", authenticateRequest, async (req, res) => {
   }
 
   // Fetch AI client
-  const ai = getGeminiClient();
+  const ai = getGeminiClient(customApiKey);
   if (ai) {
     try {
       const prompt = `You are a Minecraft Bedrock Dedicated Server Addon & Pack Diagnostics Engine.
