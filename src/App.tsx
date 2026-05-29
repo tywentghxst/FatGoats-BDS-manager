@@ -3022,6 +3022,7 @@ export default function App() {
               setDraggedResourceIdx={setDraggedResourceIdx}
               handleReorderBehaviorPacks={handleReorderBehaviorPacks}
               handleReorderResourcePacks={handleReorderResourcePacks}
+              onRefreshAddons={fetchDataFeed}
             />
           )}
 

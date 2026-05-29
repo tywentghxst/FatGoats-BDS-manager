@@ -2940,8 +2940,8 @@ You MUST respond strictly in the following JSON schema:
       "recommendedFix": "Clear explanation of how the user can fix it",
       "autoFixable": true,
       "autoFixAction": {
-        "type": "enable" | "disable" | "reorder",
-        "targetUuid": "uuid reference if enabling/disabling",
+        "type": "enable" | "disable" | "reorder" | "upgrade_manifest",
+        "targetUuid": "uuid reference if enabling/disabling/upgrading",
         "reorderUuids": ["uuid-1", "uuid-2"] // optional, full ordered list of all addons in dbCache.addons if a reordering is needed to solve a conflict or load priorities
       }
     }
@@ -2992,21 +2992,29 @@ Do not include any Markdown blocks, backticks, prefix characters, or "nice markd
 
   // Detect file conflicts locally
   if (conflicts.length > 0) {
-    const conflictGroups: Record<string, string[]> = {};
+    const conflictGroups: Record<string, { files: string[]; addonUuids: string[] }> = {};
     for (const conf of conflicts) {
       const parentNamesStr = conf.addons.map(a => a.name).sort().join(" & ");
       if (!conflictGroups[parentNamesStr]) {
-        conflictGroups[parentNamesStr] = [];
+        conflictGroups[parentNamesStr] = { files: [], addonUuids: [] };
       }
-      conflictGroups[parentNamesStr].push(conf.filePath);
+      conflictGroups[parentNamesStr].files.push(conf.filePath);
+      for (const a of conf.addons) {
+        if (!conflictGroups[parentNamesStr].addonUuids.includes(a.uuid)) {
+          conflictGroups[parentNamesStr].addonUuids.push(a.uuid);
+        }
+      }
     }
 
     let idx = 0;
-    for (const [addonsPair, files] of Object.entries(conflictGroups)) {
-      const truncatedFiles = files.slice(0, 3);
-      const remainingCount = files.length - truncatedFiles.length;
+    for (const [addonsPair, data] of Object.entries(conflictGroups)) {
+      const truncatedFiles = data.files.slice(0, 3);
+      const remainingCount = data.files.length - truncatedFiles.length;
       const filesStr = truncatedFiles.join(", ") + (remainingCount > 0 ? `, and ${remainingCount} other definitions` : "");
       
+      const disableTargetUuid = data.addonUuids[1] || data.addonUuids[0];
+      const disableTargetAddon = dbCache.addons.find(a => a.uuid === disableTargetUuid);
+
       findings.push({
         id: `local-conflict-${idx++}`,
         type: "conflict",
@@ -3014,8 +3022,12 @@ Do not include any Markdown blocks, backticks, prefix characters, or "nice markd
         addonName: addonsPair,
         title: "Overlapping Resource/Behavior Definitions",
         description: `Multiple active packs overwrite identical files (${filesStr}). This forces the Bedrock server to reject the earlier registry and use the lowest priority pack, raising stability and bug conflicts.`,
-        recommendedFix: "Disable one of the active packs, or modify priorities so your preferred pack overlays last.",
-        autoFixable: false
+        recommendedFix: disableTargetAddon ? `Disable the overriding pack "${disableTargetAddon.name}" to prevent file registry overrides.` : "Disable one of the active packs.",
+        autoFixable: !!disableTargetUuid,
+        autoFixAction: disableTargetUuid ? {
+          type: "disable",
+          targetUuid: disableTargetUuid
+        } : null
       });
     }
   }
@@ -3033,9 +3045,13 @@ Do not include any Markdown blocks, backticks, prefix characters, or "nice markd
           severity: "low",
           addonName: addon.name,
           title: "Legacy Manifest Version Structure",
-          description: `Addon "${addon.name}" targets antiquated Bedrock structures (format_version: ${formatVersion}). Running this might trigger script load-failures or render errors on current client devices.`,
-          recommendedFix: "Keep active if functional, but audit the mod source if behavior errors appear in console logs.",
-          autoFixable: false
+          description: `Addon "${addon.name}" targets antiquated Bedrock structures (format_version: ${formatVersion}). This might trigger script load-failures or render errors on current client devices.`,
+          recommendedFix: `Automatically upgrade format_version to 2 in "${addon.name}"'s manifest.json.`,
+          autoFixable: true,
+          autoFixAction: {
+            type: "upgrade_manifest",
+            targetUuid: addon.uuid
+          }
         });
       }
     }
@@ -3116,6 +3132,35 @@ app.post("/api/addons/apply-fix", authenticateRequest, requirePermission("canMan
         logServerMessage("SYS", `Deactivated addon pack "${addon.name}" and companion partners.`);
       } else {
         res.status(404).json({ error: "Target pack not found in database records." });
+        return;
+      }
+    } else if (type === "upgrade_manifest") {
+      const addon = dbCache.addons.find(a => a.uuid === targetUuid);
+      if (addon) {
+        const folder = addon.type === "behavior" ? "behavior_packs" : "resource_packs";
+        const manifestPath = path.join(SERVER_DIR, folder, addon.uuid, "manifest.json");
+        if (fs.existsSync(manifestPath)) {
+          try {
+            const content = fs.readFileSync(manifestPath, "utf-8");
+            const parsed = JSON.parse(content);
+            parsed.format_version = 2;
+            if (parsed.header && typeof parsed.header === "object") {
+              if (typeof parsed.header.min_engine_version === "string" || !parsed.header.min_engine_version || !Array.isArray(parsed.header.min_engine_version)) {
+                parsed.header.min_engine_version = [1, 20, 0];
+              }
+            }
+            fs.writeFileSync(manifestPath, JSON.stringify(parsed, null, 2), "utf-8");
+            logServerMessage("SYS", `Upgraded manifest.json for "${addon.name}" to format_version 2 successfully.`);
+          } catch (err: any) {
+            res.status(500).json({ error: `Failed to write updated manifest: ${err.message}` });
+            return;
+          }
+        } else {
+          res.status(404).json({ error: `No manifest.json file found for ${addon.name}.` });
+          return;
+        }
+      } else {
+        res.status(404).json({ error: "Target addon not identified." });
         return;
       }
     } else if (type === "reorder" && Array.isArray(reorderUuids)) {
@@ -5465,7 +5510,17 @@ async function startServer() {
       const vName = "vi" + "te";
       const { createServer: createViteServer } = await import(vName);
       const vite = await createViteServer({
-        server: { middlewareMode: true },
+        server: {
+          middlewareMode: true,
+          watch: {
+            ignored: [
+              "**/bedrock-server/**",
+              "**/uploads/**",
+              "**/dist/**",
+              "**/.git/**"
+            ]
+          }
+        },
         appType: "spa"
       });
       app.use(vite.middlewares);

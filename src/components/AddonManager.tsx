@@ -58,6 +58,7 @@ interface AddonManagerProps {
   setDraggedResourceIdx: (idx: number | null) => void;
   handleReorderBehaviorPacks: (targetIdx: number) => void;
   handleReorderResourcePacks: (targetIdx: number) => void;
+  onRefreshAddons?: () => void | Promise<void>;
 }
 
 export default function AddonManager({
@@ -98,6 +99,7 @@ export default function AddonManager({
   setDraggedResourceIdx,
   handleReorderBehaviorPacks,
   handleReorderResourcePacks,
+  onRefreshAddons,
 }: AddonManagerProps) {
   const [isDraggingOverDropzone, setIsDraggingOverDropzone] = useState(false);
   const dragCounter = useRef(0);
@@ -173,6 +175,9 @@ export default function AddonManager({
         throw new Error(errData.error || "An error occurred while executing the automatic fix.");
       }
       setDiagnosticMessage({ text: "Diagnostic auto-fix executed successfully!", type: "success" });
+      if (onRefreshAddons) {
+        await onRefreshAddons();
+      }
       setDiagnosticData(null); // Triggers automatically checking again
     } catch (e: any) {
       setDiagnosticMessage({ text: e.message || "Failed to execute auto-fix.", type: "error" });
