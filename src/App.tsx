@@ -463,7 +463,7 @@ export default function App() {
   const [uploadError, setUploadError] = useState("");
   const [actionMessage, setActionMessage] = useState({ text: "", type: "info" });
   const [addonSortBy, setAddonSortBy] = useState<"name" | "date" | "enabled" | "disabled">("name");
-  const [addonViewMode, setAddonViewMode] = useState<"grid" | "order">("grid");
+  const [addonViewMode, setAddonViewMode] = useState<"grid" | "order" | "diagnostic">("grid");
   const [addonSearch, setAddonSearch] = useState("");
   const [localBehaviorOrder, setLocalBehaviorOrder] = useState<AddonMetadata[]>([]);
   const [localResourceOrder, setLocalResourceOrder] = useState<AddonMetadata[]>([]);

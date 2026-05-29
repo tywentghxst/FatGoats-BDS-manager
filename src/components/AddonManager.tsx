@@ -14,6 +14,8 @@ import {
   Trash2,
   ExternalLink,
   Edit,
+  Sparkles,
+  Cpu,
 } from "lucide-react";
 import { AddonMetadata } from "../types";
 
@@ -23,8 +25,8 @@ interface AddonManagerProps {
   token: string | null;
   addonSortBy: "name" | "date" | "enabled" | "disabled";
   setAddonSortBy: (sortBy: "name" | "date" | "enabled" | "disabled") => void;
-  addonViewMode: "grid" | "order";
-  setAddonViewMode: (mode: "grid" | "order") => void;
+  addonViewMode: "grid" | "order" | "diagnostic";
+  setAddonViewMode: (mode: "grid" | "order" | "diagnostic") => void;
   addonSearch: string;
   setAddonSearch: (search: string) => void;
   localBehaviorOrder: AddonMetadata[];
@@ -100,6 +102,68 @@ export default function AddonManager({
   const [isDraggingOverDropzone, setIsDraggingOverDropzone] = useState(false);
   const dragCounter = useRef(0);
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
+
+  // State managers and handlers for AI addon diagnostics
+  const [diagnosticData, setDiagnosticData] = useState<any>(null);
+  const [isLoadingDiagnostic, setIsLoadingDiagnostic] = useState(false);
+  const [diagnosticError, setDiagnosticError] = useState<string | null>(null);
+  const [isFixingDiagnosticId, setIsFixingDiagnosticId] = useState<string | null>(null);
+  const [diagnosticMessage, setDiagnosticMessage] = useState<{ text: string; type: "success" | "error" | "info" } | null>(null);
+
+  const runDiagnosticScan = async () => {
+    setIsLoadingDiagnostic(true);
+    setDiagnosticError(null);
+    setDiagnosticMessage(null);
+    try {
+      const response = await fetch("/api/addons/analyze", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": token ? `Bearer ${token}` : ""
+        }
+      });
+      if (!response.ok) {
+        throw new Error("Unable to analyze addon pack status. Please verify server connection.");
+      }
+      const data = await response.json();
+      setDiagnosticData(data);
+    } catch (e: any) {
+      setDiagnosticError(e.message || "An unexpected error occurred during analysis.");
+    } finally {
+      setIsLoadingDiagnostic(false);
+    }
+  };
+
+  const applyAutoFix = async (action: any, findingId: string) => {
+    setIsFixingDiagnosticId(findingId);
+    setDiagnosticMessage(null);
+    try {
+      const response = await fetch("/api/addons/apply-fix", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": token ? `Bearer ${token}` : ""
+        },
+        body: JSON.stringify({ action })
+      });
+      if (!response.ok) {
+        const errData = await response.json();
+        throw new Error(errData.error || "An error occurred while executing the automatic fix.");
+      }
+      setDiagnosticMessage({ text: "Diagnostic auto-fix executed successfully!", type: "success" });
+      setDiagnosticData(null); // Triggers automatically checking again
+    } catch (e: any) {
+      setDiagnosticMessage({ text: e.message || "Failed to execute auto-fix.", type: "error" });
+    } finally {
+      setIsFixingDiagnosticId(null);
+    }
+  };
+
+  React.useEffect(() => {
+    if (addonViewMode === "diagnostic" && !diagnosticData && !isLoadingDiagnostic) {
+      runDiagnosticScan();
+    }
+  }, [addonViewMode, diagnosticData]);
 
   // Stats Counters
   const totalCount = addons.length;
@@ -400,7 +464,7 @@ export default function AddonManager({
 
           <div className="flex flex-wrap items-center gap-2 mt-6 relative z-10">
             <span className="text-[10px] font-mono text-zinc-550 uppercase font-black mr-1">View Mode:</span>
-            <div className="flex bg-zinc-950 p-1 border border-zinc-800 rounded-xl shadow-inner shadow-black/80">
+            <div className="flex bg-zinc-950 p-1 border border-zinc-805 rounded-xl shadow-inner shadow-black/80 flex-wrap">
               <button
                 onClick={() => setAddonViewMode("grid")}
                 className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-wider flex items-center gap-2 transition-all cursor-pointer ${
@@ -422,6 +486,17 @@ export default function AddonManager({
               >
                 <ListOrdered className="w-3.5 h-3.5" />
                 Load Priorities
+              </button>
+              <button
+                onClick={() => setAddonViewMode("diagnostic")}
+                className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-wider flex items-center gap-2 transition-all cursor-pointer ${
+                  addonViewMode === "diagnostic"
+                    ? "bg-purple-650 text-white shadow-xl shadow-purple-950/20"
+                    : "text-zinc-500 hover:text-zinc-300"
+                }`}
+              >
+                <Sparkles className="w-3.5 h-3.5 text-purple-300" />
+                AI Diagnostics
               </button>
             </div>
           </div>
@@ -585,7 +660,259 @@ export default function AddonManager({
         </div>
       )}
 
-      {addonViewMode === "order" ? (
+      {addonViewMode === "diagnostic" ? (
+        // ------------------ AI DIAGNOSTICS VIEW ------------------
+        <div className="space-y-6 animate-fade-in relative z-10 text-left">
+          {/* Header Dashboard section */}
+          <div className="glass-panel border border-zinc-800/60 rounded-2xl p-5 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <div className="text-left">
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-purple-400 animate-pulse" />
+                <h3 className="text-sm font-black uppercase tracking-wider text-purple-400">Addon Intelligence Diagnostic Engine</h3>
+              </div>
+              <p className="text-xs text-zinc-400 mt-1 leading-relaxed text-left">
+                Our AI-driven diagnostics automatically check your active and inactive behavior and resource packs for version mismatch, performance overhead, and overlapping file override conflicts.
+              </p>
+            </div>
+            <button
+              disabled={isLoadingDiagnostic}
+              onClick={runDiagnosticScan}
+              className="px-4 py-2 bg-purple-650 hover:bg-purple-600 disabled:bg-zinc-900 disabled:text-zinc-500 text-white text-xs font-black uppercase tracking-wider rounded-xl transition-all cursor-pointer shadow-md shadow-purple-950/20 flex items-center gap-2"
+            >
+              <Cpu className={`w-3.5 h-3.5 ${isLoadingDiagnostic ? "animate-spin text-purple-400" : ""}`} />
+              {isLoadingDiagnostic ? "Analyzing..." : "Re-run Diagnostic Scan"}
+            </button>
+          </div>
+
+          {/* Inline Feedback Alerts */}
+          {diagnosticMessage && (
+            <div className={`p-4 rounded-xl border flex items-center gap-3 text-xs font-bold leading-relaxed text-left ${
+              diagnosticMessage.type === "success" 
+                ? "bg-emerald-950/40 border-emerald-900/50 text-emerald-400" 
+                : "bg-rose-950/40 border-rose-900/50 text-rose-400"
+            }`}>
+              <CheckCircle className="w-4 h-4 shrink-0" />
+              <span>{diagnosticMessage.text}</span>
+            </div>
+          )}
+
+          {isLoadingDiagnostic ? (
+            <div className="glass-panel border border-zinc-900 rounded-2xl p-12 flex flex-col items-center justify-center text-center space-y-4">
+              <div className="relative">
+                <div className="w-12 h-12 rounded-full border-t-2 border-purple-500 animate-spin" />
+                <Sparkles className="w-5 h-5 text-purple-400 absolute inset-0 m-auto animate-pulse" />
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs font-black uppercase tracking-widest text-zinc-350">Scanning Minecraft Addon Filesystem</p>
+                <p className="text-[11px] text-zinc-500">Querying manifest entries, checking cross-pack dependencies, and indexing override files...</p>
+              </div>
+            </div>
+          ) : diagnosticError ? (
+            <div className="glass-panel border border-rose-950/40 bg-zinc-950/20 rounded-2xl p-10 flex flex-col items-center justify-center text-center space-y-4">
+              <AlertTriangle className="w-8 h-8 text-rose-500" />
+              <div className="space-y-1">
+                <p className="text-xs font-bold text-rose-400">Diagnostic Analysis Failed</p>
+                <p className="text-[11px] text-zinc-500 max-w-md">{diagnosticError}</p>
+              </div>
+              <button
+                onClick={runDiagnosticScan}
+                className="px-4 py-2 bg-zinc-900 hover:bg-zinc-850 text-zinc-300 text-xs font-bold rounded-xl border border-zinc-800 transition-all cursor-pointer"
+              >
+                Retry Scan
+              </button>
+            </div>
+          ) : diagnosticData ? (
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start text-left">
+              
+              {/* Left Bento-Grid: Health Summary, Lag meter */}
+              <div className="col-span-1 lg:col-span-5 space-y-6 text-left">
+                
+                {/* Health Rating Bento */}
+                <div className="glass-panel border border-zinc-850 bg-[#070b12]/60 rounded-2xl p-5 space-y-4 text-left">
+                  <div className="flex justify-between items-center">
+                    <span className="text-[10px] uppercase font-black tracking-wider text-zinc-500 font-mono">System Rigidity:</span>
+                    <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider border ${
+                      diagnosticData.overallRating === "Healthy"
+                        ? "bg-emerald-900/35 text-emerald-400 border-emerald-900/40"
+                        : diagnosticData.overallRating === "Warning"
+                        ? "bg-amber-900/35 text-amber-400 border-amber-900/40"
+                        : "bg-rose-900/35 text-rose-450 border-rose-900/40"
+                    }`}>
+                      {diagnosticData.overallRating}
+                    </span>
+                  </div>
+
+                  <div className="space-y-1.5 text-left">
+                    <h4 className="text-xs font-black text-zinc-350 uppercase tracking-widest font-mono">Core Summary</h4>
+                    <p className="text-[11px] text-zinc-400 leading-relaxed font-sans mt-1 text-left">
+                      {diagnosticData.summary}
+                    </p>
+                  </div>
+
+                  {diagnosticData.aiMissing && (
+                    <div className="p-3 bg-purple-950/30 border border-purple-900/30 rounded-xl space-y-1 text-left">
+                      <div className="flex items-center gap-1.5">
+                        <Sparkles className="w-3 h-3 text-purple-400" />
+                        <span className="text-[10px] font-bold text-purple-300 uppercase tracking-wider font-mono">Configure Gemini Intelligence</span>
+                      </div>
+                      <p className="text-[9.5px] text-zinc-500 leading-normal text-left">
+                        To activate deep generative AI summarization and sequence repairs, configure your <code className="text-purple-300 font-mono text-[9px]">GEMINI_API_KEY</code> key under Secrets. Currently operating in local checks mode.
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Lag Suspect & Performance Meter */}
+                <div className="glass-panel border border-zinc-850 bg-[#070b12]/60 rounded-2xl p-5 space-y-4 text-left">
+                  <div className="flex justify-between items-start">
+                    <div className="text-left">
+                      <span className="text-[10px] uppercase font-black tracking-wider text-zinc-500 font-mono">Performance Impact:</span>
+                      <h4 className="text-xs font-black text-zinc-350 uppercase tracking-widest font-mono mt-1">Lag Suspect Meter</h4>
+                    </div>
+                    <div className="text-right">
+                      <span className={`text-2xl font-black font-mono tracking-tight ${
+                        diagnosticData.lagPotentialScore < 35 
+                          ? "text-emerald-400" 
+                          : diagnosticData.lagPotentialScore < 70 
+                          ? "text-amber-405" 
+                          : "text-rose-450"
+                      }`}>
+                        {diagnosticData.lagPotentialScore}%
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Meter Bar */}
+                  <div className="h-2 w-full bg-zinc-950 rounded-full border border-zinc-900 overflow-hidden">
+                    <div 
+                      className={`h-full transition-all duration-550 ${
+                        diagnosticData.lagPotentialScore < 35 
+                          ? "bg-emerald-500 shadow-lg shadow-emerald-500/20" 
+                          : diagnosticData.lagPotentialScore < 70 
+                          ? "bg-amber-500 shadow-lg shadow-amber-500/20" 
+                          : "bg-rose-550 shadow-lg shadow-rose-500/20"
+                      }`}
+                      style={{ width: `${diagnosticData.lagPotentialScore}%` }}
+                    />
+                  </div>
+
+                  {/* Why contributors */}
+                  {diagnosticData.lagContributors && diagnosticData.lagContributors.length > 0 && (
+                    <div className="space-y-2 mt-4 pt-4 border-t border-zinc-900/60 text-left">
+                      <span className="text-[9px] uppercase font-black tracking-wider text-zinc-500 font-mono block">Contributing Indicators:</span>
+                      <ul className="space-y-1.5 text-left">
+                        {diagnosticData.lagContributors.map((contrib: string, index: number) => (
+                          <li key={index} className="flex items-start gap-1.5 text-[10.5px] text-zinc-400 leading-normal text-left">
+                            <span className="text-purple-400 font-mono shrink-0">•</span>
+                            <span className="text-left">{contrib}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+
+              </div>
+
+              {/* Right List: Findings & Auto-Fixes */}
+              <div className="col-span-1 lg:col-span-7 space-y-4 text-left">
+                <span className="text-[10px] uppercase font-black tracking-wider text-zinc-500 font-mono block mb-2">Detailed Findings ({diagnosticData.findings.length})</span>
+                
+                {diagnosticData.findings.length === 0 ? (
+                  <div className="glass-panel border border-zinc-850 rounded-2xl p-10 flex flex-col items-center justify-center text-center space-y-3">
+                    <CheckCircle className="w-10 h-10 text-emerald-500/80" />
+                    <p className="text-xs font-black uppercase text-zinc-300 tracking-wider">All Clear! No Addon Anomalies Found</p>
+                    <p className="text-[11px] text-zinc-500 max-w-sm">
+                      Your installed packs conform perfectly. All companions are active and there are zero index conflicts detected.
+                    </p>
+                  </div>
+                ) : (
+                  diagnosticData.findings.map((finding: any) => {
+                    const isHigh = finding.severity === "high";
+                    const isMedium = finding.severity === "medium" || finding.severity === "warning" || finding.severity === "medium";
+                    
+                    return (
+                      <div 
+                        key={finding.id} 
+                        className={`p-4 rounded-2xl bg-zinc-950/45 border transition-all hover:bg-zinc-950/60 text-left ${
+                          isHigh 
+                            ? "border-rose-900/40 hover:border-rose-900/60" 
+                            : isMedium 
+                            ? "border-amber-900/40 hover:border-amber-900/60" 
+                            : "border-zinc-800/45 hover:border-zinc-800/70"
+                        }`}
+                      >
+                        <div className="flex justify-between items-start gap-2">
+                          <div className="space-y-1 text-left">
+                            <div className="flex flex-wrap items-center gap-2">
+                              {finding.type === "conflict" && <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />}
+                              {finding.type === "dependencies" && <Layers className="w-4 h-4 text-purple-400 shrink-0" />}
+                              {finding.type === "outdated" && <Cpu className="w-4 h-4 text-blue-400 shrink-0" />}
+                              
+                              <h4 className="text-xs font-bold text-zinc-200">{finding.title}</h4>
+                            </div>
+                            <p className="text-[9px] font-mono text-zinc-500">Addon focus: <span className="text-zinc-450 font-bold">{finding.addonName}</span></p>
+                          </div>
+                          <span className={`px-2 py-0.5 rounded-full text-[8.5px] font-black uppercase tracking-wider shrink-0 ${
+                            isHigh 
+                              ? "bg-rose-950/60 text-rose-450 border border-rose-900/50" 
+                              : isMedium 
+                              ? "bg-amber-950/60 text-amber-450 border border-amber-900/50" 
+                              : "bg-blue-950/60 text-blue-405 border border-blue-900/50"
+                          }`}>
+                            {finding.severity}
+                          </span>
+                        </div>
+
+                        <p className="text-[11px] text-zinc-400 mt-2.5 leading-relaxed font-sans text-left">
+                          {finding.description}
+                        </p>
+
+                        <div className="mt-3.5 pt-3.5 border-t border-zinc-900 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                          <div className="space-y-0.5 text-left">
+                            <span className="text-[9px] uppercase font-black tracking-wider text-purple-400 font-mono block">Recommended Fix:</span>
+                            <p className="text-[10.5px] text-zinc-400 font-sans text-left">{finding.recommendedFix}</p>
+                          </div>
+
+                          {finding.autoFixable && finding.autoFixAction && isAdmin && (
+                            <button
+                              disabled={isFixingDiagnosticId !== null}
+                              onClick={() => applyAutoFix(finding.autoFixAction, finding.id)}
+                              className="px-3.5 py-2 shrink-0 bg-emerald-600 hover:bg-emerald-500 disabled:bg-zinc-900 disabled:text-zinc-650 text-white text-[10.5px] font-black uppercase tracking-wider rounded-xl transition-all cursor-pointer flex items-center gap-2 shadow-md shadow-emerald-950/10 border border-emerald-9d0/20"
+                            >
+                              {isFixingDiagnosticId === finding.id ? (
+                                <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                              ) : (
+                                <CheckCircle className="w-3.5 h-3.5 text-emerald-300" />
+                              )}
+                              Auto-Fix It
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+            </div>
+          ) : (
+            <div className="glass-panel border border-zinc-900 rounded-2xl p-10 flex flex-col items-center justify-center text-center space-y-4">
+              <Sparkles className="w-8 h-8 text-purple-400 animate-pulse" />
+              <div className="space-y-1">
+                <p className="text-xs font-black uppercase text-zinc-300 tracking-wider">Addon Intelligence Diagnostic</p>
+                <p className="text-[11px] text-zinc-500 max-w-sm">Ready to execute a diagnostic scan on your folders. We'll analyze pack integrity instantly.</p>
+              </div>
+              <button
+                onClick={runDiagnosticScan}
+                className="px-4 py-2 bg-purple-650 hover:bg-purple-600 text-white text-xs font-black uppercase tracking-wider rounded-xl transition-all cursor-pointer shadow-md shadow-purple-950/20"
+              >
+                Start Diagnostic Scan
+              </button>
+            </div>
+          )}
+        </div>
+      ) : addonViewMode === "order" ? (
         // ------------------ 3. LOAD SEQUENCE REORDERPRIORITIES VIEW ------------------
         <div className="space-y-6 animate-fade-in">
           <div className="glass-panel border border-zinc-800/60 rounded-2xl p-5 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">

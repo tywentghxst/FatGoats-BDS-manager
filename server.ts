@@ -16,6 +16,7 @@ import dns from "dns";
 import net from "net";
 import pkg from "express";
 import { Authflow, Titles } from "prismarine-auth";
+import { GoogleGenAI, Type } from "@google/genai";
 
 const { json, urlencoded } = pkg;
 
@@ -2752,6 +2753,391 @@ app.put("/api/addons/:uuid", authenticateRequest, requirePermission("canManageAd
   const updatedNames = toUpdate.map(a => a.name).join(", ");
   logServerMessage("SYS", `Addon(s) updated: ${updatedNames}`);
   res.json({ success: true, updatedCount: toUpdate.length, updatedNames });
+});
+
+// Helper function to recursively retrieve internal override targets
+function getAddonOverridingFiles(uuid: string, type: string): string[] {
+  const folder = type === "behavior" ? "behavior_packs" : "resource_packs";
+  const baseDir = path.join(SERVER_DIR, folder, uuid);
+  const filesList: string[] = [];
+  
+  function scan(dir: string, relativePath: string) {
+    if (!fs.existsSync(dir)) return;
+    try {
+      const entries = fs.readdirSync(dir, { withFileTypes: true });
+      for (const entry of entries) {
+        const rel = path.join(relativePath, entry.name);
+        if (entry.isDirectory()) {
+          scan(path.join(dir, entry.name), rel);
+        } else {
+          const parts = rel.split(path.sep);
+          const topDir = parts[0]?.toLowerCase();
+          if (["entities", "items", "blocks", "recipes", "animation_controllers", "scripts", "loot_tables"].includes(topDir)) {
+            filesList.push(rel.replace(/\\/g, "/"));
+          }
+        }
+      }
+    } catch (e) {}
+  }
+  
+  scan(baseDir, "");
+  return filesList;
+}
+
+// Fetch physical manifest info from folder
+function getAddonManifest(uuid: string, type: string) {
+  const folder = type === "behavior" ? "behavior_packs" : "resource_packs";
+  const manifestPath = path.join(SERVER_DIR, folder, uuid, "manifest.json");
+  if (fs.existsSync(manifestPath)) {
+    try {
+      const content = fs.readFileSync(manifestPath, "utf-8");
+      return JSON.parse(content);
+    } catch (e) {
+      return null;
+    }
+  }
+  return null;
+}
+
+// Lazy Gemini AI Client Initialization
+let aiClient: any = null;
+function getGeminiClient() {
+  const key = process.env.GEMINI_API_KEY;
+  if (!key || key === "MY_GEMINI_API_KEY" || key.trim() === "") {
+    return null;
+  }
+  if (!aiClient) {
+    aiClient = new GoogleGenAI({
+      apiKey: key,
+      httpOptions: {
+        headers: {
+          'User-Agent': 'aistudio-build',
+        }
+      }
+    });
+  }
+  return aiClient;
+}
+
+// POST: Deep diagnostic analysis (AI-powered or local fallback checks)
+app.post("/api/addons/analyze", authenticateRequest, async (req, res) => {
+  const activePacks = dbCache.addons.filter(a => a.isEnabled);
+  const addonsWithFiles: any[] = [];
+  const addonManifests: Record<string, any> = {};
+
+  for (const addon of dbCache.addons) {
+    const manifest = getAddonManifest(addon.uuid, addon.type);
+    if (manifest) {
+      addonManifests[addon.uuid] = manifest;
+    }
+  }
+
+  for (const addon of activePacks) {
+    const files = getAddonOverridingFiles(addon.uuid, addon.type);
+    addonsWithFiles.push({
+      uuid: addon.uuid,
+      name: addon.name,
+      type: addon.type,
+      files
+    });
+  }
+
+  // Find overlapping/conflicting files across behavior/resource packs
+  const fileToAddonsMap: Record<string, { uuid: string; name: string }[]> = {};
+  for (const addon of addonsWithFiles) {
+    for (const f of addon.files) {
+      if (!fileToAddonsMap[f]) {
+        fileToAddonsMap[f] = [];
+      }
+      fileToAddonsMap[f].push({ uuid: addon.uuid, name: addon.name });
+    }
+  }
+
+  const conflicts: any[] = [];
+  for (const [filePath, devs] of Object.entries(fileToAddonsMap)) {
+    if (devs.length > 1) {
+      conflicts.push({ filePath, addons: devs });
+    }
+  }
+
+  // Check synchronization issues with duel/group packs
+  const localMissingPartners: any[] = [];
+  for (const addon of dbCache.addons) {
+    if (addon.groupId) {
+      const partner = dbCache.addons.find(a => a.groupId === addon.groupId && a.uuid !== addon.uuid);
+      if (partner) {
+        if (addon.isEnabled && !partner.isEnabled) {
+          localMissingPartners.push({
+            addon,
+            partner,
+            reason: `Addon "${addon.name}" is active but its companion "${partner.name}" is deactivated.`
+          });
+        }
+      }
+    }
+  }
+
+  // Fetch AI client
+  const ai = getGeminiClient();
+  if (ai) {
+    try {
+      const prompt = `You are a Minecraft Bedrock Dedicated Server Addon & Pack Diagnostics Engine.
+A user is running a Bedrock Server on their custom control panel dashboard.
+Here is the detailed payload of all installed addons/packs on this server:
+${JSON.stringify(dbCache.addons.map(a => ({
+  uuid: a.uuid,
+  name: a.name,
+  description: a.description,
+  type: a.type,
+  version: a.version,
+  isEnabled: a.isEnabled,
+  originalName: a.originalName,
+  manifest: addonManifests[a.uuid] || null
+})), null, 2)}
+
+And here is the raw conflict diagnostic scan showing which files are overridden by multiple active packs:
+${JSON.stringify(conflicts, null, 2)}
+
+And here are dual-pack partner inconsistencies detected (where BP/RP groups are partially enabled):
+${JSON.stringify(localMissingPartners.map(p => ({
+  packUuid: p.addon.uuid,
+  packName: p.addon.name,
+  partnerUuid: p.partner.uuid,
+  partnerName: p.partner.name,
+  reason: p.reason
+})), null, 4)}
+
+Perform a deep, professional analysis to find:
+1. Missing companion components: An active Behavior Pack (BP) with no active Resource Pack (RP) partner or vice versa. Recommend enabling the partner or turning both on.
+2. Direct system conflicts: Two active packs modifying the EXACT same JSON files (e.g., both active packs override 'entities/player.json' or 'recipes/emerald.json'). This is critical because only the lower pack's definitions are loaded, breaking features of the upper pack.
+3. Outdated manifest format: Bedrock packs using extremely old templates (format_version 1 or older min_engine_version e.g. < 1.16.0). Let them know and offer advice on re-packaging or toggling.
+4. Heavy lag potential: If they have high potential for lag (e.g. they contain heavy GameTest scripts, script modules, extensive ticked components, or too many active packs causing overhead). Estimated lag potential score between 0 and 100.
+5. Identify any corrupt or structurally poor manifest info.
+
+You MUST respond strictly in the following JSON schema:
+{
+  "summary": "High-level summary of findings and general recommendations for server health",
+  "overallRating": "Healthy" | "Warning" | "Critical",
+  "findings": [
+    {
+      "id": "finding-unique-string-id",
+      "type": "conflict" | "outdated" | "dependencies" | "lag" | "info",
+      "severity": "high" | "medium" | "low",
+      "addonName": "Name of addon(s) involved",
+      "title": "Clear concise diagnostic heading",
+      "description": "Deep analytical description of what the problem is and how it affects playability/BDS stability",
+      "recommendedFix": "Clear explanation of how the user can fix it",
+      "autoFixable": true,
+      "autoFixAction": {
+        "type": "enable" | "disable" | "reorder",
+        "targetUuid": "uuid reference if enabling/disabling",
+        "reorderUuids": ["uuid-1", "uuid-2"] // optional, full ordered list of all addons in dbCache.addons if a reordering is needed to solve a conflict or load priorities
+      }
+    }
+  ],
+  "lagPotentialScore": integer (0 to 100),
+  "lagContributors": ["detailed reasons why this setup might lag or have performance overhead", ...]
+}
+
+Do not include any Markdown blocks, backticks, prefix characters, or "nice markdown wrapping" like \`\`\`json. Respond with the raw JSON string directly so we can parse it.`;
+
+      const response = await ai.models.generateContent({
+        model: "gemini-3.5-flash",
+        contents: prompt,
+      });
+
+      let text = response.text || "";
+      if (text.startsWith("```")) {
+        text = text.replace(/^```json\s*/i, "").replace(/```\s*$/, "");
+      }
+      text = text.trim();
+
+      const parsed = JSON.parse(text);
+      res.json({ ...parsed, usingAI: true });
+      return;
+    } catch (apiError: any) {
+      console.error("Gemini Addon API error:", apiError);
+    }
+  }
+
+  // Local fallback scanners
+  const findings: any[] = [];
+  for (const item of localMissingPartners) {
+    findings.push({
+      id: `partner-sync-${item.addon.uuid}`,
+      type: "dependencies",
+      severity: "high",
+      addonName: `${item.addon.name} & ${item.partner.name}`,
+      title: "Asymmetric Dual-Pack Activation",
+      description: item.reason + " Minecraft Bedrock requires matching behavioral rules and resource skins for custom additions to render and function. Single activation introduces client glitches or empty items.",
+      recommendedFix: `Activate the corresponding partner companion "${item.partner.name}".`,
+      autoFixable: true,
+      autoFixAction: {
+        type: "enable",
+        targetUuid: item.partner.uuid
+      }
+    });
+  }
+
+  // Detect file conflicts locally
+  if (conflicts.length > 0) {
+    const conflictGroups: Record<string, string[]> = {};
+    for (const conf of conflicts) {
+      const parentNamesStr = conf.addons.map(a => a.name).sort().join(" & ");
+      if (!conflictGroups[parentNamesStr]) {
+        conflictGroups[parentNamesStr] = [];
+      }
+      conflictGroups[parentNamesStr].push(conf.filePath);
+    }
+
+    let idx = 0;
+    for (const [addonsPair, files] of Object.entries(conflictGroups)) {
+      const truncatedFiles = files.slice(0, 3);
+      const remainingCount = files.length - truncatedFiles.length;
+      const filesStr = truncatedFiles.join(", ") + (remainingCount > 0 ? `, and ${remainingCount} other definitions` : "");
+      
+      findings.push({
+        id: `local-conflict-${idx++}`,
+        type: "conflict",
+        severity: "medium",
+        addonName: addonsPair,
+        title: "Overlapping Resource/Behavior Definitions",
+        description: `Multiple active packs overwrite identical files (${filesStr}). This forces the Bedrock server to reject the earlier registry and use the lowest priority pack, raising stability and bug conflicts.`,
+        recommendedFix: "Disable one of the active packs, or modify priorities so your preferred pack overlays last.",
+        autoFixable: false
+      });
+    }
+  }
+
+  // Outdated checks
+  for (const addon of dbCache.addons) {
+    const manifest = addonManifests[addon.uuid];
+    if (manifest) {
+      const formatVersion = manifest.format_version;
+      const isFormatOld = (typeof formatVersion === "number" && formatVersion < 2) || (typeof formatVersion === "string" && formatVersion.startsWith("1."));
+      if (isFormatOld) {
+        findings.push({
+          id: `outdated-${addon.uuid}`,
+          type: "outdated",
+          severity: "low",
+          addonName: addon.name,
+          title: "Legacy Manifest Version Structure",
+          description: `Addon "${addon.name}" targets antiquated Bedrock structures (format_version: ${formatVersion}). Running this might trigger script load-failures or render errors on current client devices.`,
+          recommendedFix: "Keep active if functional, but audit the mod source if behavior errors appear in console logs.",
+          autoFixable: false
+        });
+      }
+    }
+  }
+
+  const activeCount = activePacks.length;
+  let score = Math.min(100, activeCount * 7);
+  if (conflicts.length > 0) score += Math.min(35, conflicts.length * 6);
+  score = Math.round(score);
+
+  const contributors: string[] = [];
+  if (activeCount > 8) {
+    contributors.push(`Heavy active pack registration: ${activeCount} packs are currently enabled.`);
+  } else if (activeCount > 0) {
+    contributors.push(`Active pack footprint: ${activeCount} packs registered.`);
+  }
+  if (conflicts.length > 0) {
+    contributors.push(`${conflicts.length} duplicate file overrides found.`);
+  }
+
+  let rating: "Healthy" | "Warning" | "Critical" = "Healthy";
+  if (findings.some(f => f.severity === "high")) {
+    rating = "Critical";
+  } else if (findings.length > 0 || score > 45) {
+    rating = "Warning";
+  }
+
+  res.json({
+    summary: findings.length === 0 
+      ? "Local scanning finished successfully. No immediate dual-pack discrepancies, mismatched assets, or file overlaps were detected."
+      : "Our scanner found structural inconsistencies. Some grouped behavior-resource couples are split, or resource files overlap causing overwrites.",
+    overallRating: rating,
+    findings,
+    lagPotentialScore: score,
+    lagContributors: contributors,
+    usingAI: false,
+    aiMissing: true
+  });
+});
+
+// POST: Execute auto-fix actions automatically
+app.post("/api/addons/apply-fix", authenticateRequest, requirePermission("canManageAddons"), (req, res) => {
+  const { action } = req.body;
+  if (!action || typeof action !== "object") {
+    res.status(400).json({ error: "Missing action definitions." });
+    return;
+  }
+
+  const { type, targetUuid, reorderUuids } = action;
+
+  try {
+    if (type === "enable") {
+      const addon = dbCache.addons.find(a => a.uuid === targetUuid);
+      if (addon) {
+        addon.isEnabled = true;
+        
+        // Auto sync counterpart
+        if (addon.groupId) {
+          dbCache.addons.forEach(a => {
+            if (a.groupId === addon.groupId) a.isEnabled = true;
+          });
+        }
+        logServerMessage("SYS", `Activated addon pack "${addon.name}" and synchronized partner companions.`);
+      } else {
+        res.status(404).json({ error: "Target pack not found in database records." });
+        return;
+      }
+    } else if (type === "disable") {
+      const addon = dbCache.addons.find(a => a.uuid === targetUuid);
+      if (addon) {
+        addon.isEnabled = false;
+        
+        if (addon.groupId) {
+          dbCache.addons.forEach(a => {
+            if (a.groupId === addon.groupId) a.isEnabled = false;
+          });
+        }
+        logServerMessage("SYS", `Deactivated addon pack "${addon.name}" and companion partners.`);
+      } else {
+        res.status(404).json({ error: "Target pack not found in database records." });
+        return;
+      }
+    } else if (type === "reorder" && Array.isArray(reorderUuids)) {
+      const addonMap = new Map(dbCache.addons.map(a => [a.uuid, a]));
+      const reorderedList: any[] = [];
+      
+      for (const uuid of reorderUuids) {
+        const addon = addonMap.get(uuid);
+        if (addon) {
+          reorderedList.push(addon);
+          addonMap.delete(uuid);
+         }
+      }
+      
+      for (const addon of dbCache.addons) {
+        if (addonMap.has(addon.uuid)) {
+          reorderedList.push(addon);
+        }
+      }
+      
+      dbCache.addons = reorderedList;
+      logServerMessage("SYS", "Resolved addon priority load conflicts via AI load order fix.");
+    } else {
+      res.status(400).json({ error: `Action type '${type}' not recognized or unsupported.` });
+      return;
+    }
+
+    saveDB();
+    updateWorldPacksConfig();
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Helper function to recursively copy files while catching lock/permission errors gracefully
