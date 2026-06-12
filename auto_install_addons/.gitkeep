@@ -1,0 +1,2 @@
+# Folder for dropping .mcpack, .mcaddon, or .zip addon files to be automatically imported and enabled.
+# Place your files here and run install_addons.bat (on Windows) or install_addons.sh (on Linux/macOS) in the root.
