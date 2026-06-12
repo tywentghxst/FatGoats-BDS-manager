@@ -1340,9 +1340,7 @@ export default function AddonManager({
                   <span className="w-1.5 h-1.5 rounded-full bg-zinc-500" />
                   Inactive ({disabledCount})
                 </button>
-              </div>
-
-              {/* Addon Quick Filter Search Bar */}
+              </div>              {/* Addon Quick Filter Search Bar */}
               <div className="relative w-64">
                 <Search className="absolute left-3 top-3 w-3.5 h-3.5 text-zinc-500" />
                 <input
@@ -1362,6 +1360,24 @@ export default function AddonManager({
                   </button>
                 )}
               </div>
+
+              {isAdmin && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (onRefreshAddons) {
+                      showBanner("Scanning and syncing untracked folders...", "info");
+                      await onRefreshAddons();
+                      showBanner("Addon directories scan completed successfully!", "success");
+                    }
+                  }}
+                  className="px-3 py-2 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 font-bold text-xs rounded-xl transition-all cursor-pointer uppercase tracking-wider shadow-sm flex items-center gap-1.5"
+                  title="Scan behavior & resource packs server folders for any manually placed addons, auto-registering them"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                  Scan Folders
+                </button>
+              )}
             </div>
 
             {isAdmin && addons.length > 0 && (

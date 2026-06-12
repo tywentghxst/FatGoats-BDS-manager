@@ -2383,7 +2383,86 @@ app.post("/api/logs/history/clear", authenticateRequest, requireAdmin, (req, res
 });
 
 // Addon module triggers (enable, disable, upload, delete)
+function syncLocalAddonsWithDB() {
+  const behaviorDir = path.join(SERVER_DIR, "behavior_packs");
+  const resourceDir = path.join(SERVER_DIR, "resource_packs");
+  let changed = false;
+
+  const scanFolder = (parentDir: string, type: "behavior" | "resource") => {
+    if (!fs.existsSync(parentDir)) return;
+    try {
+      const subdirs = fs.readdirSync(parentDir);
+      for (const subdir of subdirs) {
+        const fullPath = path.join(parentDir, subdir);
+        const stats = fs.statSync(fullPath);
+        if (stats.isDirectory()) {
+          const manifestPath = path.join(fullPath, "manifest.json");
+          if (fs.existsSync(manifestPath)) {
+            try {
+              const manifestContent = fs.readFileSync(manifestPath, "utf-8");
+              const manifest = JSON.parse(manifestContent);
+              const header = manifest.header;
+              if (header && header.uuid) {
+                const uuid = header.uuid;
+                const name = header.name || subdir;
+                const description = header.description || "No description provided.";
+                const version = header.version || [1, 0, 0];
+
+                // Check if this UUID is already in dbCache.addons
+                const exists = dbCache.addons.some(a => a.uuid === uuid);
+                if (!exists) {
+                  // Read pack_icon.png if exists
+                  let iconBase64 = "";
+                  const iconPath = path.join(fullPath, "pack_icon.png");
+                  if (fs.existsSync(iconPath)) {
+                    try {
+                      const iconData = fs.readFileSync(iconPath);
+                      iconBase64 = `data:image/png;base64,${iconData.toString("base64")}`;
+                    } catch (e) {}
+                  }
+
+                  dbCache.addons.push({
+                    uuid,
+                    version,
+                    name,
+                    description,
+                    type,
+                    icon: iconBase64 || undefined,
+                    folderName: uuid,
+                    isEnabled: false,
+                    originalName: subdir + ".mcpack",
+                    groupId: `group-${crypto.randomUUID()}`,
+                    uploadedAt: new Date().toISOString()
+                  });
+                  changed = true;
+                }
+              }
+            } catch (err) {
+              console.error(`Failed parsing manifest in synced folder ${subdir}:`, err);
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.error(`Failed scanning addons folder ${parentDir}:`, err);
+    }
+  };
+
+  scanFolder(behaviorDir, "behavior");
+  scanFolder(resourceDir, "resource");
+
+  if (changed) {
+    saveDB();
+    updateWorldPacksConfig();
+  }
+}
+
 app.get("/api/addons", authenticateRequest, (req, res) => {
+  try {
+    syncLocalAddonsWithDB();
+  } catch (err) {
+    console.error("Failed executing automatic addons syncing:", err);
+  }
   res.json(dbCache.addons);
 });
 
@@ -2711,11 +2790,37 @@ app.post("/api/addons/:uuid/update-upload", authenticateRequest, requirePermissi
 
 // Update/Edit Addon parameters (Admin only - applies to all grouped addons)
 app.put("/api/addons/:uuid", authenticateRequest, requirePermission("canManageAddons"), (req, res) => {
-  const { name, description, downloadUrl } = req.body;
+  const { name, description, downloadUrl, type } = req.body;
   const targetAddon = dbCache.addons.find(a => a.uuid === req.params.uuid);
   if (!targetAddon) {
     res.status(404).json({ error: "Addon not found in records." });
     return;
+  }
+
+  // Handle Type Change and Physical Folder Relocation if requested
+  if (type && (type === "behavior" || type === "resource") && type !== targetAddon.type) {
+    const oldFolder = targetAddon.type === "behavior" ? "behavior_packs" : "resource_packs";
+    const newFolder = type === "behavior" ? "behavior_packs" : "resource_packs";
+    const srcDir = path.join(SERVER_DIR, oldFolder, targetAddon.uuid);
+    const destDir = path.join(SERVER_DIR, newFolder, targetAddon.uuid);
+
+    try {
+      if (fs.existsSync(srcDir)) {
+        if (!fs.existsSync(path.dirname(destDir))) {
+          fs.mkdirSync(path.dirname(destDir), { recursive: true });
+        }
+        if (fs.existsSync(destDir)) {
+          fs.rmSync(destDir, { recursive: true, force: true });
+        }
+        fs.renameSync(srcDir, destDir);
+      }
+      targetAddon.type = type;
+      logServerMessage("SYS", `Addon ${targetAddon.uuid} moved from ${oldFolder} to ${newFolder} due to manual type override.`);
+    } catch (err: any) {
+      console.error(`Failed to move addon folder on disk: ${err.message}`);
+      res.status(500).json({ error: `Failed to move addon files on disk: ${err.message}` });
+      return;
+    }
   }
 
   // Find all addons in the same group or with the same original name (extracted from same .mcaddon bundle)
@@ -2738,7 +2843,13 @@ app.put("/api/addons/:uuid", authenticateRequest, requirePermission("canManageAd
     if (baseName) {
       const suffix = addon.type === "behavior" ? " BP" : " RP";
       addon.name = baseName + suffix;
+    } else if (type && addon.uuid === targetAddon.uuid) {
+      // If only type changed and no baseName was passed, adjust the suffix of target addon
+      let cleanName = addon.name.replace(/\s+(?:\[?BP\]?|\[?RP\]?|\(?BP\)?|\(?RP\)?)$/i, "").trim();
+      const suffix = addon.type === "behavior" ? " BP" : " RP";
+      addon.name = cleanName + suffix;
     }
+
     if (typeof description === "string") {
       addon.description = description.trim();
     }

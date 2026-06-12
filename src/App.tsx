@@ -510,6 +510,7 @@ export default function App() {
   const [editAddonName, setEditAddonName] = useState("");
   const [editAddonDescription, setEditAddonDescription] = useState("");
   const [editAddonDownloadUrl, setEditAddonDownloadUrl] = useState("");
+  const [editAddonType, setEditAddonType] = useState<"behavior" | "resource">("behavior");
   const [isSavingAddon, setIsSavingAddon] = useState(false);
   const [updatingAddonUuid, setUpdatingAddonUuid] = useState<string | null>(null);
   const [tasksWidgetExpanded, setTasksWidgetExpanded] = useState(true);
@@ -1205,6 +1206,7 @@ export default function App() {
     setEditAddonName(cleanName);
     setEditAddonDescription(addon.description || "");
     setEditAddonDownloadUrl(addon.downloadUrl || "");
+    setEditAddonType(addon.type);
   };
 
   const handleSaveAddon = async (e: React.FormEvent) => {
@@ -1222,7 +1224,8 @@ export default function App() {
         body: JSON.stringify({
           name: editAddonName,
           description: editAddonDescription,
-          downloadUrl: editAddonDownloadUrl
+          downloadUrl: editAddonDownloadUrl,
+          type: editAddonType
         })
       });
 
@@ -5811,6 +5814,37 @@ export default function App() {
                   onChange={e => setEditAddonName(e.target.value)}
                   className="w-full px-3.5 py-2.5 bg-zinc-950 border border-zinc-800 rounded-xl text-xs text-white outline-none focus:border-amber-500 transition-colors"
                 />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase font-black tracking-wider text-zinc-400 block">Pack Category / Type</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditAddonType("behavior")}
+                    className={`px-3 py-2.5 rounded-xl border text-[11px] font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                      editAddonType === "behavior"
+                        ? "bg-amber-500/10 border-amber-500 text-amber-400 font-extrabold shadow-sm shadow-amber-500/5"
+                        : "bg-zinc-950 border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200"
+                    }`}
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                    Behavior Pack (BP)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditAddonType("resource")}
+                    className={`px-3 py-2.5 rounded-xl border text-[11px] font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                      editAddonType === "resource"
+                        ? "bg-blue-500/10 border-blue-500 text-blue-400 font-extrabold shadow-sm shadow-blue-500/5"
+                        : "bg-zinc-950 border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200"
+                    }`}
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+                    Resource Pack (RP)
+                  </button>
+                </div>
+                <span className="text-[9px] text-zinc-500 block">Changing type will automatically relocate files on the server (BP ↔ RP folders).</span>
               </div>
 
               <div className="space-y-1">
