@@ -1,0 +1,2 @@
+# Folder for dropping .mcworld files to be automatically imported.
+# Place your .mcworld files here and run import_worlds.bat (on Windows) or import_worlds.sh (on Linux/macOS) in the root.
