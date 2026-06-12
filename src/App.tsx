@@ -1352,9 +1352,115 @@ export default function App() {
     });
   };
 
+  // Reusable helper for chunk-by-chunk file transfers (bypasses Cloud Run's 32MB request body cap and network timeouts)
+  const uploadInChunks = (
+    file: File,
+    uploadType: "world" | "addon" | "addon-update" | "server-zip",
+    addonUuid?: string,
+    onProgress?: (percent: number, loaded: number, total: number) => void
+  ): Promise<any> => {
+    return new Promise((resolve, reject) => {
+      const CHUNK_SIZE = 8 * 1024 * 1024; // 8MB chunks
+      const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+      
+      const generateUUID = () => {
+        if (typeof window !== "undefined" && window.crypto && typeof window.crypto.randomUUID === "function") {
+          return window.crypto.randomUUID();
+        }
+        return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function(c) {
+          const r = Math.random() * 16 | 0;
+          const v = c === "x" ? r : (r & 0x3 | 0x8);
+          return v.toString(16);
+        });
+      };
+
+      const uploadId = generateUUID();
+      const filename = file.name;
+      let bytesUploaded = 0;
+
+      const uploadNextChunk = async (chunkIndex: number) => {
+        if (chunkIndex >= totalChunks) return;
+
+        const start = chunkIndex * CHUNK_SIZE;
+        const end = Math.min(start + CHUNK_SIZE, file.size);
+        const chunk = file.slice(start, end);
+
+        const formData = new FormData();
+        formData.append("file", chunk, filename);
+        formData.append("chunkIndex", chunkIndex.toString());
+        formData.append("totalChunks", totalChunks.toString());
+        formData.append("uploadId", uploadId);
+        formData.append("filename", filename);
+        formData.append("uploadType", uploadType);
+        if (addonUuid) {
+          formData.append("addonUuid", addonUuid);
+        }
+
+        const xhr = new XMLHttpRequest();
+        xhr.open("POST", "/api/upload/chunk");
+        if (token) {
+          xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+        }
+
+        xhr.upload.addEventListener("progress", (event) => {
+          if (event.lengthComputable && onProgress) {
+            const chunkLoadedSinceStart = event.loaded;
+            const currentTotalLoaded = bytesUploaded + chunkLoadedSinceStart;
+            const percent = Math.min(Math.round((currentTotalLoaded / file.size) * 100), 99);
+            onProgress(percent, currentTotalLoaded, file.size);
+          }
+        });
+
+        xhr.addEventListener("load", async () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            bytesUploaded += chunk.size;
+            let responseData = { success: true, isComplete: false, taskId: "" };
+            try {
+              responseData = JSON.parse(xhr.responseText);
+            } catch (e) {}
+
+            if (chunkIndex === totalChunks - 1) {
+              if (onProgress) {
+                onProgress(100, file.size, file.size);
+              }
+              resolve(responseData);
+            } else {
+              try {
+                await uploadNextChunk(chunkIndex + 1);
+              } catch (err) {
+                reject(err);
+              }
+            }
+          } else {
+            try {
+              reject(JSON.parse(xhr.responseText));
+            } catch (e) {
+              reject(new Error(`Server returned status code ${xhr.status}`));
+            }
+          }
+        });
+
+        xhr.addEventListener("error", () => {
+          reject(new Error("Network connection lost during chunk transfer."));
+        });
+
+        xhr.addEventListener("abort", () => {
+          reject(new Error("Chunk upload aborted by user or system."));
+        });
+
+        xhr.send(formData);
+      };
+
+      uploadNextChunk(0).catch(reject);
+    });
+  };
+
   // Multer Addons and Worlds uploading trigger hooks
   const handleUploadFileListDirect = async (files: FileList | null, isWorld: boolean = false) => {
-    if (!files || files.length === 0 || !token || !isAdmin) return;
+    if (!files || files.length === 0 || !token) return;
+
+    const hasPermission = isWorld ? canManageWorlds : canManageAddons;
+    if (!hasPermission) return;
 
     setIsUploading(true);
     setUploadError("");
@@ -1365,32 +1471,32 @@ export default function App() {
     const names = Array.from(files).map((f: any) => f.name);
     setUploadingFilesNames(names);
 
-    const formData = new FormData();
-    const endpoint = isWorld ? "/api/worlds/upload" : "/api/addons/upload";
-
-    if (isWorld) {
-      const file = files[0];
-      showBanner(`Uploading world ${file.name}...`, "info");
-      formData.append("file", file);
-    } else {
-      const fileNames = names.join(", ");
-      showBanner(`Uploading ${files.length} packs (${fileNames})...`, "info");
-      for (let i = 0; i < files.length; i++) {
-        formData.append("files", files[i]);
-      }
-    }
-
     try {
-      const data = await uploadWithXHR(endpoint, formData, (percent, loaded, total) => {
-        setUploadProgress(percent);
-        setUploadBytesTransmitted(loaded);
-        setUploadBytesTotal(total);
-      });
+      if (isWorld) {
+        const file = files[0];
+        showBanner(`Uploading world ${file.name} in chunks...`, "info");
+        const data = await uploadInChunks(file, "world", undefined, (percent, loaded, total) => {
+          setUploadProgress(percent);
+          setUploadBytesTransmitted(loaded);
+          setUploadBytesTotal(total);
+        });
 
-      if (data.taskIds) {
-        showBanner(`Uploaded ${files.length} packs successfully! Background tasks started executing.`, "success");
-      } else {
         showBanner(`Uploaded successfully. Background task #${data.taskId} is indexing!`, "success");
+      } else {
+        // Upload each pack sequentially in chunks
+        for (let i = 0; i < files.length; i++) {
+          const file = files[i];
+          showBanner(`Uploading pack ${i + 1}/${files.length} (${file.name}) in chunks...`, "info");
+          
+          await uploadInChunks(file, "addon", undefined, (percent, loaded, total) => {
+            const fileProgress = percent / files.length;
+            const completedProgress = (i / files.length) * 100;
+            setUploadProgress(Math.round(completedProgress + fileProgress));
+            setUploadBytesTransmitted(loaded);
+            setUploadBytesTotal(total);
+          });
+        }
+        showBanner(`Uploaded ${files.length} packs successfully in chunks!`, "success");
       }
       fetchDataFeed();
     } catch (err: any) {
@@ -1411,7 +1517,7 @@ export default function App() {
 
   const handleUpdateAddonFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !updatingAddonUuid || !token || !isAdmin) return;
+    if (!file || !updatingAddonUuid || !token || !canManageAddons) return;
 
     setIsUploading(true);
     setUploadError("");
@@ -1421,11 +1527,8 @@ export default function App() {
     setUploadingFilesNames([file.name]);
     showBanner(`Updating addon with custom file: ${file.name}...`, "info");
 
-    const formData = new FormData();
-    formData.append("file", file);
-
     try {
-      const data = await uploadWithXHR(`/api/addons/${updatingAddonUuid}/update-upload`, formData, (percent, loaded, total) => {
+      const data = await uploadInChunks(file, "addon-update", updatingAddonUuid, (percent, loaded, total) => {
         setUploadProgress(percent);
         setUploadBytesTransmitted(loaded);
         setUploadBytesTotal(total);
@@ -5349,29 +5452,27 @@ export default function App() {
                                   return;
                                 }
                                 
-                                const formData = new FormData();
-                                formData.append("file", file);
-                                
                                 try {
-                                  showBanner("Starting custom dedicated server ZIP upload...", "info");
-                                  const res = await fetch("/api/versions/upload", {
-                                    method: "POST",
-                                    headers: {
-                                      Authorization: `Bearer ${token}`
-                                    },
-                                    body: formData
+                                  showBanner("Starting custom dedicated server ZIP upload in chunks...", "info");
+                                  setIsUploading(true);
+                                  setUploadProgress(0);
+                                  setUploadBytesTransmitted(0);
+                                  setUploadBytesTotal(0);
+                                  setUploadingFilesNames([file.name]);
+
+                                  const data = await uploadInChunks(file, "server-zip", undefined, (percent, loaded, total) => {
+                                    setUploadProgress(percent);
+                                    setUploadBytesTransmitted(loaded);
+                                    setUploadBytesTotal(total);
                                   });
                                   
-                                  if (res.ok) {
-                                    const data = await res.json();
-                                    showBanner(`Custom upload deploy started (Task: ${data.taskId})!`, "success");
-                                    fetchDataFeed();
-                                  } else {
-                                    const d = await res.json();
-                                    showBanner(d.error || "Custom server ZIP upload failed.", "error");
-                                  }
-                                } catch (err) {
-                                  showBanner("Connection loss during custom server ZIP upload.", "error");
+                                  showBanner(`Custom upload deploy started (Task: ${data.taskId})!`, "success");
+                                  fetchDataFeed();
+                                } catch (err: any) {
+                                  const errMsg = err.error || err.message || "Custom server ZIP upload failed.";
+                                  showBanner(errMsg, "error");
+                                } finally {
+                                  setIsUploading(false);
                                 }
                               }}
                             />
