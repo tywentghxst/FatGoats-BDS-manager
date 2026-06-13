@@ -1664,23 +1664,116 @@ app.post("/api/server/config", authenticateRequest, requireAdmin, (req, res) => 
   res.json({ success: true, config: dbCache.appConfig });
 });
 
-// Config files directory reader/writer
+// Helper to resolve safe sandboxed paths to server.properties, config/, and worlds/ folders only
+function getSafePath(relativePath: string): string | null {
+  if (relativePath === undefined || relativePath === null) return SERVER_DIR;
+  // Clean and normalize path to prevent directory traversal
+  const cleaned = path.normalize(relativePath).replace(/^(\.\.(\/|\\|$))+/, "");
+  const resolved = path.resolve(SERVER_DIR, cleaned);
+  
+  if (!resolved.startsWith(SERVER_DIR)) {
+    return null;
+  }
+  
+  const rel = path.relative(SERVER_DIR, resolved);
+  // Allow root folder, server.properties, and any files or folders inside config or worlds
+  if (rel === "" ||
+      rel === "server.properties" ||
+      rel.startsWith("config" + path.sep) || rel === "config" ||
+      rel.startsWith("worlds" + path.sep) || rel === "worlds") {
+    return resolved;
+  }
+  return null;
+}
+
+// Config & Worlds files directory reader/writer
 app.get("/api/config-files", authenticateRequest, (req, res) => {
-  const files = [
-    {
-      id: "permissions",
-      name: "permissions.json",
-      path: "config/default/permissions.json",
-      description: "Define level privileges and command permissions for operators, members, and visitors."
-    },
-    {
-      id: "properties",
-      name: "server.properties",
-      path: "server.properties",
-      description: "Define connection, port, simulation, gameplay, and custom server settings."
+  const queryPath = (req.query.path as string) || "";
+  const resolvedPath = getSafePath(queryPath);
+  if (!resolvedPath) {
+    return res.status(400).json({ error: "Access denied. Path is out of sandbox." });
+  }
+
+  if (!fs.existsSync(resolvedPath)) {
+    return res.status(404).json({ error: "Path not found." });
+  }
+
+  try {
+    const stats = fs.statSync(resolvedPath);
+    if (!stats.isDirectory()) {
+      return res.status(400).json({ error: "Specified path is a file, not a directory." });
     }
-  ];
-  res.json(files);
+
+    // Return a refined root listing containing only config, worlds, and server.properties
+    if (queryPath === "" || queryPath === "." || queryPath === "/") {
+      const rootItems = [];
+      const configPath = path.join(SERVER_DIR, "config");
+      const worldsPath = path.join(SERVER_DIR, "worlds");
+      const propsPath = path.join(SERVER_DIR, "server.properties");
+
+      if (fs.existsSync(configPath)) {
+        const s = fs.statSync(configPath);
+        rootItems.push({ name: "config", path: "config", isDirectory: true, size: 0, mtime: s.mtime.toISOString() });
+      }
+      if (fs.existsSync(worldsPath)) {
+        const s = fs.statSync(worldsPath);
+        rootItems.push({ name: "worlds", path: "worlds", isDirectory: true, size: 0, mtime: s.mtime.toISOString() });
+      }
+      if (fs.existsSync(propsPath)) {
+        const s = fs.statSync(propsPath);
+        rootItems.push({ name: "server.properties", path: "server.properties", isDirectory: false, size: s.size, mtime: s.mtime.toISOString() });
+      }
+
+      return res.json({
+        currentPath: "",
+        items: rootItems
+      });
+    }
+
+    const items = fs.readdirSync(resolvedPath);
+    const results = [];
+
+    for (const item of items) {
+      const itemFullPath = path.join(resolvedPath, item);
+      let s;
+      try {
+        s = fs.statSync(itemFullPath);
+      } catch (err) {
+        continue; // Skip inaccessible files or broken links safely
+      }
+
+      const relPath = path.relative(SERVER_DIR, itemFullPath).replace(/\\/g, "/");
+      
+      // Limit recursion in LevelDB db folders
+      if (item === "db" && s.isDirectory()) {
+        results.push({
+          name: item,
+          path: relPath,
+          isDirectory: true,
+          size: 0,
+          mtime: s.mtime.toISOString(),
+          isReadOnly: true,
+          isDbFolder: true
+        });
+        continue;
+      }
+
+      results.push({
+        name: item,
+        path: relPath,
+        isDirectory: s.isDirectory(),
+        size: s.size,
+        mtime: s.mtime.toISOString()
+      });
+    }
+
+    res.json({
+      currentPath: queryPath.replace(/\\/g, "/"),
+      items: results
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: `Failed to list directory: ${err.message}` });
+  }
 });
 
 app.get("/api/config-files/read", authenticateRequest, (req, res) => {
@@ -1719,7 +1812,23 @@ app.get("/api/config-files/read", authenticateRequest, (req, res) => {
       writeServerProperties();
     }
   } else {
-    res.status(400).json({ error: "Invalid file target requested." });
+    const resolved = getSafePath(fileId);
+    if (!resolved) {
+      res.status(400).json({ error: "Access denied. Path is out of sandbox." });
+      return;
+    }
+    targetPath = resolved;
+  }
+
+  // Prevent downloading directory as file
+  try {
+    const stats = fs.statSync(targetPath);
+    if (stats.isDirectory()) {
+      res.status(400).json({ error: "Cannot read contents of a folder. Please select a valid configuration text file." });
+      return;
+    }
+  } catch (statErr) {
+    res.status(404).json({ error: "Specified file does not exist on disk." });
     return;
   }
 
@@ -1728,6 +1837,106 @@ app.get("/api/config-files/read", authenticateRequest, (req, res) => {
     res.json({ content: fileContent });
   } catch (err: any) {
     res.status(500).json({ error: `Could not read file contents: ${err.message}` });
+  }
+});
+
+app.post("/api/config-files/create", authenticateRequest, requireAdmin, (req, res) => {
+  const { path: relativePath, type } = req.body;
+  if (!relativePath) {
+    return res.status(400).json({ error: "Path parameter is required." });
+  }
+
+  const resolved = getSafePath(relativePath);
+  if (!resolved) {
+    return res.status(400).json({ error: "Access denied. Path is out of sandbox." });
+  }
+
+  try {
+    if (type === "directory") {
+      if (fs.existsSync(resolved)) {
+        return res.status(400).json({ error: "Directory or file already exists at that path." });
+      }
+      fs.mkdirSync(resolved, { recursive: true });
+      logServerMessage("SYS", `Created new folder at: ${relativePath}`);
+      return res.json({ success: true, message: "Directory created successfully!" });
+    } else {
+      if (fs.existsSync(resolved)) {
+        return res.status(400).json({ error: "File already exists at that path." });
+      }
+      fs.mkdirSync(path.dirname(resolved), { recursive: true });
+      fs.writeFileSync(resolved, "", "utf-8");
+      logServerMessage("SYS", `Created new empty file at: ${relativePath}`);
+      return res.json({ success: true, message: "File created successfully!" });
+    }
+  } catch (err: any) {
+    res.status(500).json({ error: `Failed to create filesystem item: ${err.message}` });
+  }
+});
+
+app.post("/api/config-files/delete", authenticateRequest, requireAdmin, (req, res) => {
+  const { path: relativePath } = req.body;
+  if (!relativePath) {
+    return res.status(400).json({ error: "Path parameter is required." });
+  }
+
+  if (relativePath === "server.properties" || relativePath === "config/default/permissions.json") {
+    return res.status(400).json({ error: "Cannot delete core dedicated server configuration files." });
+  }
+
+  const resolved = getSafePath(relativePath);
+  if (!resolved) {
+    return res.status(400).json({ error: "Access denied. Path is out of sandbox." });
+  }
+
+  if (!fs.existsSync(resolved)) {
+    return res.status(404).json({ error: "Filesystem item not found." });
+  }
+
+  try {
+    const stats = fs.statSync(resolved);
+    if (stats.isDirectory()) {
+      fs.rmSync(resolved, { recursive: true, force: true });
+      logServerMessage("SYS", `Deleted folder from server filesystem: ${relativePath}`);
+    } else {
+      fs.unlinkSync(resolved);
+      logServerMessage("SYS", `Deleted file: ${relativePath}`);
+    }
+    res.json({ success: true, message: "Deleted successfully!" });
+  } catch (err: any) {
+    res.status(500).json({ error: `Failed to delete item: ${err.message}` });
+  }
+});
+
+app.post("/api/config-files/upload", authenticateRequest, requireAdmin, upload.single("file"), (req, res) => {
+  const destFolder = req.body.path || "";
+  const file = req.file;
+  if (!file) {
+    return res.status(400).json({ error: "No file was uploaded." });
+  }
+
+  const targetDir = getSafePath(destFolder);
+  if (!targetDir) {
+    fs.unlink(file.path, () => {});
+    return res.status(400).json({ error: "Access denied. Target directory is out of sandbox." });
+  }
+
+  try {
+    if (!fs.existsSync(targetDir)) {
+      fs.mkdirSync(targetDir, { recursive: true });
+    }
+    const finalPath = path.join(targetDir, file.originalname);
+    const safeFinalPath = getSafePath(path.join(destFolder, file.originalname));
+    if (!safeFinalPath) {
+      fs.unlink(file.path, () => {});
+      return res.status(400).json({ error: "Access denied. Target file path is out of sandbox." });
+    }
+
+    fs.renameSync(file.path, safeFinalPath);
+    logServerMessage("SYS", `Uploaded file "${file.originalname}" into "${destFolder}"`);
+    res.json({ success: true, message: `File ${file.originalname} uploaded successfully!` });
+  } catch (err: any) {
+    fs.unlink(file.path, () => {});
+    res.status(500).json({ error: `Failed to save uploaded file: ${err.message}` });
   }
 });
 
