@@ -361,6 +361,8 @@ export default function App() {
     allowCheats: true,
     viewDistance: 10,
     tickDistance: 4,
+    worldsLocation: "",
+    backupsLocation: "",
     backupCountToKeep: 5,
     backupFrequencyHours: 24,
     backupOnStart: false,
@@ -3723,6 +3725,43 @@ export default function App() {
                             }`}
                           />
                         </button>
+                      </div>
+                    </div>
+
+                    {/* Storage Locations panel section */}
+                    <div className="border-t border-zinc-900 pt-4 space-y-3.5">
+                      <span className="text-[10px] font-black uppercase text-zinc-400 tracking-wider block">Custom Save Directories</span>
+                      
+                      {/* Worlds Path */}
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-extrabold text-zinc-300">Worlds Storage Location</label>
+                        <input
+                          type="text"
+                          value={appConfig.worldsLocation ?? ""}
+                          placeholder="Default (bedrock-server/worlds)"
+                          disabled={!isAdmin}
+                          onChange={e => updateSettingsField({ worldsLocation: e.target.value })}
+                          className="w-full bg-zinc-950 border border-zinc-900 px-3 py-2 rounded-xl text-xs font-semibold text-zinc-350 focus:outline-none focus:border-emerald-500/40 placeholder:text-zinc-700 disabled:opacity-45"
+                        />
+                        <p className="text-[9px] text-zinc-500 leading-normal">
+                          Move/store Bedrock Worlds anywhere. Relocating fields will trigger safe migration of standard and custom past folders instantly!
+                        </p>
+                      </div>
+
+                      {/* Backups Path */}
+                      <div className="space-y-1.5 pt-1">
+                        <label className="text-[10px] font-extrabold text-zinc-300">Backups Archive Location</label>
+                        <input
+                          type="text"
+                          value={appConfig.backupsLocation ?? ""}
+                          placeholder="Default (bedrock-server/world_backups)"
+                          disabled={!isAdmin}
+                          onChange={e => updateSettingsField({ backupsLocation: e.target.value })}
+                          className="w-full bg-zinc-950 border border-zinc-900 px-3 py-2 rounded-xl text-xs font-semibold text-zinc-350 focus:outline-none focus:border-emerald-500/40 placeholder:text-zinc-700 disabled:opacity-45"
+                        />
+                        <p className="text-[9px] text-zinc-500 leading-normal">
+                          Point directory maps to any backup drives or target stores. Modifying handles files movement with ease.
+                        </p>
                       </div>
                     </div>
 

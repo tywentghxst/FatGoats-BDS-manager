@@ -84,6 +84,8 @@ interface DBStructure {
     allowCheats?: boolean;
     viewDistance?: number;
     tickDistance?: number;
+    worldsLocation?: string;
+    backupsLocation?: string;
     customJavaPath?: string;
     customPlayitPath?: string;
     playitSecretKey?: string;
@@ -139,11 +141,109 @@ interface DBStructure {
   activeTokens?: Record<string, { username: string; role: "admin" | "viewer" }>;
 }
 
+function getWorldsDir(): string {
+  const loc = dbCache?.appConfig?.worldsLocation;
+  if (loc && loc.trim()) {
+    return path.isAbsolute(loc) ? loc : path.resolve(SERVER_DIR, loc);
+  }
+  return path.join(SERVER_DIR, "worlds");
+}
+
+function getBackupsDir(): string {
+  const loc = dbCache?.appConfig?.backupsLocation;
+  if (loc && loc.trim()) {
+    return path.isAbsolute(loc) ? loc : path.resolve(SERVER_DIR, loc);
+  }
+  return path.join(SERVER_DIR, "world_backups");
+}
+
+function moveDirContents(src: string, dest: string) {
+  if (!fs.existsSync(src)) return;
+  if (!fs.existsSync(dest)) {
+    fs.mkdirSync(dest, { recursive: true });
+  }
+  
+  const items = fs.readdirSync(src);
+  for (const item of items) {
+    const srcPath = path.join(src, item);
+    const destPath = path.join(dest, item);
+    
+    if (srcPath === dest || destPath === src) continue;
+    
+    const stat = fs.lstatSync(srcPath);
+    if (stat.isSymbolicLink()) {
+      continue;
+    } else if (stat.isDirectory()) {
+      moveDirContents(srcPath, destPath);
+      try {
+        fs.rmSync(srcPath, { recursive: true, force: true });
+      } catch (e) {}
+    } else {
+      try {
+        fs.copyFileSync(srcPath, destPath);
+        fs.unlinkSync(srcPath);
+      } catch (e) {}
+    }
+  }
+}
+
+function ensureWorldsSymlink() {
+  const defaultWorldsPath = path.join(SERVER_DIR, "worlds");
+  const customWorldsPath = getWorldsDir();
+  
+  if (path.resolve(defaultWorldsPath) === path.resolve(customWorldsPath)) {
+    try {
+      const stats = fs.lstatSync(defaultWorldsPath);
+      if (stats.isSymbolicLink()) {
+        fs.unlinkSync(defaultWorldsPath);
+      }
+    } catch (_) {}
+    return;
+  }
+  
+  try {
+    if (!fs.existsSync(customWorldsPath)) {
+      fs.mkdirSync(customWorldsPath, { recursive: true });
+    }
+    
+    let stats;
+    try {
+      stats = fs.lstatSync(defaultWorldsPath);
+    } catch (e) {}
+    
+    if (stats) {
+      if (stats.isSymbolicLink()) {
+        try {
+          const currentTarget = fs.readlinkSync(defaultWorldsPath);
+          if (path.resolve(currentTarget) === path.resolve(customWorldsPath)) {
+            return;
+          }
+        } catch (_) {}
+        fs.unlinkSync(defaultWorldsPath);
+      } else {
+        try {
+          moveDirContents(defaultWorldsPath, customWorldsPath);
+          fs.rmSync(defaultWorldsPath, { recursive: true, force: true });
+        } catch (moveErr) {
+          console.error("Failed to migrate existing worlds during symlink creation:", moveErr);
+        }
+      }
+    }
+    
+    const linkType = process.platform === "win32" ? "junction" : "dir";
+    fs.symlinkSync(customWorldsPath, defaultWorldsPath, linkType);
+  } catch (err: any) {
+    console.error("Failed to establish worlds symlink:", err);
+  }
+}
+
 let dbCache: DBStructure = {
   users: [],
   appConfig: {
     bentoStyle: true,
     serverPort: 19132,
+    worldsLocation: "",
+    backupsLocation: "",
     maxPlayers: 20,
     levelName: "BedrockWorld",
     difficulty: "normal",
@@ -201,6 +301,8 @@ function loadDB() {
         dbCache.appConfig = {
           bentoStyle: true,
           serverPort: 19132,
+          worldsLocation: "",
+          backupsLocation: "",
           maxPlayers: 20,
           levelName: "BedrockWorld",
           difficulty: "normal",
@@ -250,7 +352,10 @@ function loadDB() {
         dbCache.appConfig.sslCertPath = dbCache.appConfig.sslCertPath || "";
         dbCache.appConfig.sslKeyPath = dbCache.appConfig.sslKeyPath || "";
         dbCache.appConfig.upnpEnabled = dbCache.appConfig.upnpEnabled ?? false;
+        dbCache.appConfig.worldsLocation = dbCache.appConfig.worldsLocation || "";
+        dbCache.appConfig.backupsLocation = dbCache.appConfig.backupsLocation || "";
       }
+      ensureWorldsSymlink();
     } catch (e) {
       console.error("Failed to parse database, resetting", e);
       saveDB();
@@ -810,7 +915,7 @@ function writeServerProperties() {
 // Prepare resource/behavior packs json configurations
 function getPacksJSONPath(type: "behavior" | "resource") {
   const levelName = dbCache.appConfig.levelName || "BedrockWorld";
-  const targetWorldDir = path.join(SERVER_DIR, "worlds", levelName);
+  const targetWorldDir = path.join(getWorldsDir(), levelName);
   if (!fs.existsSync(targetWorldDir)) {
     fs.mkdirSync(targetWorldDir, { recursive: true });
   }
@@ -1057,7 +1162,7 @@ function importWorldPack(filePath: string, originalName: string, taskId: string)
     let worldDirName = originalName.replace(/\.mcworld$/i, "").replace(/[^a-zA-Z0-9_-]/g, "_");
     if (!worldDirName) worldDirName = `World_${Date.now()}`;
 
-    const destWorldDir = path.join(SERVER_DIR, "worlds", worldDirName);
+    const destWorldDir = path.join(getWorldsDir(), worldDirName);
     if (!fs.existsSync(destWorldDir)) {
       fs.mkdirSync(destWorldDir, { recursive: true });
     }
@@ -1654,8 +1759,48 @@ app.get("/api/server/config", authenticateRequest, (req, res) => {
 
 app.post("/api/server/config", authenticateRequest, requireAdmin, (req, res) => {
   const newConfig = req.body;
+  const oldWorldsLocation = dbCache.appConfig.worldsLocation;
+  const oldBackupsLocation = dbCache.appConfig.backupsLocation;
+
   dbCache.appConfig = { ...dbCache.appConfig, ...newConfig };
   saveDB();
+
+  // Handle Worlds path migration dynamically
+  if (dbCache.appConfig.worldsLocation !== oldWorldsLocation) {
+    const defaultWorldsPath = oldWorldsLocation
+      ? (path.isAbsolute(oldWorldsLocation) ? oldWorldsLocation : path.resolve(SERVER_DIR, oldWorldsLocation))
+      : path.join(SERVER_DIR, "worlds");
+    const newWorldsPath = getWorldsDir();
+
+    if (path.resolve(defaultWorldsPath) !== path.resolve(newWorldsPath)) {
+      try {
+        logServerMessage("SYS", `Migrating worlds directory from "${defaultWorldsPath}" to "${newWorldsPath}"...`);
+        moveDirContents(defaultWorldsPath, newWorldsPath);
+        logServerMessage("SYS", `Successfully migrated worlds.`);
+      } catch (err: any) {
+        console.error("Failed to migrate worlds directory:", err);
+      }
+    }
+    ensureWorldsSymlink();
+  }
+
+  // Handle Backups path migration dynamically
+  if (dbCache.appConfig.backupsLocation !== oldBackupsLocation) {
+    const defaultBackupsPath = oldBackupsLocation
+      ? (path.isAbsolute(oldBackupsLocation) ? oldBackupsLocation : path.resolve(SERVER_DIR, oldBackupsLocation))
+      : path.join(SERVER_DIR, "world_backups");
+    const newBackupsPath = getBackupsDir();
+
+    if (path.resolve(defaultBackupsPath) !== path.resolve(newBackupsPath)) {
+      try {
+        logServerMessage("SYS", `Migrating backups directory from "${defaultBackupsPath}" to "${newBackupsPath}"...`);
+        moveDirContents(defaultBackupsPath, newBackupsPath);
+        logServerMessage("SYS", `Successfully migrated backups.`);
+      } catch (err: any) {
+        console.error("Failed to migrate backups directory:", err);
+      }
+    }
+  }
 
   // Rewrite props instantly
   writeServerProperties();
@@ -1664,9 +1809,30 @@ app.post("/api/server/config", authenticateRequest, requireAdmin, (req, res) => 
   res.json({ success: true, config: dbCache.appConfig });
 });
 
-// Helper to resolve safe sandboxed paths to server.properties, config/, and worlds/ folders only
+// Helper to resolve safe sandboxed paths to server.properties, config/, worlds/, and world_backups/ folders
 function getSafePath(relativePath: string): string | null {
   if (relativePath === undefined || relativePath === null) return SERVER_DIR;
+  
+  const normalizedRel = relativePath.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+  
+  if (normalizedRel === "worlds" || normalizedRel.startsWith("worlds/")) {
+    const sub = normalizedRel.length === 6 ? "" : normalizedRel.substring(7);
+    const target = path.resolve(getWorldsDir(), sub);
+    if (target.startsWith(path.resolve(getWorldsDir()))) {
+      return target;
+    }
+    return null;
+  }
+
+  if (normalizedRel === "world_backups" || normalizedRel.startsWith("world_backups/")) {
+    const sub = normalizedRel.length === 13 ? "" : normalizedRel.substring(14);
+    const target = path.resolve(getBackupsDir(), sub);
+    if (target.startsWith(path.resolve(getBackupsDir()))) {
+      return target;
+    }
+    return null;
+  }
+
   // Clean and normalize path to prevent directory traversal
   const cleaned = path.normalize(relativePath).replace(/^(\.\.(\/|\\|$))+/, "");
   const resolved = path.resolve(SERVER_DIR, cleaned);
@@ -1704,11 +1870,12 @@ app.get("/api/config-files", authenticateRequest, (req, res) => {
       return res.status(400).json({ error: "Specified path is a file, not a directory." });
     }
 
-    // Return a refined root listing containing only config, worlds, and server.properties
+    // Return a refined root listing containing only config, worlds, world_backups, and server.properties
     if (queryPath === "" || queryPath === "." || queryPath === "/") {
       const rootItems = [];
       const configPath = path.join(SERVER_DIR, "config");
-      const worldsPath = path.join(SERVER_DIR, "worlds");
+      const worldsPath = getWorldsDir();
+      const backupsPath = getBackupsDir();
       const propsPath = path.join(SERVER_DIR, "server.properties");
 
       if (fs.existsSync(configPath)) {
@@ -1718,6 +1885,10 @@ app.get("/api/config-files", authenticateRequest, (req, res) => {
       if (fs.existsSync(worldsPath)) {
         const s = fs.statSync(worldsPath);
         rootItems.push({ name: "worlds", path: "worlds", isDirectory: true, size: 0, mtime: s.mtime.toISOString() });
+      }
+      if (fs.existsSync(backupsPath)) {
+        const s = fs.statSync(backupsPath);
+        rootItems.push({ name: "world_backups", path: "world_backups", isDirectory: true, size: 0, mtime: s.mtime.toISOString() });
       }
       if (fs.existsSync(propsPath)) {
         const s = fs.statSync(propsPath);
@@ -3540,7 +3711,7 @@ function copyFolderSyncRecursive(src: string, dest: string) {
 // World backup helper function
 function performWorldBackup(worldFolderName: string, isAutomaticReason?: string): string | null {
   try {
-    const worldsDir = path.join(SERVER_DIR, "worlds");
+    const worldsDir = getWorldsDir();
     const targetWorldPath = path.join(worldsDir, worldFolderName);
     
     if (!fs.existsSync(targetWorldPath)) {
@@ -3548,7 +3719,7 @@ function performWorldBackup(worldFolderName: string, isAutomaticReason?: string)
       return null;
     }
     
-    const backupsDir = path.join(SERVER_DIR, "world_backups");
+    const backupsDir = getBackupsDir();
     if (!fs.existsSync(backupsDir)) {
       fs.mkdirSync(backupsDir, { recursive: true });
     }
@@ -3651,7 +3822,7 @@ setInterval(() => {
 
 // Get all world backups
 app.get("/api/worlds/backups", authenticateRequest, (req, res) => {
-  const backupsDir = path.join(SERVER_DIR, "world_backups");
+  const backupsDir = getBackupsDir();
   if (!fs.existsSync(backupsDir)) {
     res.json([]);
     return;
@@ -3704,7 +3875,7 @@ app.post("/api/worlds/backups/create", authenticateRequest, requirePermission("c
 // Restore world backup
 app.post("/api/worlds/backups/:fileName/restore", authenticateRequest, requirePermission("canManageBackups"), (req, res) => {
   const fileName = req.params.fileName;
-  const backupsDir = path.join(SERVER_DIR, "world_backups");
+  const backupsDir = getBackupsDir();
   const zipPath = path.join(backupsDir, fileName);
   
   if (!fs.existsSync(zipPath)) {
@@ -3727,7 +3898,7 @@ app.post("/api/worlds/backups/:fileName/restore", authenticateRequest, requirePe
       worldName = dbCache.appConfig.levelName || "BedrockWorld";
     }
     
-    const worldsDir = path.join(SERVER_DIR, "worlds");
+    const worldsDir = getWorldsDir();
     const worldPath = path.join(worldsDir, worldName);
     
     // Save current world folder to pre-restore directory as safety fallback
@@ -3757,7 +3928,7 @@ app.post("/api/worlds/backups/:fileName/restore", authenticateRequest, requirePe
 // Delete specific world backup
 app.delete("/api/worlds/backups/:fileName", authenticateRequest, requirePermission("canManageBackups"), (req, res) => {
   const fileName = req.params.fileName;
-  const backupsDir = path.join(SERVER_DIR, "world_backups");
+  const backupsDir = getBackupsDir();
   const filePath = path.join(backupsDir, fileName);
   
   if (!fs.existsSync(filePath)) {
@@ -3777,7 +3948,7 @@ app.delete("/api/worlds/backups/:fileName", authenticateRequest, requirePermissi
 // World export to Minecraft .mcworld (zip extension compatibility)
 app.get("/api/worlds/:folderName/export", authenticateRequest, (req, res) => {
   const folderName = req.params.folderName;
-  const worldsDir = path.join(SERVER_DIR, "worlds");
+  const worldsDir = getWorldsDir();
   const targetWorldPath = path.join(worldsDir, folderName);
   
   if (!fs.existsSync(targetWorldPath)) {
@@ -3800,7 +3971,7 @@ app.get("/api/worlds/:folderName/export", authenticateRequest, (req, res) => {
 
 // Worlds database manager
 app.get("/api/worlds", authenticateRequest, (req, res) => {
-  const worldsDir = path.join(SERVER_DIR, "worlds");
+  const worldsDir = getWorldsDir();
   if (!fs.existsSync(worldsDir)) {
     res.json([]);
     return;
@@ -3861,7 +4032,7 @@ app.delete("/api/worlds/:folderName", authenticateRequest, requirePermission("ca
     return;
   }
   
-  const worldsDir = path.join(SERVER_DIR, "worlds");
+  const worldsDir = getWorldsDir();
   const targetWorldPath = path.join(worldsDir, folderName);
   
   if (!fs.existsSync(targetWorldPath)) {
@@ -3874,7 +4045,7 @@ app.delete("/api/worlds/:folderName", authenticateRequest, requirePermission("ca
     logServerMessage("SYS", `Deleted world folder from disk repository: ${folderName}`);
 
     // Also automatically clean up any backup archive files for this world
-    const backupsDir = path.join(SERVER_DIR, "world_backups");
+    const backupsDir = getBackupsDir();
     if (fs.existsSync(backupsDir)) {
       try {
         const files = fs.readdirSync(backupsDir);
@@ -3905,7 +4076,7 @@ app.post("/api/worlds/:folderName/configure", authenticateRequest, requirePermis
   const folderName = req.params.folderName;
   const { newFolderName, newDisplayName } = req.body;
   
-  const worldsDir = path.join(SERVER_DIR, "worlds");
+  const worldsDir = getWorldsDir();
   const oldPath = path.join(worldsDir, folderName);
   
   if (!fs.existsSync(oldPath)) {
@@ -3968,7 +4139,7 @@ app.post("/api/worlds/:folderName/configure", authenticateRequest, requirePermis
 // Active World switcher
 app.post("/api/worlds/:folderName/select", authenticateRequest, requirePermission("canManageWorlds"), (req, res) => {
   const folderName = req.params.folderName;
-  const worldsDir = path.join(SERVER_DIR, "worlds", folderName);
+  const worldsDir = path.join(getWorldsDir(), folderName);
 
   if (!fs.existsSync(worldsDir)) {
     res.status(404).json({ error: "World directory does not exist." });

@@ -96,6 +96,8 @@ export interface AppConfig {
   allowCheats?: boolean;
   viewDistance?: number;
   tickDistance?: number;
+  worldsLocation?: string;
+  backupsLocation?: string;
   backupCountToKeep?: number;
   backupFrequencyHours?: number;
   backupOnStart?: boolean;
