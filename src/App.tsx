@@ -368,13 +368,17 @@ export default function App() {
     backupOnStart: false,
     backupOnStop: false,
     lastBackupTimestamp: 0,
-    appPort: 3000,
+    appPort: 3004,
     bindAddress: "0.0.0.0",
     enableHttps: false,
     sslCertPath: "",
     sslKeyPath: "",
     upnpEnabled: false
   });
+
+  const lastInteractedRef = useRef<number>(0);
+  const pendingChangesRef = useRef<Partial<AppConfig>>({});
+  const saveTimeoutRef = useRef<any>(null);
 
   // Live collections
   const [consoleLogs, setConsoleLogs] = useState<ConsoleLine[]>([]);
@@ -880,7 +884,9 @@ export default function App() {
 
       // 3. Active configuration properties
       const configData = await fetchJson("/api/server/config");
-      setAppConfig(configData);
+      if (Date.now() - lastInteractedRef.current > 5000 && Object.keys(pendingChangesRef.current).length === 0) {
+        setAppConfig(configData);
+      }
 
       // Xbox Console Connect (Redirection Bot) State Poller for Global Notifier Indicators
       try {
@@ -1687,27 +1693,49 @@ export default function App() {
     }
   };
 
-  // Config modifier
+  // Config modifier with instant frontend update + debounced backend persist
   const updateSettingsField = async (fields: Partial<AppConfig>) => {
     if (!token || !isAdmin) return;
-    try {
-      const res = await fetch("/api/server/config", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify(fields)
-      });
-      if (res.ok) {
-        showBanner("Bedrock Server configurations modified.", "success");
-        fetchDataFeed();
-      } else {
-        showBanner("Failed setting changes.", "error");
-      }
-    } catch (err) {
-      showBanner("Network config save error", "error");
+    
+    // 1. Instantly update local state so the UI responds instantly with 0 latency
+    setAppConfig(prev => ({ ...prev, ...fields }));
+    
+    // 2. Track user interaction time to prevent background data polls from overwriting edits
+    lastInteractedRef.current = Date.now();
+    
+    // 3. Accumulate fields to save
+    pendingChangesRef.current = { ...pendingChangesRef.current, ...fields };
+    
+    // 4. Cancel previous scheduled save timeout
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
     }
+    
+    // 5. Schedule aggregated save after 800ms of inactivity
+    saveTimeoutRef.current = setTimeout(async () => {
+      const changesToSave = { ...pendingChangesRef.current };
+      pendingChangesRef.current = {}; // clear early
+      
+      try {
+        const res = await fetch("/api/server/config", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`
+          },
+          body: JSON.stringify(changesToSave)
+        });
+        if (res.ok) {
+          showBanner("Bedrock Server configurations modified.", "success");
+          // Re-fetch standard data feed after a tiny delay so backend state is synchronized
+          setTimeout(fetchDataFeed, 200);
+        } else {
+          showBanner("Failed saving changes to server.", "error");
+        }
+      } catch (err) {
+        showBanner("Network config save error", "error");
+      }
+    }, 800);
   };
 
   // Switch Active Minecraft World
@@ -4641,9 +4669,9 @@ export default function App() {
                       disabled={!isAdmin}
                       min="1"
                       max="65535"
-                      value={appConfig.appPort ?? 3000}
+                      value={appConfig.appPort ?? 3004}
                       onChange={(e) => {
-                        const val = parseInt(e.target.value) || 3000;
+                        const val = parseInt(e.target.value) || 3004;
                         updateSettingsField({ appPort: val });
                       }}
                       className="w-full bg-zinc-950 border border-zinc-900 focus:border-zinc-800 focus:ring-1 focus:ring-zinc-800 rounded-lg px-3 py-2 text-xs font-mono text-white outline-none cursor-text disabled:opacity-50"

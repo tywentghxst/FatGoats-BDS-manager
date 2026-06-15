@@ -264,7 +264,7 @@ let dbCache: DBStructure = {
     backupOnStart: false,
     backupOnStop: false,
     lastBackupTimestamp: 0,
-    appPort: 3000,
+    appPort: 3004,
     bindAddress: "0.0.0.0",
     enableHttps: false,
     sslCertPath: "",
@@ -323,7 +323,7 @@ function loadDB() {
           backupOnStart: false,
           backupOnStop: false,
           lastBackupTimestamp: 0,
-          appPort: 3000,
+          appPort: 3004,
           bindAddress: "0.0.0.0",
           enableHttps: false,
           sslCertPath: "",
@@ -346,7 +346,7 @@ function loadDB() {
         dbCache.appConfig.backupOnStart = dbCache.appConfig.backupOnStart ?? false;
         dbCache.appConfig.backupOnStop = dbCache.appConfig.backupOnStop ?? false;
         dbCache.appConfig.lastBackupTimestamp = dbCache.appConfig.lastBackupTimestamp ?? 0;
-        dbCache.appConfig.appPort = dbCache.appConfig.appPort || 3000;
+        dbCache.appConfig.appPort = dbCache.appConfig.appPort || 3004;
         dbCache.appConfig.bindAddress = dbCache.appConfig.bindAddress || "0.0.0.0";
         dbCache.appConfig.enableHttps = dbCache.appConfig.enableHttps ?? false;
         dbCache.appConfig.sslCertPath = dbCache.appConfig.sslCertPath || "";
@@ -6360,7 +6360,7 @@ async function startServer() {
   }
 
   const isHostedSandbox = !!process.env.K_SERVICE || !!process.env.AIS_DEV || process.env.IS_SANDBOX === "true";
-  const effectivePort = isHostedSandbox ? 3000 : (dbCache.appConfig.appPort || 3000);
+  const effectivePort = isHostedSandbox ? 3000 : (dbCache.appConfig.appPort || 3004);
   const effectiveHost = isHostedSandbox ? "0.0.0.0" : (dbCache.appConfig.bindAddress || "0.0.0.0");
 
   app.listen(effectivePort, effectiveHost, () => {
