@@ -521,6 +521,134 @@ export default function App() {
   const [fileEditorContent, setFileEditorContent] = useState<string>("");
   const [fileEditorLoading, setFileEditorLoading] = useState<boolean>(false);
 
+  // New visual file manager states
+  const [explorerPath, setExplorerPath] = useState<string>("");
+  const [explorerItems, setExplorerItems] = useState<any[]>([]);
+  const [isLoadingExplorer, setIsLoadingExplorer] = useState<boolean>(false);
+  const [createItemType, setCreateItemType] = useState<"file" | "directory" | null>(null);
+  const [newItemName, setNewItemName] = useState<string>("");
+
+  const loadExplorerDirectory = async (tgtPath: string) => {
+    setIsLoadingExplorer(true);
+    try {
+      const res = await fetch(`/api/config-files?path=${encodeURIComponent(tgtPath)}`, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setExplorerItems(data.items || []);
+        setExplorerPath(data.currentPath || "");
+      } else {
+        const err = await res.json();
+        showBanner(err.error || "Failed to load directory items.", "error");
+      }
+    } catch (e) {
+      showBanner("Failed to scan directory paths.", "error");
+    } finally {
+      setIsLoadingExplorer(false);
+    }
+  };
+
+  const handleCreateFileSystemItem = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newItemName.trim() || !createItemType) return;
+    
+    const relativeItemPath = explorerPath ? `${explorerPath}/${newItemName.trim()}` : newItemName.trim();
+    try {
+      const res = await fetch("/api/config-files/create", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          path: relativeItemPath,
+          type: createItemType
+        })
+      });
+
+      if (res.ok) {
+        showBanner(`Successfully created ${createItemType}: "${newItemName}"`, "success");
+        setNewItemName("");
+        setCreateItemType(null);
+        await loadExplorerDirectory(explorerPath);
+      } else {
+        const data = await res.json();
+        showBanner(data.error || `Failed to create ${createItemType}`, "error");
+      }
+    } catch (err) {
+      showBanner("Failed to communicate with files API.", "error");
+    }
+  };
+
+  const handleDeleteFileSystemItem = async (tgtPath: string) => {
+    if (!isAdmin) return;
+    
+    setConfirmModal({
+      isOpen: true,
+      title: "Delete File / Folder",
+      message: `Are you sure you want to permanently delete "${tgtPath}"? This cannot be undone!`,
+      onConfirm: async () => {
+        try {
+          const res = await fetch("/api/config-files/delete", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`
+            },
+            body: JSON.stringify({ path: tgtPath })
+          });
+
+          if (res.ok) {
+            showBanner("Filesystem item deleted successfully.", "success");
+            if (selectedFileId === tgtPath) {
+              setSelectedFileId("server.properties");
+              loadConfigFile("server.properties");
+            }
+            await loadExplorerDirectory(explorerPath);
+          } else {
+            const data = await res.json();
+            showBanner(data.error || "Failed to delete item.", "error");
+          }
+        } catch (err) {
+          showBanner("Communication failure deleting item.", "error");
+        }
+      }
+    });
+  };
+
+  const handleFileUploadInExplorer = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("path", explorerPath);
+
+    try {
+      showBanner(`Uploading "${file.name}" to /${explorerPath}...`, "info");
+      const res = await fetch("/api/config-files/upload", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`
+        },
+        body: formData
+      });
+
+      if (res.ok) {
+        showBanner(`File "${file.name}" uploaded successfully!`, "success");
+        await loadExplorerDirectory(explorerPath);
+      } else {
+        const data = await res.json();
+        showBanner(data.error || "Upload failed.", "error");
+      }
+    } catch (err) {
+      showBanner("Failed to upload file to backend server.", "error");
+    }
+  };
+
   const loadConfigFile = async (fileId: string) => {
     setFileEditorLoading(true);
     try {
@@ -688,6 +816,13 @@ export default function App() {
     const interval = setInterval(fetchDataFeed, 2000);
     return () => clearInterval(interval);
   }, [token, navTab, settingsSubTab, experimentalSubTab]);
+
+  // Auto-scan configuration and worlds directories when files tab is active
+  useEffect(() => {
+    if (token && navTab === "settings" && settingsSubTab === "properties" && propertiesTab === "files") {
+      loadExplorerDirectory(explorerPath || "");
+    }
+  }, [navTab, settingsSubTab, propertiesTab, token]);
 
   // Command logs autoscroll
   useEffect(() => {
@@ -5605,97 +5740,203 @@ export default function App() {
                 /* RAW INTEGRATED DIRECT CONFIGS FILE EDITOR */
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                   {/* Left panel: File navigation */}
-                  <div className="lg:col-span-1 bg-zinc-900/30 border border-zinc-900 rounded-2xl p-5 space-y-4 h-[520px] overflow-y-auto">
-                    <div className="flex items-center gap-2 pb-3 border-b border-zinc-900/55">
-                      <FolderOpen className="w-4 h-4 text-emerald-400" />
-                      <h4 className="text-xs font-black uppercase text-white tracking-widest">Main Server Folder</h4>
-                    </div>
-
-                    {/* Navigation tree selector */}
-                    <div className="space-y-3 font-mono text-[11px] text-zinc-400">
-                      <div className="pl-2 border-l border-zinc-850 space-y-1">
-                        <button
-                          type="button"
-                          onClick={() => setSelectedFileId("properties")}
-                          className={`w-full flex items-center justify-between p-2.5 rounded-xl transition-all text-left cursor-pointer ${
-                            selectedFileId === "properties"
-                              ? "bg-zinc-850 border border-zinc-750 text-white font-bold"
-                              : "hover:bg-zinc-950/40 border border-transparent hover:text-white"
-                          }`}
-                        >
-                          <div className="flex items-center gap-2.5">
-                            <FileCode className="w-3.5 h-3.5 text-indigo-400" />
-                            <span>server.properties</span>
-                          </div>
-                          <span className="text-[8px] bg-zinc-950/50 px-1.5 py-0.5 rounded text-zinc-500 font-sans tracking-tight">properties</span>
-                        </button>
-                      </div>
-
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2 text-zinc-500 pl-1">
-                          <FolderOpen className="w-3 h-3 text-emerald-500/70" />
-                          <span className="font-bold">config</span>
+                  <div className="lg:col-span-1 bg-zinc-900/30 border border-zinc-900 rounded-2xl p-5 space-y-4 h-[540px] flex flex-col justify-between">
+                    <div className="space-y-3 flex-1 flex flex-col min-h-0">
+                      <div className="flex items-center justify-between pb-3 border-b border-zinc-900/55 flex-shrink-0">
+                        <div className="flex items-center gap-2">
+                          <FolderOpen className="w-4 h-4 text-emerald-400" />
+                          <h4 className="text-xs font-black uppercase text-white tracking-widest font-sans">Main Server Folder</h4>
                         </div>
                         
-                        <div className="pl-4 border-l border-zinc-850 space-y-1">
-                          <div className="flex items-center gap-2 text-zinc-500">
-                            <FolderOpen className="w-3 h-3 text-emerald-600/70" />
-                            <span className="font-semibold">default</span>
-                          </div>
-
-                          <div className="pl-4 border-l border-zinc-850">
+                        {isAdmin && (
+                          <div className="flex items-center gap-1.5 font-sans">
                             <button
                               type="button"
-                              onClick={() => setSelectedFileId("permissions")}
-                              className={`w-full flex items-center justify-between p-2.5 rounded-xl transition-all text-left cursor-pointer ${
-                                selectedFileId === "permissions"
-                                  ? "bg-zinc-850 border border-zinc-750 text-white font-bold"
-                                  : "hover:bg-zinc-950/40 border border-transparent hover:text-white"
-                              }`}
+                              onClick={() => {
+                                setCreateItemType("directory");
+                                setNewItemName("");
+                              }}
+                              className="p-1 px-2 rounded-lg bg-zinc-950/80 border border-zinc-800 text-[9px] hover:text-white uppercase font-bold text-zinc-400 flex items-center gap-1 cursor-pointer transition-colors"
+                              title="Create new world or folder"
                             >
-                              <div className="flex items-center gap-2.5">
-                                <FileCode className="w-3.5 h-3.5 text-amber-500" />
-                                <span>permissions.json</span>
-                              </div>
-                              <span className="text-[8px] bg-zinc-950/50 px-1.5 py-0.5 rounded text-zinc-500 font-sans tracking-tight">json</span>
+                              <FolderOpen className="w-3 h-3 text-amber-500" />
+                              <span>+ Folder</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setCreateItemType("file");
+                                setNewItemName("");
+                              }}
+                              className="p-1 px-2 rounded-lg bg-zinc-950/80 border border-zinc-800 text-[9px] hover:text-white uppercase font-bold text-zinc-400 flex items-center gap-1 cursor-pointer transition-colors"
+                              title="Create new file"
+                            >
+                              <FileCode className="w-3 h-3 text-indigo-400" />
+                              <span>+ File</span>
+                            </button>
+                            <label
+                              className="p-1 px-2 rounded-lg bg-zinc-950/80 border border-zinc-800 text-[9px] hover:text-white uppercase font-bold text-zinc-400 flex items-center gap-1 cursor-pointer transition-colors"
+                              title="Upload file into here"
+                            >
+                              <UploadCloud className="w-3 h-3 text-emerald-400" />
+                              <span>Upload</span>
+                              <input
+                                type="file"
+                                onChange={handleFileUploadInExplorer}
+                                className="hidden"
+                              />
+                            </label>
+                          </div>
+                        )}
+                      </div>
+
+                      {createItemType && (
+                        <form onSubmit={handleCreateFileSystemItem} className="p-3 bg-zinc-950/80 rounded-xl border border-zinc-800 space-y-2 flex-shrink-0 font-sans">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[9px] uppercase font-bold text-zinc-400">
+                              Create New {createItemType === "directory" ? "Folder / World" : "File"}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setCreateItemType(null)}
+                              className="text-zinc-500 hover:text-white text-[10px]"
+                            >
+                              ✕
                             </button>
                           </div>
-                        </div>
+                          <div className="flex gap-1.5">
+                            <input
+                              type="text"
+                              required
+                              placeholder={createItemType === "directory" ? "e.g. NewWorld" : "e.g. levelname.txt"}
+                              value={newItemName}
+                              onChange={(e) => setNewItemName(e.target.value)}
+                              className="flex-1 bg-zinc-900 border border-zinc-850 px-2 py-1 text-[11px] rounded-lg text-white font-mono placeholder:text-zinc-650 outline-none focus:ring-1 focus:ring-amber-500/30"
+                            />
+                            <button
+                              type="submit"
+                              className="bg-emerald-650 hover:bg-emerald-600 text-white rounded-lg px-2.5 py-1 text-[10px] uppercase tracking-wide font-black"
+                            >
+                              OK
+                            </button>
+                          </div>
+                        </form>
+                      )}
+
+                      {/* Path Breadcrumb and Back Button */}
+                      <div className="flex items-center gap-1.5 bg-zinc-950/35 p-2 rounded-xl text-[10px] font-mono border border-zinc-900 flex-shrink-0">
+                        {explorerPath && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const lastSlash = explorerPath.lastIndexOf("/");
+                              const parentPath = lastSlash === -1 ? "" : explorerPath.substring(0, lastSlash);
+                              loadExplorerDirectory(parentPath);
+                            }}
+                            className="px-1.5 py-0.5 rounded bg-zinc-850 border border-zinc-750 text-white hover:bg-zinc-800 text-[9px] flex items-center justify-center font-sans tracking-wide cursor-pointer transition-colors"
+                          >
+                            ← UP
+                          </button>
+                        )}
+                        <span className="text-zinc-500">Path:</span>
+                        <span className="text-zinc-350 font-bold truncate">/{explorerPath || "."}</span>
+                      </div>
+
+                      {/* Dynamic files/folders list inside scrollbox */}
+                      <div className="flex-1 overflow-y-auto min-h-0 space-y-1.5 pr-1">
+                        {isLoadingExplorer ? (
+                          <div className="py-12 text-center text-zinc-500 flex flex-col items-center justify-center gap-2">
+                            <RefreshCw className="w-5 h-5 text-amber-500 animate-spin" />
+                            <span className="text-[10px] uppercase font-bold tracking-widest text-zinc-550 font-sans">Scanning directory...</span>
+                          </div>
+                        ) : explorerItems.length === 0 ? (
+                          <div className="py-12 text-center text-zinc-600 text-[10px] font-sans">
+                            This folder is empty.
+                          </div>
+                        ) : (
+                          explorerItems.map((item, idx) => {
+                            const isSelected = selectedFileId === item.path;
+                            return (
+                              <div
+                                key={idx}
+                                className={`flex items-center justify-between p-2 rounded-xl border transition-all ${
+                                  isSelected
+                                    ? "bg-zinc-850 border-zinc-750 text-white"
+                                    : "bg-transparent border-transparent hover:bg-zinc-950/40 text-zinc-400 hover:text-white"
+                                }`}
+                              >
+                                <div
+                                  onClick={() => {
+                                    if (item.isDirectory) {
+                                      loadExplorerDirectory(item.path);
+                                    } else {
+                                      setSelectedFileId(item.path);
+                                      loadConfigFile(item.path);
+                                    }
+                                  }}
+                                  className="flex-1 flex items-center gap-2 cursor-pointer font-mono text-[11px] truncate"
+                                >
+                                  {item.isDirectory ? (
+                                    <FolderOpen className={`w-3.5 h-3.5 flex-shrink-0 ${item.isDbFolder ? "text-rose-500/60" : "text-amber-500"}`} />
+                                  ) : (
+                                    <FileCode className="w-3.5 h-3.5 flex-shrink-0 text-indigo-400/90" />
+                                  )}
+                                  <span className={`truncate ${item.isDirectory ? "font-bold text-zinc-300" : ""}`}>
+                                    {item.name}
+                                  </span>
+                                </div>
+
+                                <div className="flex items-center gap-1.5 ml-2 flex-shrink-0 font-sans">
+                                  {item.isDirectory ? (
+                                    <span className="text-[7.5px] font-sans font-black bg-zinc-950/50 px-1 py-0.5 rounded text-amber-500 uppercase tracking-tight">dir</span>
+                                  ) : (
+                                    <span className="text-[7.5px] font-sans font-black bg-zinc-950/50 px-1 py-0.5 rounded text-zinc-500 uppercase tracking-tight">file</span>
+                                  )}
+
+                                  {isAdmin && !item.isReadOnly && item.path !== "server.properties" && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteFileSystemItem(item.path)}
+                                      className="p-1 rounded-md text-zinc-600 hover:text-red-400 hover:bg-zinc-950/50 transition-colors cursor-pointer"
+                                      title="Delete file or folder"
+                                    >
+                                      <Trash2 className="w-3 h-3" />
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })
+                        )}
                       </div>
                     </div>
 
-                    {/* Meta info boxes */}
-                    <div className="p-3.5 bg-zinc-950/50 rounded-xl border border-zinc-900 space-y-2 text-[10px] text-zinc-500 leading-relaxed font-sans font-normal">
+                    {/* Standard physical paths shortcuts indicator */}
+                    <div className="p-3 bg-zinc-950/50 rounded-xl border border-zinc-900 space-y-2 text-[10px] text-zinc-500 leading-relaxed font-sans font-normal flex-shrink-0">
                       <div className="flex items-center gap-1 text-zinc-300 font-bold">
                         <Activity className="w-3.5 h-3.5 text-emerald-500" />
                         <span>Interactive File Mounting</span>
                       </div>
-                      {selectedFileId === "permissions" ? (
-                        <p>
-                          The <code className="text-zinc-300">permissions.json</code> dictates backend execution rights. You can map console commands cleanly to different permission rings (<code className="text-zinc-400">"operator"</code>, <code className="text-zinc-400 font-bold">"member"</code>, and <code className="text-zinc-400">"visitor"</code>).
-                        </p>
-                      ) : (
-                        <p>
-                          Customize or add ANY config settings in <code className="text-zinc-300">server.properties</code> directly! The applet safely merges custom properties so your definitions are never overridden.
-                        </p>
-                      )}
+                      <p>
+                        Explore, configure, and add files under the bedrock dedicated server structure. Navigate into <code className="text-zinc-300">worlds/</code> directory to manage individual worlds level details.
+                      </p>
                     </div>
                   </div>
 
                   {/* Right panel: Active Editor screen */}
-                  <div className="lg:col-span-2 bg-zinc-900/30 border border-zinc-900 rounded-2xl p-5 flex flex-col h-[520px]">
-                    <div className="flex items-center justify-between pb-3 border-b border-zinc-900">
-                      <div>
-                        <h3 className="text-xs font-black uppercase text-white tracking-widest flex items-center gap-2">
+                  <div className="lg:col-span-2 bg-zinc-900/30 border border-zinc-900 rounded-2xl p-5 flex flex-col h-[540px]">
+                    <div className="flex items-center justify-between pb-3 border-b border-zinc-900 select-none">
+                      <div className="min-w-0 flex-1 pr-4">
+                        <h3 className="text-xs font-black uppercase text-white tracking-widest flex items-center gap-2 truncate font-sans">
                           <FileCode className="w-4 h-4 text-emerald-400" />
-                          <span>Editing: {selectedFileId === "permissions" ? "config/default/permissions.json" : "server.properties"}</span>
+                          <span className="truncate">Editing: {selectedFileId === "permissions" ? "config/default/permissions.json" : selectedFileId === "properties" ? "server.properties" : selectedFileId}</span>
                         </h3>
-                        <p className="text-[10px] text-zinc-500 mt-1">
-                          Direct physical path: <code className="text-zinc-400 font-mono text-[9px]">bedrock-server/{selectedFileId === "permissions" ? "config/default/permissions.json" : "server.properties"}</code>
+                        <p className="text-[10px] text-zinc-500 mt-1 truncate">
+                          Direct physical path: <code className="text-zinc-400 font-mono text-[9px]">bedrock-server/{selectedFileId === "permissions" ? "config/default/permissions.json" : selectedFileId === "properties" ? "server.properties" : selectedFileId}</code>
                         </p>
                       </div>
 
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-shrink-0 font-sans">
                         <button
                           type="button"
                           onClick={() => loadConfigFile(selectedFileId)}
@@ -5720,7 +5961,7 @@ export default function App() {
                     {/* Text Area Element */}
                     <div className="flex-1 mt-4 relative bg-zinc-950 rounded-xl overflow-hidden border border-zinc-900 shadow-inner flex flex-col">
                       {fileEditorLoading && (
-                        <div className="absolute inset-0 bg-black/80 backdrop-blur-sm z-50 flex flex-col items-center justify-center gap-2">
+                        <div className="absolute inset-0 bg-black/80 backdrop-blur-sm z-50 flex flex-col items-center justify-center gap-2 font-sans">
                           <RefreshCw className="w-6 h-6 text-emerald-400 animate-spin" />
                           <span className="text-[10px] text-zinc-500 tracking-wider uppercase font-black">Reading raw file contents...</span>
                         </div>
@@ -5731,7 +5972,7 @@ export default function App() {
                         onChange={(e) => setFileEditorContent(e.target.value)}
                         className="flex-1 resize-none p-4 font-mono text-[11px] leading-relaxed text-emerald-300 bg-transparent outline-none border-none select-text focus:ring-0 disabled:opacity-60 disabled:cursor-not-allowed selection:bg-emerald-500/20 selection:text-emerald-200 h-full w-full"
                         spellCheck={false}
-                        placeholder={selectedFileId === "permissions" ? "Loading permissions.json schema contents..." : "Loading server.properties config settings..."}
+                        placeholder={selectedFileId === "permissions" ? "Loading permissions.json contents..." : "Loading configuration content settings..."}
                       />
                     </div>
                   </div>

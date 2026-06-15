@@ -71,7 +71,7 @@ for %%F in ("%IMPORT_DIR%\*.mcworld") do (
     
     :: Perform PowerShell extraction of the .mcworld structure (which is a ZIP)
     echo Extracting archive contents...
-    powershell -NoProfile -Command "try { Add-Type -AssemblyName 'System.IO.Compression.FileSystem'; [System.IO.Compression.ZipFile]::ExtractToDirectory('!FULL_PATH!', '!DEST_DIR!', $true); Write-Host 'Extraction completed successfully.' } catch { Write-Error $_.Exception.Message; exit 1 }"
+    powershell -NoProfile -Command "try { Expand-Archive -LiteralPath '!FULL_PATH!' -DestinationPath '!DEST_DIR!' -Force; Write-Host 'Extraction completed successfully.' } catch { Write-Error $_.Exception.Message; exit 1 }"
     
     if %ERRORLEVEL% equ 0 (
         echo World folder extracted to: "!DEST_DIR!"
