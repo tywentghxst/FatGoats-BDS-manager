@@ -884,6 +884,14 @@ function writeServerProperties() {
     "emit-server-telemetry": String(emitServerTelemetry),
   };
 
+  // If online mode is disabled, we MUST force whitelist/allowlist to false to prevent BDS from failing to boot.
+  // BDS latest versions do not permit running an allowlist in offline mode.
+  if (!onlineMode) {
+    guiProps["white-list"] = "false";
+    guiProps["allow-list"] = "false";
+    guiProps["allowlist"] = "false";
+  }
+
   // Merge them (gui values overwrite/supplement existing)
   const mergedProps = {
     "player-movement-score-threshold": "20",
@@ -941,6 +949,21 @@ function updateWorldPacksConfig() {
     logServerMessage("SYS", `Updated active world packs inside worlds/${levelName}.`);
   } catch (e: any) {
     logServerMessage("ERROR", `Failed to write worlds JSON config: ${e.message}`);
+  }
+}
+
+function restoreServerConfigsAndWorlds() {
+  try {
+    logServerMessage("SYS", "Restoring previous custom configurations, worlds, and addons...");
+    // 1. Rewrite server.properties with custom options
+    writeServerProperties();
+    // 2. Refresh / update addons configuration
+    updateWorldPacksConfig();
+    // 3. Re-establish worlds directory symlink / structure
+    ensureWorldsSymlink();
+    logServerMessage("SYS", "Restoration complete. Worlds and configurations have been successfully linked!");
+  } catch (err: any) {
+    console.error("Error during restoreServerConfigsAndWorlds:", err);
   }
 }
 
@@ -1494,6 +1517,9 @@ function downloadBedrockVersion(version: string, downloadUrl: string, taskId: st
 
           dbCache.appConfig.selectedVersion = version;
           saveDB();
+
+          // Restore previously active worlds, configurations, and pack symlinks
+          restoreServerConfigsAndWorlds();
 
           logServerMessage("SYS", `Installed Minecraft Bedrock software v${version}`);
         } catch (unzipErr: any) {
@@ -2722,6 +2748,9 @@ app.post("/api/versions/upload", authenticateRequest, requireAdmin, upload.singl
       const displayVersion = "Custom Upload";
       dbCache.appConfig.selectedVersion = displayVersion;
       saveDB();
+
+      // Restore previously active worlds, configurations, and pack symlinks
+      restoreServerConfigsAndWorlds();
 
       logServerMessage("SYS", `Installed custom uploaded Bedrock server ZIP: ${req.file?.originalname}`);
 
@@ -4479,6 +4508,9 @@ app.post("/api/upload/chunk", authenticateRequest, upload.single("file"), (req, 
           const displayVersion = "Custom Upload";
           dbCache.appConfig.selectedVersion = displayVersion;
           saveDB();
+
+          // Restore previously active worlds, configurations, and pack symlinks
+          restoreServerConfigsAndWorlds();
 
           logServerMessage("SYS", `Installed custom uploaded Bedrock server ZIP: ${filename}`);
 
