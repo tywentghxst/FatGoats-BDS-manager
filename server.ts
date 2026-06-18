@@ -2467,7 +2467,12 @@ app.post("/api/console", authenticateRequest, requirePermission("canUseConsole")
     return;
   }
 
-  logServerMessage("SYS", `Command executed: ${command}`);
+  let processedCommand = command.trim();
+  if (processedCommand.startsWith("/")) {
+    processedCommand = processedCommand.substring(1);
+  }
+
+  logServerMessage("SYS", `Command executed: ${processedCommand}`);
 
   if (serverStatus !== "running") {
     res.status(400).json({ error: "Cannot send commands while server is offline." });
@@ -2475,7 +2480,7 @@ app.post("/api/console", authenticateRequest, requirePermission("canUseConsole")
   }
 
   if (serverProcess) {
-    serverProcess.stdin.write(`${command}\n`);
+    serverProcess.stdin.write(`${processedCommand}\n`);
   } else {
     res.status(400).json({ error: "Dedicated process stream disconnected." });
     return;

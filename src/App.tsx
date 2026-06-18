@@ -819,7 +819,7 @@ export default function App() {
     if (!token) return;
 
     fetchDataFeed();
-    const interval = setInterval(fetchDataFeed, 2000);
+    const interval = setInterval(fetchDataFeed, 1000);
     return () => clearInterval(interval);
   }, [token, navTab, settingsSubTab, experimentalSubTab]);
 
@@ -874,68 +874,101 @@ export default function App() {
     };
 
     try {
+      const promises: Promise<any>[] = [];
+
       // 1. Core Server Stats Info
-      const statsData = await fetchJson("/api/server/status");
-      setStats(statsData);
+      promises.push(
+        fetchJson("/api/server/status")
+          .then(data => setStats(data))
+          .catch(e => console.error("Stats feed connection issue:", e))
+      );
 
       // 2. Active Tasks
-      const tasksData = await fetchJson("/api/tasks");
-      setActiveTasks(tasksData);
+      promises.push(
+        fetchJson("/api/tasks")
+          .then(data => setActiveTasks(data))
+          .catch(e => console.error("Tasks feed connection issue:", e))
+      );
 
       // 3. Active configuration properties
-      const configData = await fetchJson("/api/server/config");
-      if (Date.now() - lastInteractedRef.current > 5000 && Object.keys(pendingChangesRef.current).length === 0) {
-        setAppConfig(configData);
-      }
+      promises.push(
+        fetchJson("/api/server/config")
+          .then(data => {
+            if (Date.now() - lastInteractedRef.current > 5000 && Object.keys(pendingChangesRef.current).length === 0) {
+              setAppConfig(data);
+            }
+          })
+          .catch(e => console.error("Config feed connection issue:", e))
+      );
 
-      // Xbox Console Connect (Redirection Bot) State Poller for Global Notifier Indicators
-      try {
-        const xboxData = await fetchJson("/api/xbox-bot/state");
-        setXboxBotState(xboxData);
-      } catch (e) {
-        console.error("Xbox bot state global query skipped/failed:", e);
-      }
+      // 4. Xbox Connect redactor bot status
+      promises.push(
+        fetchJson("/api/xbox-bot/state")
+          .then(data => setXboxBotState(data))
+          .catch(e => console.error("Xbox bot state connection issue:", e))
+      );
 
-      // Fetch according to visible route
+      // 5. Context-based sub-navigation requests
       if (navTab === "dashboard" || consoleTab === "logs") {
-        const consoleData = await fetchJson("/api/console");
-        setConsoleLogs(consoleData);
+        promises.push(
+          fetchJson("/api/console")
+            .then(data => setConsoleLogs(data))
+            .catch(e => console.error("Console logs sync issue:", e))
+        );
       }
 
       if (consoleTab === "history" || navTab === "dashboard" || (navTab === "settings" && settingsSubTab === "tasks_history")) {
-        const historyData = await fetchJson("/api/logs/history");
-        setPastLogs(historyData);
+        promises.push(
+          fetchJson("/api/logs/history")
+            .then(data => setPastLogs(data))
+            .catch(e => console.error("History logs connection issue:", e))
+        );
       }
 
       if (navTab === "addons" || navTab === "dashboard") {
-        const addonsData = await fetchJson("/api/addons");
-        setAddons(addonsData);
+        promises.push(
+          fetchJson("/api/addons")
+            .then(data => setAddons(data))
+            .catch(e => console.error("Addons configuration sync issue:", e))
+        );
       }
 
       if (navTab === "worlds" || navTab === "dashboard") {
-        const worldsData = await fetchJson("/api/worlds");
-        setWorlds(worldsData);
-        try {
-          const backupsData = await fetchJson("/api/worlds/backups");
-          setBackups(backupsData);
-        } catch (backErr) {
-          console.error("Backups feed load error", backErr);
-        }
+        promises.push(
+          fetchJson("/api/worlds")
+            .then(data => setWorlds(data))
+            .catch(e => console.error("Worlds content sync issue:", e))
+        );
+        promises.push(
+          fetchJson("/api/worlds/backups")
+            .then(data => setBackups(data))
+            .catch(e => console.error("Backups repo sync issue:", e))
+        );
       }
 
       if ((navTab === "users" || (navTab === "settings" && settingsSubTab === "users")) && isAdmin) {
-        const usersData = await fetchJson("/api/users");
-        setUsersList(usersData);
-
-        const inviteData = await fetchJson("/api/invites");
-        setInvitesList(inviteData);
+        promises.push(
+          fetchJson("/api/users")
+            .then(data => setUsersList(data))
+            .catch(e => console.error("Users vault sync issue:", e))
+        );
+        promises.push(
+          fetchJson("/api/invites")
+            .then(data => setInvitesList(data))
+            .catch(e => console.error("Registry invitation sync issue:", e))
+        );
       }
 
-      // Pre-populate Bedrock versions on first load of dashboard
       if (versions.length === 0) {
-        const versionsData = await fetchJson("/api/versions");
-        setVersions(versionsData);
+        promises.push(
+          fetchJson("/api/versions")
+            .then(data => setVersions(data))
+            .catch(e => console.error("Server inventory catalog sync issue:", e))
+        );
       }
+
+      // Execute all fetches in parallel
+      await Promise.all(promises);
 
     } catch (err: any) {
       if (err?.message === "Unauthorized") {
@@ -1053,6 +1086,16 @@ export default function App() {
     setStats(null);
   };
 
+  const cleanLogMessage = (message: string) => {
+    if (!message) return "";
+    const cleanMsg = message.trim();
+    const match = cleanMsg.match(/^\[(?:\d{4}-\d{2}-\d{2}\s+)?\d{2}:\d{2}:\d{2}[.:\d]*\s+[A-Z_\s]+\]\s*(.*)$/i);
+    if (match) {
+      return match[1];
+    }
+    return cleanMsg;
+  };
+
   const showBanner = (text: string, type: "info" | "success" | "error" = "info") => {
     setActionMessage({ text, type });
     setTimeout(() => setActionMessage({ text: "", type: "info" }), 5000);
@@ -1097,6 +1140,7 @@ export default function App() {
       });
       if (res.ok) {
         setCommandText("");
+        fetchDataFeed();
       } else {
         const err = await res.json();
         showBanner(err.error || "Failed delivering console instruction", "error");
@@ -1498,7 +1542,7 @@ export default function App() {
     });
   };
 
-  // Reusable helper for chunk-by-chunk file transfers (bypasses Cloud Run's 32MB request body cap and network timeouts)
+  // Reusable helper for chunk-by-chunk file transfers (configured to fully upload file in a single piece per user request)
   const uploadInChunks = (
     file: File,
     uploadType: "world" | "addon" | "addon-update" | "server-zip",
@@ -1506,7 +1550,8 @@ export default function App() {
     onProgress?: (percent: number, loaded: number, total: number) => void
   ): Promise<any> => {
     return new Promise((resolve, reject) => {
-      const CHUNK_SIZE = 8 * 1024 * 1024; // 8MB chunks
+      // Set chunk size to the entire file size (or at least 1GB) so it is uploaded fully in one single piece
+      const CHUNK_SIZE = Math.max(file.size, 1024 * 1024 * 1024);
       const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
       
       const generateUUID = () => {
@@ -2868,7 +2913,7 @@ export default function App() {
                           >
                             {log.type}
                           </span>
-                          <span className="text-zinc-250 break-all font-mono font-medium">{log.message}</span>
+                          <span className="text-zinc-250 break-all font-mono font-medium">{cleanLogMessage(log.message)}</span>
                         </div>
                       ))
                     )}
@@ -3849,7 +3894,7 @@ export default function App() {
                           >
                             {log.type}
                           </span>
-                          <span className="text-zinc-300 break-all">{log.message}</span>
+                          <span className="text-zinc-300 break-all">{cleanLogMessage(log.message)}</span>
                         </div>
                       ))
                     )}
